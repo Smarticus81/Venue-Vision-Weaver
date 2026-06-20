@@ -1,0 +1,1526 @@
+﻿openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: venues
+    description: Venue management
+  - name: sessions
+    description: Couple photo sessions
+  - name: storage
+    description: Object storage upload and serving endpoints
+  - name: billing
+    description: Stripe billing and credits
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /readyz:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Readiness check
+      description: Returns non-secret production readiness checks for deploy monitors.
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+        "503":
+          description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+
+  /venues:
+    get:
+      operationId: listVenues
+      tags: [venues]
+      summary: Deprecated public venue directory
+      deprecated: true
+      responses:
+        "404":
+          description: Directory disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: createVenue
+      tags: [venues]
+      summary: Create a new venue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVenueBody"
+      responses:
+        "201":
+          description: Venue created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Slug already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}:
+    get:
+      operationId: getVenue
+      tags: [venues]
+      summary: Get a venue by slug (public)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Venue found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenuePublicResponse"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      operationId: updateVenue
+      tags: [venues]
+      summary: Update venue profile (owner session)
+      description: |
+        Owner-only. Updates the public-facing venue profile fields. The slug
+        cannot be changed (it is the public URL handle and would break QR codes
+        and shared links). Owner email updates require an active owner session.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVenueBody"
+      responses:
+        "200":
+          description: Updated venue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /owners/recover:
+    post:
+      operationId: recoverOwnerVenues
+      tags: [venues]
+      summary: Email a venue owner the profile links for venues they own (magic link)
+      description: |
+        Looks up all venues registered with the given ownerEmail and emails the
+        owner direct profile links. Always returns `{accepted: true}` to
+        prevent enumeration. Rate-limited per IP and per email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecoverOwnerBody"
+      responses:
+        "200":
+          description: Accepted (regardless of whether a venue was found)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleAcceptedResponse"
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /owners/login-link:
+    post:
+      operationId: requestOwnerLoginLink
+      tags: [venues]
+      summary: Email a one-time owner login link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleAcceptedResponse"
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /owners/login:
+    post:
+      operationId: exchangeOwnerLoginToken
+      tags: [venues]
+      summary: Exchange a magic-link token for an owner session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Owner session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleAcceptedResponse"
+        "401":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /owners/session:
+    get:
+      operationId: getOwnerSession
+      tags: [venues]
+      summary: Get the current owner session
+      responses:
+        "200":
+          description: Owner session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerSessionResponse"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /owners/logout:
+    post:
+      operationId: logoutOwner
+      tags: [venues]
+      summary: Clear the current owner session cookie
+      responses:
+        "200":
+          description: Signed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleAcceptedResponse"
+
+  /venues/{slug}/dashboard:
+    get:
+      operationId: getVenueDashboard
+      tags: [venues]
+      summary: Get venue dashboard (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueDashboardResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/stats:
+    get:
+      operationId: getVenueStats
+      tags: [venues]
+      summary: Get venue statistics
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Venue stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueStatsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/media:
+    get:
+      operationId: listVenueMedia
+      tags: [venues]
+      summary: List venue media (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of venue media
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListVenueMediaResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: addVenueMedia
+      tags: [venues]
+      summary: Add a media item to the venue (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddVenueMediaBody"
+      responses:
+        "201":
+          description: Media added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueMediaItem"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/media/{mediaId}:
+    delete:
+      operationId: deleteVenueMedia
+      tags: [venues]
+      summary: Delete a venue media item (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Media not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/billing/checkout:
+    post:
+      operationId: createBillingCheckout
+      tags: [billing]
+      summary: Start Stripe Checkout for subscription or credit pack (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingCheckoutBody"
+      responses:
+        "200":
+          description: Checkout URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCheckoutResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Billing not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/billing/portal:
+    post:
+      operationId: createBillingPortal
+      tags: [billing]
+      summary: Open Stripe Customer Portal (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Portal URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPortalResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/sessions:
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a new couple session for a venue
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionBody"
+      responses:
+        "201":
+          description: Session created and processing started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "402":
+          description: Insufficient credits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    get:
+      operationId: listVenueSessions
+      tags: [sessions]
+      summary: List all sessions for a venue (owner session)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSessionsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get a session by ID (owner-only, owner-session protected)
+      description: Owner-only endpoint. Couples should use /sessions/by-token/{shareToken}.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerSessionDetailResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /sessions/by-token/{shareToken}:
+    get:
+      operationId: getSessionByToken
+      tags: [sessions]
+      summary: Get a session by share token (couple-facing public view)
+      description: Public read-only access via unguessable share token. Never returns PII like coupleEmail.
+      parameters:
+        - name: shareToken
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetailResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /sessions/recover:
+    post:
+      operationId: recoverSessions
+      tags: [sessions]
+      summary: Email magic recovery links for any sessions tied to this email
+      description: |
+        Cross-device recovery. To prevent email enumeration, this endpoint always
+        returns 200 with the same generic response whether or not the email has
+        sessions on file. If sessions exist, an email is sent with one-tap links.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecoverSessionsBody"
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoverSessionsResponse"
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /sessions/{id}/send-email:
+    post:
+      operationId: sendSessionEmail
+      tags: [sessions]
+      summary: Email the gallery link to the couple (owner-only)
+      description: Owner-only. Can override recipient. Use /sessions/by-token/{shareToken}/send-email for couple-driven sends.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendSessionEmailBody"
+      responses:
+        "200":
+          description: Email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendSessionEmailResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Gallery is not ready to email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /sessions/by-token/{shareToken}/send-email:
+    post:
+      operationId: sendSessionEmailByToken
+      tags: [sessions]
+      summary: Couple-driven send. Authorized by the unguessable share token.
+      description: |
+        Used by the couple from the result page. Recipient is constrained: it must
+        match the email captured on the session OR the session must have no email
+        on file yet (first-time capture). Override to arbitrary third-party emails
+        is not allowed via this endpoint.
+      parameters:
+        - name: shareToken
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendSessionEmailByTokenBody"
+      responses:
+        "200":
+          description: Email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendSessionEmailResponse"
+        "400":
+          description: Recipient not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Gallery is not ready to email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /gallery-styles:
+    get:
+      operationId: listGalleryStyles
+      tags: [styles]
+      summary: List available gallery styles
+      responses:
+        "200":
+          description: List of gallery styles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListGalleryStylesResponse"
+
+  /storage/uploads/request-url:
+    post:
+      tags: [storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Missing or invalid required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Failed to generate upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [storage]
+      operationId: getStorageObject
+      summary: Serve a stored object
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: shareToken
+          in: query
+          required: false
+          description: Required to read generated gallery assets from a public share page.
+          schema:
+            type: string
+        - name: venueSlug
+          in: query
+          required: false
+          description: Required to read venue media from the public couple preview for that venue.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ReadinessStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        checks:
+          type: object
+          required: [env, database, storage, ai, billing, email, qualityGate, imageModel, ffmpeg]
+          additionalProperties: false
+          properties:
+            env:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            database:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            storage:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            ai:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            billing:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            email:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            qualityGate:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            imageModel:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            ffmpeg:
+              $ref: "#/components/schemas/ReadinessCheckState"
+
+    ReadinessCheckState:
+      type: string
+      enum: [ok, degraded]
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    CreateVenueBody:
+      type: object
+      required: [name, slug, ownerEmail]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+          minLength: 1
+          pattern: "^[a-z0-9-]+$"
+        tagline:
+          type: string
+        description:
+          type: string
+        ownerEmail:
+          type: string
+          format: email
+          description: Email of the venue owner for secure login links and notifications.
+        contactEmail:
+          type: string
+          format: email
+          description: Optional public inquiry email shown to couples.
+        contactPhone:
+          type: string
+          description: Optional public phone number shown to couples.
+        websiteUrl:
+          type: string
+          format: uri
+          description: Optional public venue website URL.
+        bookingUrl:
+          type: string
+          format: uri
+          description: Optional public tour booking URL.
+
+    VenueResponse:
+      type: object
+      required: [id, name, slug, plan, creditsBalance, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        tagline:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        ownerEmail:
+          type: string
+          format: email
+          nullable: true
+          description: Owner contact email (only returned on owner-session protected responses).
+        contactEmail:
+          type: string
+          nullable: true
+          description: Public inquiry email shown to couples.
+        contactPhone:
+          type: string
+          nullable: true
+          description: Public phone number shown to couples.
+        websiteUrl:
+          type: string
+          nullable: true
+          description: Public venue website URL.
+        bookingUrl:
+          type: string
+          nullable: true
+          description: Public tour booking URL.
+        plan:
+          type: string
+          enum: [trial, starter, growth, none]
+        creditsBalance:
+          type: integer
+        billingPeriodEnd:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    BillingCheckoutBody:
+      type: object
+      required: [product]
+      properties:
+        product:
+          type: string
+          enum: [starter, growth, credit_pack]
+
+    BillingCheckoutResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+
+    BillingPortalResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+
+    UpdateVenueBody:
+      type: object
+      description: |
+        All fields optional. Only the provided fields are updated.
+        Slug is intentionally not editable to keep public URLs stable.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        tagline:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        ownerEmail:
+          type: string
+          format: email
+          description: Owner email for secure login links and notifications. Cannot be cleared.
+        contactEmail:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        bookingUrl:
+          type: string
+          nullable: true
+
+    RecoverOwnerBody:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    SimpleAcceptedResponse:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+
+    OwnerSessionResponse:
+      type: object
+      required: [ownerEmail, venues]
+      properties:
+        ownerEmail:
+          type: string
+          format: email
+        venues:
+          type: array
+          items:
+            type: object
+            required: [id, name, slug]
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              slug:
+                type: string
+
+    VenuePublicResponse:
+      type: object
+      required: [id, name, slug, media, isReady]
+      description: Couple-facing venue profile. Never exposes billing or credit balances.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        tagline:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+          description: Public inquiry email shown to couples.
+        contactPhone:
+          type: string
+          nullable: true
+          description: Public phone number shown to couples.
+        websiteUrl:
+          type: string
+          nullable: true
+          description: Public venue website URL.
+        bookingUrl:
+          type: string
+          nullable: true
+          description: Public tour booking URL.
+        createdAt:
+          type: string
+          format: date-time
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/VenueMediaItem"
+        isReady:
+          type: boolean
+          description: True when the venue has at least five uploaded photos and complete required coverage.
+        uploadToken:
+          type: string
+          description: Short-lived venue-scoped token required for couple photo upload URL requests.
+
+    ListVenuesResponse:
+      type: object
+      required: [venues]
+      properties:
+        venues:
+          type: array
+          items:
+            $ref: "#/components/schemas/VenueDirectoryItem"
+
+    VenueDirectoryItem:
+      type: object
+      required: [id, name, slug, mediaCount, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        tagline:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        mediaCount:
+          type: integer
+          description: Number of venue photos on file. Always >= 1 for listed venues.
+        thumbnailObjectKey:
+          type: string
+          nullable: true
+
+    VenueMediaItem:
+      type: object
+      required: [id, venueId, objectKey, coverage, displayOrder, createdAt]
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        objectKey:
+          type: string
+        coverage:
+          $ref: "#/components/schemas/VenueMediaCoverage"
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    VenueMediaCoverage:
+      type: string
+      enum: [exterior, ceremony, reception, detail, natural_light]
+      description: Coverage role of the venue reference photo for scene-specific generation.
+
+    ListVenueMediaResponse:
+      type: object
+      required: [media]
+      properties:
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/VenueMediaItem"
+
+    AddVenueMediaBody:
+      type: object
+      required: [objectKey, coverage]
+      properties:
+        objectKey:
+          type: string
+        coverage:
+          $ref: "#/components/schemas/VenueMediaCoverage"
+        displayOrder:
+          type: integer
+
+    VenueDashboardResponse:
+      type: object
+      required: [venue, sessions]
+      properties:
+        venue:
+          $ref: "#/components/schemas/VenueResponse"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionSummary"
+
+    VenueStatsResponse:
+      type: object
+      required: [totalSessions, readySessions, processingSessions, failedSessions, avgCompletionSeconds, totalEstimatedCostUsd]
+      properties:
+        totalSessions:
+          type: integer
+        readySessions:
+          type: integer
+        processingSessions:
+          type: integer
+        failedSessions:
+          type: integer
+        avgCompletionSeconds:
+          type: number
+          nullable: true
+        totalEstimatedCostUsd:
+          type: number
+          description: Sum of estimated USD costs across all sessions for this venue.
+
+    CreateSessionBody:
+      type: object
+      required: [couplePhotoKeys, coupleEmail]
+      properties:
+        couplePhotoKeys:
+          type: array
+          items:
+            type: string
+          minItems: 2
+          maxItems: 3
+        styleId:
+          type: string
+          description: ID of the desired gallery style. If omitted, the default style is used.
+        coupleName:
+          type: string
+          description: Name of the couple. Optional.
+        coupleEmail:
+          type: string
+          format: email
+          description: Required. Used for recovery emails and notifications.
+
+    GalleryStyleSummary:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    ListGalleryStylesResponse:
+      type: object
+      required: [styles]
+      properties:
+        styles:
+          type: array
+          items:
+            $ref: "#/components/schemas/GalleryStyleSummary"
+
+    SessionResponse:
+      type: object
+      required: [id, venueId, status, shareToken, createdAt]
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+        shareToken:
+          type: string
+          description: Unguessable token used by the couple to view and share the session. Treat this like a password.
+        createdAt:
+          type: string
+          format: date-time
+
+    SessionSummary:
+      type: object
+      required: [id, venueId, status, createdAt]
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        thumbnailObjectKey:
+          type: string
+          nullable: true
+        coupleName:
+          type: string
+          nullable: true
+        coupleEmail:
+          type: string
+          nullable: true
+        shareToken:
+          type: string
+          nullable: true
+        estimatedCostUsd:
+          type: number
+          description: Estimated USD cost to generate this gallery.
+
+    SendSessionEmailBody:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Override recipient email. Uses session coupleEmail if omitted. Owner-only.
+
+    SendSessionEmailByTokenBody:
+      type: object
+      properties:
+        email:
+          type: string
+          description: |
+            Recipient email. Only honored when the session has no email on file
+            yet (first-time capture) or when the value matches the email already
+            captured on the session.
+
+    SendSessionEmailResponse:
+      type: object
+      required: [sent]
+      properties:
+        sent:
+          type: boolean
+
+    RecoverSessionsBody:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          description: Email to look up. Server emails a magic-link list if sessions exist.
+
+    RecoverSessionsResponse:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+          description: Always true for valid emails. Server intentionally does not reveal whether the email is on file.
+
+    SessionDetailResponse:
+      type: object
+      required: [id, venueId, status, createdAt, generatedAssets]
+      description: Public/couple-facing session view. Intentionally omits PII like coupleEmail.
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+        errorMessage:
+          type: string
+          nullable: true
+        styleId:
+          type: string
+          nullable: true
+        coupleName:
+          type: string
+          nullable: true
+        hasCoupleEmail:
+          type: boolean
+          description: True if an email is on file. The email itself is never returned to non-owners.
+        shareToken:
+          type: string
+          nullable: true
+        estimatedCostUsd:
+          type: number
+          description: Estimated USD cost to generate this gallery.
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        venue:
+          $ref: "#/components/schemas/VenuePublicResponse"
+        generatedAssets:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedAsset"
+
+    OwnerSessionDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/SessionDetailResponse"
+        - type: object
+          description: Owner-only session detail. Includes couple contact data for that venue owner.
+          properties:
+            coupleEmail:
+              type: string
+              nullable: true
+              description: Couple email on file. Only returned from owner-session protected endpoints.
+
+    GeneratedAsset:
+      type: object
+      required: [id, sessionId, objectKey, assetType, displayOrder]
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        objectKey:
+          type: string
+        assetType:
+          type: string
+          enum: [image, video]
+          description: "image is one generated gallery still; video is the branded motion reel."
+        displayOrder:
+          type: integer
+        generationModel:
+          type: string
+          nullable: true
+          description: Image model that produced this still. Null for legacy assets and motion reels.
+        generationAttempts:
+          type: integer
+          nullable: true
+          description: Number of frame attempts before this asset passed generation and quality checks.
+        venueReferenceIndexes:
+          type: array
+          nullable: true
+          description: Indexes of venue reference photos selected for this generated still.
+          items:
+            type: integer
+        qualityReport:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Gallery quality judge output for this still when the quality gate is enabled.
+
+    ListSessionsResponse:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionSummary"
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType, purpose, venueSlug]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+          maximum: 8388608
+          description: Maximum upload size is 8MB.
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        purpose:
+          type: string
+          enum: [couple, venue]
+        venueSlug:
+          type: string
+          minLength: 1
+        uploadToken:
+          type: string
+          description: Required for couple uploads. Venue media uploads use the owner session cookie instead.
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/UploadUrlRequest"
+

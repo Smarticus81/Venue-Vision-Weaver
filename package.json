@@ -1,0 +1,28 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "preinstall": "node scripts/enforce-pnpm-install.cjs",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "smoke:security": "node ./scripts/node_modules/tsx/dist/cli.mjs ./scripts/src/security-smoke.ts",
+    "verify:production": "node ./scripts/node_modules/tsx/dist/cli.mjs ./scripts/src/verify-production.ts",
+    "gallery:qa": "node ./scripts/node_modules/tsx/dist/cli.mjs ./artifacts/api-server/src/tools/galleryQa.ts",
+    "setup:db": "node scripts/setup-database.cjs",
+    "setup:storage": "node scripts/setup-supabase-storage.cjs",
+    "db:push": "pnpm --filter @workspace/db run push",
+    "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "private": true,
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "typescript": "~5.9.2",
+    "prettier": "^3.8.1"
+  }
+}

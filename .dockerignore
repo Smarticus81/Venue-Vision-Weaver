@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.env
+.env.*
+!.env.example
+.git
+.cache
+.local
+*.log
+.DS_Store
+Thumbs.db
+.cursor
+attached_assets
