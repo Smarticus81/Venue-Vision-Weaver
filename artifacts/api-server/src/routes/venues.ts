@@ -50,6 +50,7 @@ import {
 } from "../lib/referenceImageQuality.js";
 import { ownerVenueResponse, publicContactFields } from "../lib/venueResponse.js";
 import { hasCompletePublicGalleryAssets } from "../lib/sessionVisibility.js";
+import { logger } from "../lib/logger.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_VENUE_PHOTO_EDGE_PX = 1024;
@@ -239,22 +240,34 @@ router.post("/venues", async (req, res): Promise<void> => {
     return;
   }
 
-  const [venue] = await db
-    .insert(venuesTable)
-    .values({
-      name,
-      slug,
-      tagline: tagline ?? null,
-      description: description ?? null,
-      ownerEmail: normalizedOwnerEmail,
-      contactEmail: normalizedContactEmail ?? null,
-      contactPhone: normalizeNullableText(contactPhone) ?? null,
-      websiteUrl: normalizedWebsiteUrl ?? null,
-      bookingUrl: normalizedBookingUrl ?? null,
-      plan: "trial",
-      creditsBalance: TRIAL_CREDITS,
-    })
-    .returning();
+  let venue;
+  try {
+    [venue] = await db
+      .insert(venuesTable)
+      .values({
+        name,
+        slug,
+        tagline: tagline ?? null,
+        description: description ?? null,
+        ownerEmail: normalizedOwnerEmail,
+        contactEmail: normalizedContactEmail ?? null,
+        contactPhone: normalizeNullableText(contactPhone) ?? null,
+        websiteUrl: normalizedWebsiteUrl ?? null,
+        bookingUrl: normalizedBookingUrl ?? null,
+        plan: "trial",
+        creditsBalance: TRIAL_CREDITS,
+      })
+      .returning();
+  } catch (err) {
+    const pgError = err instanceof Error ? (err.cause as { code?: string; detail?: string; message?: string }) : null;
+    logger.error({ err, pgCode: pgError?.code, pgDetail: pgError?.detail, pgMessage: pgError?.message }, "Failed to insert venue");
+    if (pgError?.code === "23505") {
+      res.status(409).json({ error: "This venue URL is already taken. Please choose a different one." });
+      return;
+    }
+    res.status(500).json({ error: "Failed to create venue. Please try again." });
+    return;
+  }
 
   await db.insert(creditTransactionsTable).values({
     venueId: venue.id,
