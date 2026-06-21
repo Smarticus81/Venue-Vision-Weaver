@@ -12,6 +12,7 @@
     "gallery:qa": "node ./scripts/node_modules/tsx/dist/cli.mjs ./artifacts/api-server/src/tools/galleryQa.ts",
     "setup:db": "node scripts/setup-database.cjs",
     "setup:storage": "node scripts/setup-supabase-storage.cjs",
+    "generate:secrets": "node scripts/generate-secrets.cjs",
     "db:push": "pnpm --filter @workspace/db run push",
     "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs"
   },
