@@ -28,6 +28,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
 function storageAssetUrl(objectKey: string, shareToken?: string | null): string {
   const token = shareToken ? `?shareToken=${encodeURIComponent(shareToken)}` : "";
@@ -101,8 +102,8 @@ export default function GallerySharePage() {
 
   if (tokenQuery.isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-gold" />
       </div>
     );
   }
@@ -147,17 +148,18 @@ export default function GallerySharePage() {
 function NotAvailable() {
   const [, setLocation] = useLocation();
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-      <AlertCircle className="h-12 w-12 text-destructive mb-6" />
-      <h1 className="serif text-3xl md:text-4xl mb-3">This gallery isn't here</h1>
-      <p className="text-muted-foreground max-w-md mb-8">
+    <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 text-center">
+      <AlertCircle className="h-12 w-12 text-muted-foreground mb-6" />
+      <h1 className="font-playfair text-3xl md:text-4xl mb-3 text-[#111111]">This gallery isn't here</h1>
+      <p className="text-muted-foreground max-w-md mb-8 font-light">
         The link may be incorrect or expired. Use the email we sent you, or find your
         gallery with the address you used at the venue.
       </p>
       <div className="flex flex-col gap-3 w-full max-w-xs">
         <Button
           onClick={() => setLocation("/find-my-gallery")}
-          className="bg-primary text-primary-foreground min-h-[48px]"
+          variant="gold"
+          className="min-h-[48px] shadow-lg shadow-[#C2A36B]/20"
           data-testid="button-find-my-gallery"
         >
           <Images className="mr-2 h-4 w-4" /> Find my gallery
@@ -165,7 +167,7 @@ function NotAvailable() {
         <Button
           onClick={() => setLocation("/couple")}
           variant="outline"
-          className="min-h-[48px]"
+          className="min-h-[48px] bg-white hover:bg-gray-50"
           data-testid="button-return-home"
         >
           <Home className="mr-2 h-4 w-4" /> Home
@@ -180,10 +182,10 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
   const venueSlug = session.venue?.slug ?? "";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-      <AlertCircle className="h-12 w-12 text-primary mb-6" />
-      <h1 className="serif text-3xl md:text-4xl mb-3">This gallery needs a fresh start</h1>
-      <p className="text-muted-foreground max-w-md mb-8">
+    <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 text-center">
+      <AlertCircle className="h-12 w-12 text-gold mb-6" />
+      <h1 className="font-playfair text-3xl md:text-4xl mb-3 text-[#111111]">This gallery needs a fresh start</h1>
+      <p className="text-muted-foreground max-w-md mb-8 font-light">
         glimpse now creates venue-branded galleries only. Start again from the venue
         page so we can use the current likeness and venue-preservation flow.
       </p>
@@ -191,7 +193,8 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
         {venueSlug && (
           <Button
             onClick={() => setLocation(`/preview/${venueSlug}`)}
-            className="bg-primary text-primary-foreground min-h-[48px]"
+            variant="gold"
+            className="min-h-[48px] shadow-lg shadow-[#C2A36B]/20"
             data-testid="legacy-start-gallery"
           >
             <Images className="mr-2 h-4 w-4" /> Create gallery
@@ -200,7 +203,7 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
         <Button
           onClick={() => setLocation("/find-my-gallery")}
           variant="outline"
-          className="min-h-[48px]"
+          className="min-h-[48px] bg-white hover:bg-gray-50"
           data-testid="legacy-find-gallery"
         >
           <Mail className="mr-2 h-4 w-4" /> Find my gallery
@@ -222,14 +225,14 @@ function FailureView({
   const [, setLocation] = useLocation();
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
+    <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-4 text-center">
       <AlertCircle className="h-12 w-12 text-destructive mb-6" />
-      <h2 className="serif text-3xl mb-4">glimpse paused</h2>
-      <p className="text-muted-foreground mb-8 max-w-md">{message}</p>
+      <h2 className="font-playfair text-3xl mb-4 text-[#111111]">glimpse paused</h2>
+      <p className="text-muted-foreground mb-8 max-w-md font-light">{message}</p>
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
         <Button
           onClick={onRestart}
-          className="flex-1 bg-primary text-primary-foreground"
+          className="flex-1 bg-[#111111] text-white hover:bg-[#111111]/90 shadow-md"
           data-testid="failed-try-again"
         >
           <RotateCcw className="mr-2 h-4 w-4" /> Once more
@@ -237,7 +240,7 @@ function FailureView({
         <Button
           variant="outline"
           onClick={() => setLocation(session.venue?.slug ? `/preview/${session.venue.slug}` : "/couple")}
-          className="flex-1"
+          className="flex-1 bg-white hover:bg-gray-50"
           data-testid="failed-home"
         >
           <Home className="mr-2 h-4 w-4" /> Venue page
@@ -266,7 +269,7 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center relative"
+      className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 text-center relative"
       data-testid="processing-screen"
     >
       <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
@@ -296,19 +299,19 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
         <motion.div
           animate={{ scale: [1, 1.2, 1], rotate: 360 }}
           transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-          className="absolute inset-0 rounded-full border-t-2 border-primary/40 border-r-2 border-transparent"
+          className="absolute inset-0 rounded-full border-t-2 border-gold/40 border-r-2 border-transparent"
         />
         <motion.div
           animate={{ scale: [1.2, 1, 1.2], rotate: -360 }}
           transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-          className="absolute inset-4 rounded-full border-b-2 border-secondary/40 border-l-2 border-transparent"
+          className="absolute inset-4 rounded-full border-b-2 border-muted-foreground/20 border-l-2 border-transparent"
         />
-        <div className="z-10 bg-background/50 backdrop-blur-xl p-6 md:p-8 rounded-full border border-border">
-          <Images className="h-10 w-10 md:h-12 md:w-12 text-primary animate-pulse" />
+        <div className="z-10 bg-white/80 backdrop-blur-xl p-6 md:p-8 rounded-full border border-[#f0e6d2] shadow-sm">
+          <Images className="h-10 w-10 md:h-12 md:w-12 text-gold animate-pulse" />
         </div>
       </div>
 
-      <h2 className="serif text-2xl md:text-3xl mb-3 italic" data-testid="text-phase">
+      <h2 className="font-playfair text-2xl md:text-3xl mb-3 italic text-[#111111]" data-testid="text-phase">
         {phase}
       </h2>
       <p className="text-muted-foreground font-light max-w-md mb-8" data-testid="text-phase-detail">
@@ -318,12 +321,12 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
 
       <div className="w-full max-w-md mb-3">
         <div className="flex justify-between text-xs text-muted-foreground mb-2">
-          <span className="uppercase tracking-[0.2em] text-primary">glimpse</span>
-          <span data-testid="text-progress-percent">{percent}%</span>
+          <span className="uppercase tracking-[0.2em] text-gold font-semibold">glimpse</span>
+          <span data-testid="text-progress-percent" className="font-medium text-[#111111]">{percent}%</span>
         </div>
-        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+        <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-primary to-secondary"
+            className="h-full bg-gold"
             initial={{ width: 0 }}
             animate={{ width: `${percent}%` }}
             transition={{ duration: 0.6, ease: "easeOut" }}
@@ -423,47 +426,48 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="fixed bottom-6 left-6 right-6 z-30 pointer-events-none"
     >
-      <motion.div className="max-w-lg mx-auto pointer-events-auto bg-black/50 backdrop-blur-md rounded-2xl p-4 border border-white/10 space-y-3">
-        <motion.div className="flex flex-wrap gap-2 justify-center">
+      <motion.div className="max-w-xl mx-auto pointer-events-auto bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 space-y-4">
+        <motion.div className="flex flex-wrap gap-3 justify-center">
           <Button
-            variant="secondary"
+            variant="outline"
             size="sm"
             onClick={handleCopy}
-            className="bg-white/10 text-white hover:bg-white/20 border-0"
+            className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
             data-testid="copy-link-button"
           >
-            <Link className="h-4 w-4 mr-2" />
+            <Link className="h-4 w-4 mr-2 text-gray-400" />
             Copy Link
           </Button>
           <Button
-            variant="secondary"
+            variant="outline"
             size="sm"
             onClick={handleShare}
-            className="bg-white/10 text-white hover:bg-white/20 border-0"
+            className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
             data-testid="share-button"
           >
-            <Share2 className="h-4 w-4 mr-2" />
+            <Share2 className="h-4 w-4 mr-2 text-gray-400" />
             Share
           </Button>
           <Button
-            variant="secondary"
+            variant="outline"
             size="sm"
             onClick={() => setShowEmail((value) => !value)}
-            className="bg-white/10 text-white hover:bg-white/20 border-0"
+            className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700"
             data-testid="email-toggle-button"
           >
-            <Mail className="h-4 w-4 mr-2" />
+            <Mail className="h-4 w-4 mr-2 text-gray-400" />
             {emailLocked ? "Resend to me" : "Email me"}
           </Button>
         </motion.div>
+        
         {showEmail && (
-          <div className="space-y-2">
+          <div className="space-y-3 pt-2 border-t border-gray-100">
             {emailLocked ? (
-              <p className="text-xs text-white/70 text-center">
+              <p className="text-sm text-gray-500 text-center font-light">
                 We will send the link to the email you provided when you created your
                 gallery.
               </p>
@@ -473,7 +477,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                 value={emailInput}
                 onChange={(event) => setEmailInput(event.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-lg bg-black/40 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-all"
                 data-testid="email-input"
               />
             )}
@@ -482,10 +486,11 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                 size="sm"
                 onClick={handleSendEmail}
                 disabled={sending || (!emailLocked && !emailInput.trim())}
-                className="bg-primary text-primary-foreground"
+                variant="gold"
+                className="w-full sm:w-auto shadow-md shadow-[#C2A36B]/20 min-w-[120px]"
                 data-testid="send-email-button"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Gallery Link"}
               </Button>
             </div>
           </div>
@@ -522,59 +527,45 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-black text-white"
+      className="min-h-screen bg-white text-[#111111]"
       data-testid="gallery-view"
     >
-      {reelSrc ? (
-        <div className="relative w-full min-h-[72vh] bg-black flex items-center justify-center">
-          <video
-            ref={videoRef}
-            src={reelSrc}
-            autoPlay
-            playsInline
-            muted={muted}
-            loop
-            controls
-            preload="auto"
-            className="w-full max-h-[82vh] object-contain bg-black"
-            data-testid="gallery-reel"
-          />
-          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black via-transparent to-black/50" />
-          <div className="absolute top-6 left-6 right-6 flex justify-between gap-4 pointer-events-none">
-            <div className="pointer-events-auto">
-              <p className="text-xs uppercase tracking-[0.25em] text-white/60 mb-1">
-                Created for {venueName}
-              </p>
-              <h2 className="serif text-2xl md:text-3xl font-semibold">
-                {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
-              </h2>
-            </div>
-            <div className="flex gap-2 pointer-events-auto">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setMuted((value) => !value)}
-                className="text-white hover:bg-white/10 bg-black/30 backdrop-blur"
-                data-testid="gallery-mute"
-                title={muted ? "Unmute" : "Mute"}
-              >
-                {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => window.open(reelSrc, "_blank")}
-                className="text-white hover:bg-white/10 bg-black/30 backdrop-blur"
-                data-testid="gallery-download-reel"
-                title="Download reel"
-              >
-                <Download className="h-5 w-5" />
-              </Button>
+      <header className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
+           <div className="pointer-events-auto">
+             <GlimpseLogo variant="mark" href="/" className="h-8 w-auto opacity-90 drop-shadow-md" />
+           </div>
+           
+           <div className="flex gap-2 pointer-events-auto">
+              {reelSrc && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setMuted((value) => !value)}
+                  className="bg-white/80 backdrop-blur text-gray-700 hover:bg-white border border-gray-200/50 shadow-sm"
+                  data-testid="gallery-mute"
+                  title={muted ? "Unmute" : "Mute"}
+                >
+                  {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </Button>
+              )}
+              {reelSrc && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => window.open(reelSrc, "_blank")}
+                  className="bg-white/80 backdrop-blur text-gray-700 hover:bg-white border border-gray-200/50 shadow-sm"
+                  data-testid="gallery-download-reel"
+                  title="Download reel"
+                >
+                  <Download className="h-5 w-5" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onRestart}
-                className="text-white hover:bg-white/10 bg-black/30 backdrop-blur"
+                className="bg-white/80 backdrop-blur text-gray-700 hover:bg-white border border-gray-200/50 shadow-sm"
                 data-testid="gallery-restart"
                 title="Create another"
               >
@@ -584,67 +575,95 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                 variant="ghost"
                 size="icon"
                 onClick={() => setLocation("/couple")}
-                className="text-white hover:bg-white/10 bg-black/30 backdrop-blur"
+                className="bg-white/80 backdrop-blur text-gray-700 hover:bg-white border border-gray-200/50 shadow-sm"
                 title="Home"
               >
                 <Home className="h-5 w-5" />
               </Button>
             </div>
+        </div>
+      </header>
+
+      {reelSrc ? (
+        <div className="relative w-full min-h-[85vh] bg-[#111111] flex flex-col items-center justify-center overflow-hidden">
+          <video
+            ref={videoRef}
+            src={reelSrc}
+            autoPlay
+            playsInline
+            muted={muted}
+            loop
+            controls
+            preload="auto"
+            className="w-full h-full max-h-[85vh] object-contain md:object-cover opacity-90"
+            data-testid="gallery-reel"
+          />
+          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black via-transparent to-black/30" />
+          
+          <div className="absolute bottom-16 left-6 right-6 md:bottom-24 max-w-7xl mx-auto flex flex-col items-center text-center pointer-events-none">
+             <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/20 backdrop-blur-md px-4 py-1.5 text-xs font-semibold tracking-widest text-white/90 uppercase mb-6">
+                Created for {venueName}
+             </div>
+             <h2 className="font-playfair text-4xl md:text-6xl lg:text-7xl font-semibold text-white drop-shadow-lg leading-tight max-w-4xl">
+               {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
+             </h2>
           </div>
         </div>
       ) : (
-        <div className="relative w-full px-4 md:px-8 pt-8 pb-4 bg-gradient-to-b from-zinc-950 to-black">
-          <div className="max-w-6xl mx-auto flex justify-between items-start gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-white/60 mb-1">
-                Created for {venueName}
-              </p>
-              <h2 className="serif text-2xl md:text-3xl font-semibold">
-                {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
-              </h2>
+        <div className="relative w-full pt-32 pb-16 bg-[#fdfbf7] border-b border-[#f0e6d2]">
+          <div className="max-w-5xl mx-auto px-6 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-white px-4 py-1.5 text-xs font-semibold tracking-widest text-gold uppercase mb-6">
+              Created for {venueName}
             </div>
-            <Button variant="outline" size="sm" onClick={onRestart} className="border-white/20">
-              Create another
-            </Button>
+            <h2 className="font-playfair text-4xl md:text-5xl lg:text-6xl font-semibold text-[#111111] leading-tight mb-8">
+              {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
+            </h2>
           </div>
         </div>
       )}
 
-      <div className="relative bg-gradient-to-b from-black via-zinc-950 to-zinc-900 px-4 md:px-8 pt-8 pb-32">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <ImageIcon className="h-4 w-4 text-primary" />
-            <h3 className="text-sm uppercase tracking-widest text-white/70">Editorial Stills</h3>
-          </div>
-          <p className="text-sm text-white/50 font-light mb-6 max-w-2xl">
-            Four venue-anchored portraits. Download any frame or share the motion reel above.
-          </p>
-
+      <div className="relative bg-white px-6 py-20 pb-40">
+        <div className="max-w-5xl mx-auto">
+          
           {contactAction && (
-            <div className="mb-8 rounded-lg border border-primary/30 bg-primary/10 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-primary mb-1">
-                  Created for {venueName}
+            <div className="mb-16 -mt-32 md:-mt-40 relative z-10 rounded-[2rem] border border-[#f0e6d2] bg-white p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl shadow-black/5">
+              <div className="text-center md:text-left max-w-xl">
+                <p className="text-xs uppercase tracking-widest text-gold mb-3 font-semibold">
+                  Take the next step
                 </p>
-                <p className="serif text-2xl leading-tight">
-                  Picture the day here? Take the next step with the venue.
-                </p>
+                <h3 className="font-playfair text-3xl md:text-4xl leading-tight text-[#111111]">
+                  Picture your day here? Let's make it a reality.
+                </h3>
               </div>
               <Button
                 asChild
-                className="bg-primary text-primary-foreground shrink-0"
+                variant="gold"
+                size="lg"
+                className="w-full md:w-auto shrink-0 shadow-xl shadow-[#C2A36B]/20 py-7 text-lg px-8"
                 data-testid="venue-contact-cta"
               >
                 <a href={contactAction.href} target="_blank" rel="noreferrer">
                   <VenueContactIcon icon={contactAction.icon} />
                   {contactAction.label}
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="h-5 w-5 ml-2" />
                 </a>
               </Button>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10 mt-12">
+             <div className="max-w-xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <ImageIcon className="h-5 w-5 text-gold" />
+                  <h3 className="text-sm font-semibold tracking-widest uppercase text-gold">Editorial Stills</h3>
+                </div>
+                <p className="text-lg text-gray-500 font-light leading-relaxed">
+                  Four venue-anchored portraits. Tap any frame to enlarge, or download to keep.
+                </p>
+             </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-12">
             {stills.map((still, index) => {
               const src = storageAssetUrl(still.objectKey, session.shareToken);
               const selected = activeStill === index;
@@ -653,19 +672,21 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                   key={still.id}
                   type="button"
                   onClick={() => setActiveStill(index)}
-                  className={`group relative rounded-xl overflow-hidden border transition-all text-left ${
-                    selected ? "border-primary ring-2 ring-primary/40" : "border-white/10 hover:border-white/30"
+                  className={`group relative rounded-2xl overflow-hidden border transition-all text-left ${
+                    selected ? "border-gold ring-2 ring-gold/40 ring-offset-2" : "border-[#f0e6d2] hover:border-gold/50"
                   }`}
                   data-testid={`gallery-still-${index}`}
                 >
-                  <img
-                    src={src}
-                    alt={`Portrait ${index + 1}`}
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-80" />
-                  <div className="absolute bottom-0 left-0 right-0 p-3 flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider text-white/80">
+                  <div className="aspect-[3/4] w-full overflow-hidden bg-gray-50">
+                    <img
+                      src={src}
+                      alt={`Portrait ${index + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <span className="text-xs font-medium uppercase tracking-wider text-white">
                       Frame {index + 1}
                     </span>
                     <span
@@ -681,7 +702,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                           window.open(src, "_blank");
                         }
                       }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-sm text-white"
                     >
                       <Download className="h-4 w-4" />
                     </span>
@@ -691,11 +712,11 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
             })}
           </div>
 
-          <div className="mt-8 rounded-2xl overflow-hidden border border-white/10 bg-black/40">
+          <div className="rounded-[2.5rem] overflow-hidden border border-gray-100 bg-gray-50 shadow-2xl shadow-black/5 p-4 md:p-8">
             <img
               src={storageAssetUrl(activeAsset.objectKey, session.shareToken)}
               alt="Selected portrait"
-              className="w-full max-h-[70vh] object-contain mx-auto"
+              className="w-full max-h-[75vh] object-contain mx-auto rounded-2xl shadow-md"
               data-testid="gallery-still-hero"
             />
           </div>

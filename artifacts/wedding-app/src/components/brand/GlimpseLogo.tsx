@@ -8,21 +8,22 @@ type GlimpseLogoProps = {
 };
 
 export function GlimpseLogo({ variant = "full", className, href = "/" }: GlimpseLogoProps) {
-  const img = (
-    <img
-      src={variant === "mark" ? "/brand/glimpse-logo-rose.png" : "/brand/glimpse-logo.png"}
-      alt="glimpse"
+  const wordmark = (
+    <span
       className={cn(
-        variant === "full" ? "h-14 sm:h-16 w-auto object-contain" : "h-10 w-10 object-contain",
+        "font-bold tracking-tight leading-none text-foreground select-none",
+        variant === "full" ? "text-2xl" : "text-xl",
         className,
       )}
-    />
+    >
+      Glimpse<span className="text-gold">.</span>
+    </span>
   );
 
-  if (!href) return img;
+  if (!href) return wordmark;
   return (
     <Link href={href} className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
-      {img}
+      {wordmark}
     </Link>
   );
 }

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Building2, Loader2, LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { toVenueSlug } from "@/lib/venueSlug";
+import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
 export default function CreateVenuePage() {
   const [, setLocation] = useLocation();
@@ -75,147 +76,128 @@ export default function CreateVenuePage() {
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[linear-gradient(135deg,#f8fbff_0%,#f6eef5_46%,#edf8f5_100%)] text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_16%,rgba(255,255,255,0.88),transparent_28%),radial-gradient(circle_at_82%_18%,rgba(204,234,255,0.68),transparent_29%),radial-gradient(circle_at_58%_86%,rgba(255,230,238,0.76),transparent_31%)]" />
-      <main className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-4 py-8 lg:grid-cols-[0.9fr_440px]">
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
+    <div className="min-h-screen bg-white text-[#111111] font-sans selection:bg-gold selection:text-white flex flex-col">
+      <header className="absolute top-0 w-full p-6 sm:p-10 flex items-center justify-between z-10">
+        <GlimpseLogo href="/" />
+        <Button variant="ghost" onClick={() => setLocation("/")} className="text-sm font-medium text-gray-500 hover:text-[#111111]">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to site
+        </Button>
+      </header>
+
+      <main className="flex-1 flex items-center justify-center p-6 relative py-20">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(194,163,107,0.05),transparent_50%)] pointer-events-none" />
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55 }}
-          className="hidden lg:block"
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-md mt-10"
         >
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            className="mb-10 inline-flex items-center gap-2 text-sm text-foreground/60 transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Glimpse
-          </button>
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/45 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-2xl">
-            <Sparkles className="h-4 w-4 text-sky-500" />
-            Venue conversion
-          </div>
-          <h1 className="max-w-2xl text-6xl font-semibold leading-[0.95] tracking-normal text-[#111318]">
-            Create the workspace that turns tours into yes.
-          </h1>
-          <p className="mt-6 max-w-lg text-lg leading-8 text-foreground/62">
-            Upload the venue once. Every ready gallery becomes a private,
-            email-delivered follow-up for the couple.
-          </p>
-        </motion.section>
-
-        <motion.section
-          initial={{ opacity: 0, y: 18, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.08 }}
-          className="rounded-lg border border-white/65 bg-white/58 p-5 shadow-[0_30px_90px_rgba(31,41,55,0.16),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-3xl"
-        >
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            className="mb-6 inline-flex items-center gap-2 text-sm text-foreground/55 transition hover:text-foreground lg:hidden"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Home
-          </button>
-
-          <div className="mb-7">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#111318] text-white shadow-lg">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <h2 className="text-3xl font-semibold tracking-normal">Create venue</h2>
-            <p className="mt-2 text-sm leading-6 text-foreground/58">
-              Set up the owner login and dashboard in under a minute.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="venue-name">Venue name</Label>
-              <Input
-                id="venue-name"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                className="h-12 border-white/80 bg-white/64 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                placeholder="The Willow House"
-                data-testid="venue-name-input"
-                autoComplete="organization"
-              />
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gold/20" />
+            
+            <div className="mb-8">
+              <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] flex items-center justify-center mb-6 text-gold shadow-sm border border-[#f5eedf]">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-[#111111]">Create venue</h1>
+              <p className="mt-2 text-gray-500 font-light">
+                Set up the owner login and dashboard
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="owner-email">Owner email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/38" />
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="venue-name" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Venue name</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="venue-name"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    placeholder="The Willow House"
+                    data-testid="venue-name-input"
+                    autoComplete="organization"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="owner-email" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Owner email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="owner-email"
+                    type="email"
+                    required
+                    value={formData.ownerEmail}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, ownerEmail: e.target.value }))}
+                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    placeholder="owner@venue.com"
+                    data-testid="venue-owner-email-input"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="owner-password" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Password</Label>
+                <div className="relative">
+                  <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="owner-password"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={formData.password}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    placeholder="At least 8 characters"
+                    data-testid="venue-password-input"
+                    autoComplete="new-password"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="booking-url" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Tour booking link <span className="text-gray-400 font-normal normal-case">(optional)</span></Label>
                 <Input
-                  id="owner-email"
-                  type="email"
-                  required
-                  value={formData.ownerEmail}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, ownerEmail: e.target.value }))}
-                  className="h-12 border-white/80 bg-white/64 pl-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                  placeholder="owner@venue.com"
-                  data-testid="venue-owner-email-input"
-                  autoComplete="email"
+                  id="booking-url"
+                  value={formData.bookingUrl}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, bookingUrl: e.target.value }))}
+                  className="h-12 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                  placeholder="https://yourvenue.com/tours"
+                  data-testid="venue-booking-url-input"
+                  autoComplete="url"
                 />
               </div>
+
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full h-12 bg-black hover:bg-gray-800 text-white rounded-full font-medium mt-4 transition-all shadow-md"
+                data-testid="create-venue-submit"
+              >
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Enter dashboard <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </form>
+            
+            <div className="mt-8 text-center">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setLocation("/login")}
+                className="text-gray-500 hover:text-[#111111]"
+                data-testid="venue-existing-login"
+              >
+                Already have an account? Sign in
+              </Button>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="owner-password">Password</Label>
-              <div className="relative">
-                <LockKeyhole className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/38" />
-                <Input
-                  id="owner-password"
-                  type="password"
-                  required
-                  minLength={8}
-                  value={formData.password}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                  className="h-12 border-white/80 bg-white/64 pl-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                  placeholder="At least 8 characters"
-                  data-testid="venue-password-input"
-                  autoComplete="new-password"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="booking-url">Tour booking link</Label>
-              <Input
-                id="booking-url"
-                value={formData.bookingUrl}
-                onChange={(e) => setFormData((prev) => ({ ...prev, bookingUrl: e.target.value }))}
-                className="h-12 border-white/80 bg-white/64 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                placeholder="https://yourvenue.com/tours"
-                data-testid="venue-booking-url-input"
-                autoComplete="url"
-              />
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="h-12 w-full bg-[#111318] text-white hover:bg-[#252932]"
-              data-testid="create-venue-submit"
-            >
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Enter dashboard <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </form>
-
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setLocation("/login")}
-            className="mt-4 w-full text-foreground/62 hover:text-foreground"
-            data-testid="venue-existing-login"
-          >
-            Already have an account?
-          </Button>
-        </motion.section>
+          </div>
+        </motion.div>
       </main>
     </div>
   );

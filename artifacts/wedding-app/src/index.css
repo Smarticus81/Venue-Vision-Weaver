@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -27,6 +27,9 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-gold: hsl(var(--gold));
+  --color-gold-foreground: hsl(var(--gold-foreground));
+  --color-gold-hover: hsl(var(--gold-hover));
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --radius-sm: calc(var(--radius) - 4px);
@@ -36,29 +39,35 @@
 }
 
 :root {
-  --background: 210 55% 98%;
-  --foreground: 225 18% 8%;
+  /* Glimpse — premium white + antique gold */
+  --background: 0 0% 100%;
+  --foreground: 0 0% 7%;
   --card: 0 0% 100%;
-  --card-foreground: 225 18% 8%;
+  --card-foreground: 0 0% 7%;
   --popover: 0 0% 100%;
-  --popover-foreground: 225 18% 8%;
-  --primary: 225 18% 8%;
+  --popover-foreground: 0 0% 7%;
+  --primary: 0 0% 7%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 186 42% 93%;
-  --secondary-foreground: 225 18% 8%;
-  --muted: 215 28% 94%;
-  --muted-foreground: 220 9% 42%;
-  --accent: 198 86% 56%;
-  --accent-foreground: 225 18% 8%;
+  --secondary: 40 33% 97%;
+  --secondary-foreground: 0 0% 7%;
+  --muted: 40 14% 96%;
+  --muted-foreground: 220 6% 42%;
+  --accent: 40 38% 95%;
+  --accent-foreground: 0 0% 7%;
   --destructive: 350 74% 48%;
   --destructive-foreground: 0 0% 100%;
-  --border: 216 26% 88%;
-  --input: 216 26% 88%;
-  --ring: 198 86% 56%;
-  --radius: 0.5rem;
+  --border: 40 16% 90%;
+  --input: 40 16% 90%;
+  --ring: 39 42% 59%;
+  --radius: 0.75rem;
 
-  --font-serif: 'Inter', system-ui, sans-serif;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  /* Antique gold accent */
+  --gold: 39 42% 59%;
+  --gold-hover: 39 36% 52%;
+  --gold-foreground: 0 0% 100%;
+
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
 }
 
 @layer base {
@@ -69,20 +78,36 @@
   body {
     @apply antialiased bg-background text-foreground;
     font-family: var(--font-sans);
-    background-image:
-      radial-gradient(circle at 20% 0%, hsl(198 86% 56% / 0.12), transparent 30%),
-      radial-gradient(circle at 84% 12%, hsl(336 76% 74% / 0.14), transparent 28%),
-      linear-gradient(135deg, hsl(210 55% 98%), hsl(190 45% 97%));
   }
 
-  h1, h2, h3, .serif {
+  h1, h2, h3 {
     font-family: var(--font-sans);
-    font-weight: 600;
-    letter-spacing: 0;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .font-playfair, .serif {
+    font-family: var(--font-serif);
   }
 }
 
 @layer utilities {
+  .text-gold {
+    color: hsl(var(--gold));
+  }
+
+  .bg-gold {
+    background-color: hsl(var(--gold));
+  }
+
+  .bg-gold:hover {
+    background-color: hsl(var(--gold-hover));
+  }
+
+  .border-gold {
+    border-color: hsl(var(--gold));
+  }
+
   .glimpse-divider {
     @apply flex items-center gap-4 w-full max-w-xs mx-auto;
   }
@@ -90,14 +115,25 @@
   .glimpse-divider::before,
   .glimpse-divider::after {
     content: "";
-    @apply flex-1 h-px bg-primary/40;
+    @apply flex-1 h-px bg-border;
   }
 
   .glimpse-card {
-    @apply bg-card border border-border rounded-lg shadow-sm;
+    @apply bg-card border border-border rounded-2xl shadow-sm;
   }
 
   .glimpse-gold-ring {
-    box-shadow: 0 0 0 1px hsl(36 38% 55% / 0.25);
+    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25);
+  }
+
+  .animate-fade-in-up {
+    animation: glimpseFadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  @keyframes glimpseFadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }

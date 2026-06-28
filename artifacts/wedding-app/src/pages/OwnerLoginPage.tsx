@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Loader2, LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
 export default function OwnerLoginPage() {
   const [, setLocation] = useLocation();
@@ -104,148 +105,136 @@ export default function OwnerLoginPage() {
 
   if (isTokenExchange) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.95),transparent_32%),linear-gradient(135deg,#f7fbff_0%,#f8f1f5_46%,#eef7f4_100%)] flex items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-foreground" />
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-gold" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[linear-gradient(135deg,#f8fbff_0%,#f6eef5_42%,#edf8f5_100%)] text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(255,255,255,0.9),transparent_26%),radial-gradient(circle_at_78%_20%,rgba(214,239,255,0.7),transparent_28%),radial-gradient(circle_at_52%_82%,rgba(255,231,240,0.7),transparent_30%)]" />
-      <main className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-4 py-8 lg:grid-cols-[1fr_420px]">
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
+    <div className="min-h-screen bg-white text-[#111111] font-sans selection:bg-gold selection:text-white flex flex-col">
+      <header className="absolute top-0 w-full p-6 sm:p-10 flex items-center justify-between z-10">
+        <GlimpseLogo href="/" />
+        <Button variant="ghost" onClick={() => setLocation("/")} className="text-sm font-medium text-gray-500 hover:text-[#111111]">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to site
+        </Button>
+      </header>
+
+      <main className="flex-1 flex items-center justify-center p-6 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(194,163,107,0.05),transparent_50%)] pointer-events-none" />
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55 }}
-          className="hidden lg:block"
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-md"
         >
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            className="mb-10 inline-flex items-center gap-2 text-sm text-foreground/60 transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Glimpse
-          </button>
-          <div className="max-w-xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/45 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] backdrop-blur-2xl">
-              <Sparkles className="h-4 w-4 text-sky-500" />
-              Venue OS
-            </div>
-            <h1 className="text-6xl font-semibold leading-[0.95] tracking-normal text-[#111318]">
-              Sign in. Send the vision. Book the tour.
-            </h1>
-            <p className="mt-6 max-w-lg text-lg leading-8 text-foreground/62">
-              One clean workspace for venue teams turning tour interest into a
-              personal gallery moment.
-            </p>
-          </div>
-        </motion.section>
-
-        <motion.section
-          initial={{ opacity: 0, y: 18, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.08 }}
-          className="rounded-lg border border-white/65 bg-white/58 p-5 shadow-[0_30px_90px_rgba(31,41,55,0.16),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-3xl"
-        >
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            className="mb-6 inline-flex items-center gap-2 text-sm text-foreground/55 transition hover:text-foreground lg:hidden"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Home
-          </button>
-
-          <div className="mb-7">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#111318] text-white shadow-lg">
-              <LockKeyhole className="h-5 w-5" />
-            </div>
-            <h2 className="text-3xl font-semibold tracking-normal">Owner login</h2>
-            <p className="mt-2 text-sm leading-6 text-foreground/58">
-              Use the owner email and password for your venue dashboard.
-            </p>
-          </div>
-
-          {tokenError && (
-            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50/85 px-4 py-3 text-sm text-rose-700">
-              {tokenError}
-            </div>
-          )}
-
-          <form onSubmit={handlePasswordLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="owner-email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/38" />
-                <Input
-                  id="owner-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-12 border-white/80 bg-white/64 pl-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                  placeholder="owner@venue.com"
-                  data-testid="owner-login-email"
-                  autoComplete="email"
-                />
+          <div className="bg-white rounded-3xl border border-gray-100 p-8 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gold/20" />
+            
+            <div className="mb-8">
+              <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] flex items-center justify-center mb-6 text-gold shadow-sm border border-[#f5eedf]">
+                <LockKeyhole className="h-6 w-6" />
               </div>
+              <h1 className="text-3xl font-bold tracking-tight text-[#111111]">Owner login</h1>
+              <p className="mt-2 text-gray-500 font-light">
+                Sign in to your venue dashboard
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="owner-password">Password</Label>
-              <Input
-                id="owner-password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-12 border-white/80 bg-white/64 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                placeholder="Your password"
-                data-testid="owner-login-password"
-                autoComplete="current-password"
-              />
+            {tokenError && (
+              <div className="mb-6 rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-sm text-rose-600">
+                {tokenError}
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordLogin} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="owner-email" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="owner-email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    placeholder="owner@venue.com"
+                    data-testid="owner-login-email"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="owner-password" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Password</Label>
+                <div className="relative">
+                  <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    id="owner-password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    placeholder="Your password"
+                    data-testid="owner-login-password"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full h-12 bg-black hover:bg-gray-800 text-white rounded-full font-medium mt-2 transition-all shadow-md"
+                data-testid="owner-login-submit"
+              >
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Sign in <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </form>
+
+            <div className="mt-8 flex flex-col gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-100" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase font-semibold">
+                  <span className="bg-white px-2 text-gray-400">Or</span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleMagicLink}
+                disabled={isSendingLink}
+                className="w-full h-12 rounded-full font-medium border-gray-200 hover:bg-gray-50 text-gray-700 mt-2"
+                data-testid="owner-magic-link"
+              >
+                {isSendingLink ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4 text-gray-400" />
+                )}
+                Send sign-in link
+              </Button>
             </div>
-
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="h-12 w-full bg-[#111318] text-white hover:bg-[#252932]"
-              data-testid="owner-login-submit"
-            >
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Continue <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </form>
-
-          <div className="mt-5 grid gap-2 sm:grid-cols-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleMagicLink}
-              disabled={isSendingLink}
-              className="border-white/80 bg-white/45"
-              data-testid="owner-magic-link"
-            >
-              {isSendingLink ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Mail className="mr-2 h-4 w-4" />
-              )}
-              Email link
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setLocation("/create-venue")}
-              className="text-foreground/64 hover:text-foreground"
-              data-testid="owner-create-account"
-            >
-              New venue
-            </Button>
+            
+            <div className="mt-8 text-center">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setLocation("/create-venue")}
+                className="text-gray-500 hover:text-[#111111]"
+                data-testid="owner-create-account"
+              >
+                Create a new venue workspace
+              </Button>
+            </div>
           </div>
-        </motion.section>
+        </motion.div>
       </main>
     </div>
   );
