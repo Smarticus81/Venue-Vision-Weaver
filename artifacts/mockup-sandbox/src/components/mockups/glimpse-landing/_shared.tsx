@@ -34,7 +34,7 @@ export function SiteNav({ active }: { active?: string }) {
             Sign in
           </Button>
           <Button asChild className="hidden md:inline-flex bg-gold hover:bg-[#b09159] text-white rounded-full px-6 text-sm font-medium shadow-lg shadow-[#C2A36B]/20">
-            <a href="BookDemo">Book a demo</a>
+            <a href="BookDemo">Create workspace</a>
           </Button>
           <Button variant="ghost" size="icon" className="md:hidden">
             <Menu className="h-5 w-5" />
@@ -57,7 +57,7 @@ export function SiteFooter() {
           <a href="HowItWorks" className="hover:text-gold transition-colors">How it works</a>
           <a href="Gallery" className="hover:text-gold transition-colors">Gallery</a>
           <a href="Pricing" className="hover:text-gold transition-colors">Pricing</a>
-          <a href="BookDemo" className="hover:text-gold transition-colors">Book a demo</a>
+          <a href="BookDemo" className="hover:text-gold transition-colors">Create workspace</a>
           <a href="#" className="hover:text-gold transition-colors">Privacy</a>
         </div>
 

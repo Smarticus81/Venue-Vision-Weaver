@@ -24,15 +24,16 @@ export function HowItWorks() {
             <div className="flex justify-center mb-7">
               <Pill>
                 <Sparkles className="w-3.5 h-3.5 text-gold" />
-                From your photos to booked weddings
+                From the tour to the booking
               </Pill>
             </div>
             <h1 className="text-[2.75rem] md:text-[4rem] leading-[1.05] tracking-tighter font-extrabold mb-6">
               How Glimpse <span className="text-gold">works</span>
             </h1>
             <p className="text-lg md:text-xl text-gray-500 font-light leading-relaxed">
-              No new shoot. No software to learn. Send us the venue photos you already have,
-              and we turn them into branded preview galleries your prospects fall in love with.
+              Set up your venue once. Then every couple who tours can see themselves
+              getting married in your real space &mdash; personalized galleries generated
+              in minutes and delivered straight to their inbox.
             </p>
           </div>
         </section>
@@ -44,26 +45,26 @@ export function HowItWorks() {
               {
                 step: "01",
                 icon: ImageUp,
-                title: "Send us your space",
-                body: "Share your existing venue photos. We map your rooms, lighting and signature angles, so every render stays true to the real place couples will tour.",
-                points: ["No photoshoot or equipment needed", "Works from the photos you already have", "We handle the heavy lifting"],
+                title: "Create your venue workspace",
+                body: "Sign up and upload a handful of real photos of your spaces. They become the canvas every couple's preview is built on, so each render stays true to the place they'll actually tour.",
+                points: ["Self-serve setup in minutes", "Use the photos you already have", "Ceremony, reception, exterior and details"],
                 img: "venue-empty.png",
               },
               {
                 step: "02",
                 icon: Wand2,
-                title: "We craft the preview",
-                body: "Our team builds photoreal, true-to-space galleries with accurate scale, natural lighting and believable shadows, tastefully branded to your venue and ready for every channel.",
-                points: ["Branded to your venue", "Compact variants for ads, email and embeds", "Delivered in 24 to 72 hours"],
-                img: "venue-styled.png",
+                title: "Add a couple",
+                body: "Two ways, your choice. Snap two or three photos of the couple and add their email right from your dashboard during the tour, or share your venue link and let couples add themselves.",
+                points: ["Capture couples during the tour", "Or share your self-serve venue link", "Just a couple of photos and an email"],
+                img: "couple-venue-tour.png",
               },
               {
                 step: "03",
                 icon: CheckCircle2,
-                title: "Approve and convert",
-                body: "Review every render, request changes, and approve what goes live. Publish to your site, ads and emails with a clear inquiry CTA, then watch tours turn into bookings.",
-                points: ["Full owner approval controls", "Optional demo watermarking for privacy", "Clear inquiry CTAs built in"],
-                img: "owner-review.png",
+                title: "They picture their day",
+                body: "Glimpse instantly places the couple inside your real venue and builds a private gallery \u2014 four editorial stills and a cinematic motion reel. They get a link by email with a clear Book a tour button.",
+                points: ["Personalized to each couple", "4 editorial stills + 1 motion reel", "Private link with a Book a tour CTA"],
+                img: "venue-styled.png",
               },
             ].map(({ step, icon: Icon, title, body, points, img }, i) => (
               <div key={step} className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center ${i % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}>
@@ -100,14 +101,14 @@ export function HowItWorks() {
         <section className="py-20 md:py-28 bg-[#fdfbf7] border-y border-[#f5eedf]">
           <div className="container mx-auto px-6">
             <SectionHeading
-              eyebrow="The same space, transformed"
-              title="From empty room to their wedding day"
-              subtitle="We keep your venue exactly as it is, then let couples picture the celebration inside it."
+              eyebrow="The same space, made personal"
+              title="From your real room to their wedding day"
+              subtitle="We keep your venue exactly as it is, then place the couple inside it so they can picture the celebration."
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-5xl mx-auto">
               {[
-                { img: "venue-empty.png", tag: "Before", note: "Your real space, as you photographed it" },
-                { img: "venue-styled.png", tag: "After", note: "Reimagined for their wedding day" },
+                { img: "venue-empty.png", tag: "Your venue", note: "Your real space, as you photographed it" },
+                { img: "venue-styled.png", tag: "Their gallery", note: "The couple, placed in your space" },
               ].map(({ img, tag, note }) => (
                 <div key={tag} className="relative rounded-[2rem] overflow-hidden border border-[#f0e6d2]/60 shadow-sm aspect-[4/3]">
                   <img src={`/__mockup/images/${img}`} alt={tag} className="w-full h-full object-cover" />
@@ -124,9 +125,9 @@ export function HowItWorks() {
           <div className="container mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
               {[
-                { icon: Clock, title: "Fast by design", body: "First samples land in 24 to 72 hours, so you can start converting this week." },
-                { icon: CheckCircle2, title: "You stay in control", body: "Nothing publishes without your approval. Request changes any time." },
-                { icon: ShieldCheck, title: "Private until launch", body: "Optional demo watermarking protects work in progress and sensitive spaces." },
+                { icon: Clock, title: "Generated in minutes", body: "No shoot, no waiting on a team. Couples can see themselves in your venue before they leave the tour." },
+                { icon: CheckCircle2, title: "Two ways to add couples", body: "Capture them at the tour from your dashboard, or share your link so couples add themselves." },
+                { icon: ShieldCheck, title: "Private by default", body: "Every couple gets their own secure gallery link by email. Nothing is posted publicly." },
               ].map(({ icon: Icon, title, body }) => (
                 <div key={title} className="rounded-3xl border border-gray-100 p-8 text-center">
                   <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] flex items-center justify-center mb-5 mx-auto text-gold border border-[#f5eedf]">
@@ -143,12 +144,12 @@ export function HowItWorks() {
         {/* CTA */}
         <section className="py-24 bg-[#111111] text-white">
           <div className="container mx-auto px-6 text-center max-w-3xl">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">See it on your own venue</h2>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">Set up your venue today</h2>
             <p className="text-xl text-gray-300 font-light mb-10 max-w-xl mx-auto">
-              Book a 20 minute demo and we&rsquo;ll create a free branded sample from your photos.
+              Create your workspace, upload your spaces, and send your first couple a gallery in minutes.
             </p>
             <Button asChild className="bg-gold hover:bg-[#b09159] text-white rounded-full px-10 py-7 text-lg font-medium transition-all shadow-xl shadow-[#C2A36B]/20">
-              <a href="BookDemo">Book a demo <ArrowRight className="ml-2 h-5 w-5" /></a>
+              <a href="BookDemo">Create venue workspace <ArrowRight className="ml-2 h-5 w-5" /></a>
             </Button>
           </div>
         </section>

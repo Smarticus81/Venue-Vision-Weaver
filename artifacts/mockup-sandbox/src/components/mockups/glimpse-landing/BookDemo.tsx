@@ -19,15 +19,15 @@ export function BookDemo() {
                 <div className="mb-7">
                   <Pill>
                     <Sparkles className="w-3.5 h-3.5 text-gold" />
-                    Free branded sample included
+                    Self-serve &mdash; set up in minutes
                   </Pill>
                 </div>
                 <h1 className="text-[2.75rem] md:text-[3.75rem] leading-[1.05] tracking-tighter font-extrabold mb-6">
-                  Book your <span className="text-gold">demo.</span>
+                  Create your <span className="text-gold">workspace.</span>
                 </h1>
                 <p className="text-lg md:text-xl text-gray-500 font-light leading-relaxed mb-10">
-                  Twenty minutes is all it takes. We&rsquo;ll walk you through the ROI and create a
-                  free branded preview from your own venue photos.
+                  Set up your venue, upload your spaces, and start sending couples personalized
+                  galleries that place them inside your real venue. No photoshoot, no waiting.
                 </p>
 
                 <div className="rounded-3xl overflow-hidden border border-gray-100 shadow-sm mb-10 aspect-[16/10]">
@@ -36,8 +36,8 @@ export function BookDemo() {
 
                 <ul className="space-y-4">
                   {[
-                    { icon: Check, text: "A free branded sample of your venue" },
-                    { icon: Clock, text: "First previews back in 24 to 72 hours" },
+                    { icon: Check, text: "Upload your real venue photos once" },
+                    { icon: Clock, text: "Couple galleries generate in minutes" },
                     { icon: ShieldCheck, text: "No long contracts, cancel any time" },
                   ].map(({ icon: Icon, text }) => (
                     <li key={text} className="flex items-center gap-3 text-gray-600">
@@ -53,8 +53,8 @@ export function BookDemo() {
               {/* Right: form */}
               <div className="lg:sticky lg:top-28 animate-fade-in-up delay-100">
                 <div className="rounded-[2rem] border border-gray-100 shadow-2xl shadow-black/5 p-8 md:p-10 bg-white">
-                  <h2 className="text-2xl font-bold tracking-tight mb-1">Tell us about your venue</h2>
-                  <p className="text-gray-500 font-light mb-8">We&rsquo;ll reply within one business day.</p>
+                  <h2 className="text-2xl font-bold tracking-tight mb-1">Start your venue workspace</h2>
+                  <p className="text-gray-500 font-light mb-8">Create your account and add your first space.</p>
 
                   <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -62,9 +62,9 @@ export function BookDemo() {
                       <Field label="Venue name" placeholder="The Grand Estate" />
                     </div>
                     <Field label="Work email" placeholder="you@venue.com" type="email" />
-                    <Field label="Website" placeholder="venue.com" />
+                    <Field label="Create a password" placeholder="••••••••" type="password" />
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">What would you like to show couples?</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Which spaces will you showcase?</label>
                       <textarea
                         rows={4}
                         placeholder="Ballroom, garden ceremony, seasonal looks..."
@@ -72,10 +72,10 @@ export function BookDemo() {
                       />
                     </div>
                     <Button className="w-full bg-gold hover:bg-[#b09159] text-white rounded-full py-6 text-base font-medium transition-all shadow-lg shadow-[#C2A36B]/20">
-                      Book my demo
+                      Create workspace
                     </Button>
                     <p className="text-center text-xs text-gray-400">
-                      By booking, you agree to our Privacy Policy. No spam, ever.
+                      By creating a workspace, you agree to our Privacy Policy. No spam, ever.
                     </p>
                   </form>
                 </div>

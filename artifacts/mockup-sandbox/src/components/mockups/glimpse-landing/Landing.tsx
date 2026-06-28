@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Sun,
   Palette,
-  Megaphone,
   CheckCircle2,
   ShieldCheck,
   Clock,
@@ -49,7 +48,7 @@ export function Landing() {
 
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <Button asChild className="w-full sm:w-auto bg-gold hover:bg-[#b09159] text-white rounded-full px-8 py-6 text-base font-medium transition-all shadow-lg shadow-[#C2A36B]/20">
-                    <a href="BookDemo">Book a demo</a>
+                    <a href="BookDemo">Create venue workspace</a>
                   </Button>
                   <Button asChild variant="ghost" className="w-full sm:w-auto rounded-full px-8 py-6 text-base font-medium text-gray-600 hover:text-[#111111] hover:bg-gray-50 group">
                     <a href="Gallery">See a sample gallery <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" /></a>
@@ -58,7 +57,7 @@ export function Landing() {
 
                 <p className="mt-6 text-sm text-gray-400 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-gold" />
-                  First samples delivered in 24 to 72 hours. No new photoshoot required.
+                  Galleries generate in minutes. Couples get a private link by email.
                 </p>
               </div>
 
@@ -166,18 +165,18 @@ export function Landing() {
           <div className="container mx-auto px-6">
             <SectionHeading
               eyebrow="Built for booking"
-              title="Marketing-first, true to your space"
-              subtitle="Every output is designed to win the inquiry, and to protect your brand while it does."
+              title="Personal, photoreal, true to your space"
+              subtitle="Every gallery places a real couple inside your real venue, and points them straight at booking a tour."
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
               {[
                 { icon: Sun, title: "True-to-space realism", body: "Accurate scale, natural lighting and believable shadows. Couples see your venue, not a generic render." },
                 { icon: Palette, title: "Tasteful venue branding", body: "Your name, colors and details, woven in elegantly. Premium and warm, never busy or templated." },
-                { icon: Megaphone, title: "Ready for every channel", body: "Compact variants sized for ads, email and on-site embeds. Drop them straight into your funnel." },
-                { icon: CheckCircle2, title: "Owner approval controls", body: "Nothing goes live without your sign-off. Review, request changes, and approve every gallery." },
-                { icon: ShieldCheck, title: "Privacy by default", body: "Optional demo watermarking keeps work in progress and sensitive spaces protected before launch." },
-                { icon: Clock, title: "Fast sample delivery", body: "First previews back in 24 to 72 hours, so you can test, iterate and start converting this week." },
+                { icon: Wand2, title: "Personalized to each couple", body: "The couple's own likeness, placed inside your real spaces, so the preview feels unmistakably theirs." },
+                { icon: CalendarCheck, title: "Two ways to add couples", body: "Capture them during the tour from your dashboard, or share your link and let couples add themselves." },
+                { icon: ShieldCheck, title: "Private galleries by email", body: "Each couple gets their own secure share link with a Book a tour CTA. Nothing is posted publicly." },
+                { icon: Clock, title: "Generated in minutes", body: "AI builds four editorial stills and a cinematic motion reel automatically, no shoot and no waiting." },
               ].map(({ icon: Icon, title, body }) => (
                 <div key={title} className="group rounded-3xl p-8 transition-all hover:bg-gray-50/60 border border-transparent hover:border-gray-100">
                   <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] flex items-center justify-center mb-6 text-gold shadow-sm border border-[#f5eedf] group-hover:scale-110 transition-transform">
@@ -197,16 +196,16 @@ export function Landing() {
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-14">
               <div className="max-w-xl">
                 <p className="text-xs font-semibold tracking-widest uppercase text-gold mb-4">How it works</p>
-                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#111111]">Live in days, not weeks</h2>
+                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#111111]">From tour to gallery in minutes</h2>
               </div>
               <GoldLink href="HowItWorks">See the full process</GoldLink>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
-                { step: "01", icon: ImageUp, title: "Send us your space", body: "Share the venue photos you already have. We map your rooms, lighting, and signature angles." },
-                { step: "02", icon: Wand2, title: "We craft the preview", body: "Photoreal, true-to-space galleries, branded to you. Delivered in 24 to 72 hours." },
-                { step: "03", icon: CheckCircle2, title: "Approve and convert", body: "Review and approve every render, then publish to your site, ads and emails." },
+                { step: "01", icon: ImageUp, title: "Create your venue", body: "Sign up and upload a few real photos of your spaces. They become the canvas for every couple's gallery." },
+                { step: "02", icon: Wand2, title: "Add a couple", body: "Snap a couple of photos and their email at the tour, or share your venue link and let them add themselves." },
+                { step: "03", icon: CheckCircle2, title: "They picture their day", body: "Glimpse places them in your real venue in minutes and emails a private gallery with a Book a tour button." },
               ].map(({ step, icon: Icon, title, body }) => (
                 <div key={step} className="relative rounded-3xl bg-white border border-[#f0e6d2]/60 p-8 shadow-sm">
                   <span className="absolute top-6 right-7 text-5xl font-extrabold text-[#f0e6d2]">{step}</span>
@@ -229,14 +228,14 @@ export function Landing() {
               Turn lookers into booked weddings
             </h2>
             <p className="text-xl text-gray-300 font-light mb-10 max-w-xl mx-auto">
-              See a branded sample of your own venue, free. We&rsquo;ll walk you through the ROI on a 20 minute demo.
+              Create your venue workspace and send your first couple a personalized gallery today.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button asChild className="w-full sm:w-auto bg-gold hover:bg-[#b09159] text-white rounded-full px-10 py-7 text-lg font-medium transition-all shadow-xl shadow-[#C2A36B]/20">
-                <a href="BookDemo">Book a demo</a>
+                <a href="BookDemo">Create venue workspace</a>
               </Button>
               <Button asChild variant="ghost" className="w-full sm:w-auto rounded-full px-10 py-7 text-lg font-medium text-gray-200 hover:text-white hover:bg-white/10 group">
-                <a href="Gallery">Get a free sample <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" /></a>
+                <a href="Gallery">See a sample gallery <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" /></a>
               </Button>
             </div>
           </div>

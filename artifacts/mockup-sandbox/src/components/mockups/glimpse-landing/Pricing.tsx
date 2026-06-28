@@ -6,46 +6,46 @@ import "./_group.css";
 
 const TIERS = [
   {
-    name: "Starter",
-    price: "$490",
-    cadence: "per gallery",
-    blurb: "Perfect for a single signature space or a first campaign.",
+    name: "Single Venue",
+    price: "$99",
+    cadence: "per month",
+    blurb: "Everything one venue needs to turn tours into bookings.",
     features: [
-      "1 branded preview gallery",
-      "Up to 6 styled scenes",
-      "Web and email ready exports",
-      "1 round of revisions",
-      "Delivery in 72 hours",
+      "1 venue workspace",
+      "Unlimited couple galleries",
+      "4 stills + 1 motion reel per couple",
+      "Capture at the tour or self-serve link",
+      "Private galleries delivered by email",
     ],
     featured: false,
-    cta: "Start with Starter",
+    cta: "Create workspace",
   },
   {
-    name: "Studio",
-    price: "$1,290",
+    name: "Multi-Space",
+    price: "$299",
     cadence: "per month",
-    blurb: "For venues actively marketing multiple spaces and seasons.",
+    blurb: "For venues marketing several spaces and seasons.",
     features: [
-      "3 galleries per month",
-      "Unlimited styled scenes",
-      "Ad, email and embed variants",
-      "Owner approval workflow",
-      "Optional demo watermarking",
-      "Priority 24 to 48 hour delivery",
+      "Up to 5 venue workspaces",
+      "Unlimited couple galleries",
+      "Priority generation",
+      "Branded galleries and custom domain",
+      "Built-in Book a tour CTAs",
+      "Booking and gallery analytics",
     ],
     featured: true,
-    cta: "Book a demo",
+    cta: "Create workspace",
   },
   {
     name: "Venue Group",
     price: "Custom",
     cadence: "let's talk",
-    blurb: "Multi-venue brands and management groups with volume needs.",
+    blurb: "Multi-property brands and management groups with volume needs.",
     features: [
-      "Unlimited galleries",
+      "Unlimited venue workspaces",
       "Multi-property branding",
-      "Dedicated creative partner",
-      "Campaign and seasonal planning",
+      "Dedicated account partner",
+      "Team roles and permissions",
       "Onboarding and training",
       "Priority support",
     ],
@@ -73,8 +73,8 @@ export function Pricing() {
               Pricing that pays for <span className="text-gold">itself.</span>
             </h1>
             <p className="text-lg md:text-xl text-gray-500 font-light leading-relaxed">
-              Most venues earn back the cost of Glimpse with a single additional booking.
-              Simple plans, no long contracts, cancel any time.
+              Flat monthly plans with unlimited couple galleries. Most venues earn it back
+              with a single additional booking. No long contracts, cancel any time.
             </p>
           </div>
         </section>
@@ -137,10 +137,10 @@ export function Pricing() {
             <SectionHeading eyebrow="Good to know" title="Questions, answered" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
               {[
-                { q: "Do we need a professional photoshoot?", a: "No. Glimpse works from the venue photos you already have. If you want fresh angles, we can guide a quick phone capture." },
-                { q: "How fast will we see results?", a: "First samples arrive in 24 to 72 hours. Many venues run their first campaign within the same week." },
-                { q: "Do we approve everything?", a: "Always. Nothing goes live without your sign-off, and you can request revisions at any time." },
-                { q: "Is our space kept private?", a: "Yes. Optional demo watermarking protects work in progress and sensitive spaces until you choose to publish." },
+                { q: "Do we need a professional photoshoot?", a: "No. Upload the venue photos you already have once \u2014 that becomes the canvas for every couple's gallery." },
+                { q: "How fast will couples see results?", a: "Instantly. Galleries generate in minutes, so a couple can see themselves in your venue before they leave the tour." },
+                { q: "How do couples get added?", a: "Snap a couple of photos and their email at the tour from your dashboard, or share your venue link and let couples add themselves." },
+                { q: "Is each gallery private?", a: "Yes. Every couple gets their own secure link, delivered by email \u2014 galleries are never posted publicly." },
               ].map(({ q, a }) => (
                 <div key={q} className="rounded-3xl bg-white border border-[#f0e6d2]/60 p-7">
                   <h3 className="text-lg font-bold mb-2">{q}</h3>
@@ -156,10 +156,10 @@ export function Pricing() {
           <div className="container mx-auto px-6 text-center max-w-3xl">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">Not sure which plan fits?</h2>
             <p className="text-xl text-gray-300 font-light mb-10 max-w-xl mx-auto">
-              Book a quick demo. We&rsquo;ll show a free sample of your venue and recommend the right plan.
+              Start with any plan, set up your venue, and send your first couple a gallery today.
             </p>
             <Button asChild className="bg-gold hover:bg-[#b09159] text-white rounded-full px-10 py-7 text-lg font-medium transition-all shadow-xl shadow-[#C2A36B]/20">
-              <a href="BookDemo">Book a demo <ArrowRight className="ml-2 h-5 w-5" /></a>
+              <a href="BookDemo">Create venue workspace <ArrowRight className="ml-2 h-5 w-5" /></a>
             </Button>
           </div>
         </section>

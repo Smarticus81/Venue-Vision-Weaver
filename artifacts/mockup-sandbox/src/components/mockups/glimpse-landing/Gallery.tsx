@@ -25,15 +25,15 @@ export function Gallery() {
             <div className="flex justify-center mb-7">
               <Pill>
                 <Sparkles className="w-3.5 h-3.5 text-gold" />
-                A few of the moments we render
+                What lands in a couple&rsquo;s inbox
               </Pill>
             </div>
             <h1 className="text-[2.75rem] md:text-[4rem] leading-[1.05] tracking-tighter font-extrabold mb-6">
               See the <span className="text-gold">difference.</span>
             </h1>
             <p className="text-lg md:text-xl text-gray-500 font-light leading-relaxed">
-              Every gallery is built from a real venue and tastefully branded.
-              Here is the kind of work couples fall in love with before they ever tour.
+              Every gallery is personal &mdash; a real couple, placed inside your real venue.
+              This is the kind of preview couples fall in love with after a tour.
             </p>
           </div>
         </section>
@@ -43,8 +43,8 @@ export function Gallery() {
           <div className="container mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-5xl mx-auto">
               {[
-                { img: "venue-empty.png", tag: "Before", note: "The real space" },
-                { img: "venue-styled.png", tag: "After", note: "Reimagined for their day" },
+                { img: "venue-empty.png", tag: "Your venue", note: "The real space" },
+                { img: "venue-styled.png", tag: "Their gallery", note: "The couple, placed in your space" },
               ].map(({ img, tag, note }) => (
                 <div key={tag} className="relative rounded-[2rem] overflow-hidden border border-[#f0e6d2]/60 shadow-sm aspect-[4/3]">
                   <img src={`/__mockup/images/${img}`} alt={tag} className="w-full h-full object-cover" />
@@ -72,19 +72,19 @@ export function Gallery() {
           </div>
         </section>
 
-        {/* Variants strip */}
+        {/* What every couple receives */}
         <section className="py-20 md:py-28 bg-[#fdfbf7] border-y border-[#f5eedf]">
           <div className="container mx-auto px-6">
             <SectionHeading
-              eyebrow="One gallery, every channel"
-              title="Sized for ads, email and embeds"
-              subtitle="We deliver compact variants ready to drop straight into the places your prospects already are."
+              eyebrow="Every gallery, the same promise"
+              title="What every couple receives"
+              subtitle="One private gallery per couple, generated in minutes and delivered by email with a Book a tour button."
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
               {[
-                { label: "Social and ads", ratio: "aspect-square", src: "reception-table.png" },
-                { label: "Email banners", ratio: "aspect-[16/9]", src: "ballroom-evening.png" },
-                { label: "Website embeds", ratio: "aspect-[16/9]", src: "garden-ceremony.png" },
+                { label: "4 editorial stills", ratio: "aspect-[4/5]", src: "garden-ceremony.png" },
+                { label: "1 cinematic motion reel", ratio: "aspect-[4/5]", src: "ballroom-evening.png" },
+                { label: "A private gallery link", ratio: "aspect-[4/5]", src: "couple-entrance.png" },
               ].map(({ label, ratio, src }) => (
                 <div key={label} className="text-center">
                   <div className={`rounded-2xl overflow-hidden border border-[#f0e6d2]/60 shadow-sm mb-4 ${ratio}`}>
@@ -102,10 +102,10 @@ export function Gallery() {
           <div className="container mx-auto px-6 text-center max-w-3xl">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">Want this for your venue?</h2>
             <p className="text-xl text-gray-300 font-light mb-10 max-w-xl mx-auto">
-              We&rsquo;ll create a free branded sample of your own space, no commitment required.
+              Create your workspace and send your first couple a personalized gallery in minutes.
             </p>
             <Button asChild className="bg-gold hover:bg-[#b09159] text-white rounded-full px-10 py-7 text-lg font-medium transition-all shadow-xl shadow-[#C2A36B]/20">
-              <a href="BookDemo">Get a free sample <ArrowRight className="ml-2 h-5 w-5" /></a>
+              <a href="BookDemo">Create venue workspace <ArrowRight className="ml-2 h-5 w-5" /></a>
             </Button>
           </div>
         </section>
