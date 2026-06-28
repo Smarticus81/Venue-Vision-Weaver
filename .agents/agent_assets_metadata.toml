@@ -1,2 +1,8 @@
 uploads = []
 outputs = []
+
+[[generated]]
+id = "8_tah9rp02PhDdu48pGv_"
+uri = "file://artifacts/mockup-sandbox/public/images/couple-venue-tour.png"
+type = "image"
+title = "generated_image"
