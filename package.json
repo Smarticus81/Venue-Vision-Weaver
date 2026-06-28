@@ -19,7 +19,7 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@10.15.0",
+  "packageManager": "pnpm@10.26.1",
   "private": true,
   "devDependencies": {
     "@supabase/supabase-js": "^2.49.1",

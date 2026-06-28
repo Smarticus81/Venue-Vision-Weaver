@@ -32,7 +32,7 @@ export default defineConfig({
       allow: ["../.."],
     },
     proxy: {
-      "/api": "http://localhost:5000",
+      "/api": "http://localhost:3001",
     },
   },
   preview: {
