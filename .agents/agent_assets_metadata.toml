@@ -5,7 +5,7 @@ outputs = []
 id = "8_tah9rp02PhDdu48pGv_"
 uri = "file://artifacts/mockup-sandbox/public/images/couple-venue-tour.png"
 type = "image"
-title = "generated_image"
+title = "couple touring venue photoreal"
 
 [[generated]]
 id = "ikvTS9Ns3LVVsjsotvHbA"
@@ -35,7 +35,7 @@ title = "reception table setting"
 id = "5B6CFsZ0OXPQUHd5ik7n0"
 uri = "file://artifacts/mockup-sandbox/public/images/couple-entrance.png"
 type = "image"
-title = "couple at venue entrance"
+title = "couple wedding entrance photoreal"
 
 [[generated]]
 id = "Na9iLaQu1saU139xddAVm"
