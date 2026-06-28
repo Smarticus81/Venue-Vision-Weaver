@@ -22,3 +22,40 @@ GALLERY_MIN_LIKENESS_SCORE = "0.82"
 GALLERY_MIN_PARTNER_LIKENESS_SCORE = "0.78"
 GALLERY_MIN_VENUE_SCORE = "0.80"
 GALLERY_MIN_COMPOSITION_SCORE = "0.74"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash start-dev.sh"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+build = ["bash", "-c", "pnpm --filter @workspace/wedding-app run build && pnpm --filter @workspace/api-server run build"]

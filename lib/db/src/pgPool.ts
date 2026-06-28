@@ -10,17 +10,21 @@ function normalizeDatabaseUrl(raw: string): { url: string; needsSsl: boolean } {
     );
   }
 
-  const needsSsl =
-    url.includes("supabase.co") ||
-    url.includes("supabase.com") ||
-    /[?&]sslmode=/i.test(url);
+  const isSupabase = url.includes("supabase.co") || url.includes("supabase.com");
+  const isReplitInternal =
+    url.includes("@helium") || url.includes("@localhost") || url.includes("@127.0.0.1");
 
-  // Strip sslmode/sslrootcert from the connection string. Newer pg versions
+  const needsSsl =
+    isSupabase ||
+    (!isReplitInternal && /[?&]sslmode=require/i.test(url));
+
+  // Strip sslmode/sslrootcert/ssl from the connection string. Newer pg versions
   // treat sslmode=require as verify-full and override our `ssl` object, which
   // breaks managed providers (Supabase, Railway) that use self-signed chains.
   url = url
     .replace(/([?&])sslmode=[^&]*/gi, "$1")
     .replace(/([?&])sslrootcert=[^&]*/gi, "$1")
+    .replace(/([?&])ssl(?:=[^&]*)?(?=&|$)/gi, "$1")
     .replace(/\?&/, "?")
     .replace(/&&+/g, "&")
     .replace(/[?&]$/, "");
