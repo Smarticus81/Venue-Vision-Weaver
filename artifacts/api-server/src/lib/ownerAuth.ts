@@ -1,13 +1,21 @@
 import crypto from "crypto";
 import type { Request, Response } from "express";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import { db, ownerLoginTokensTable, ownerSessionsTable, venuesTable } from "@workspace/db";
+import {
+  db,
+  ownerCredentialsTable,
+  ownerLoginTokensTable,
+  ownerSessionsTable,
+  venuesTable,
+} from "@workspace/db";
 import { getAppBaseUrl } from "./appUrl.js";
 import { isCorsOriginAllowed } from "./httpSecurity.js";
 
 export const OWNER_SESSION_COOKIE = "glimpse_owner_session";
 const LOGIN_TOKEN_MINUTES = 15;
 const SESSION_DAYS = 30;
+const SCRYPT_KEY_LENGTH = 64;
+const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -15,6 +23,21 @@ function sha256(value: string): string {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+export function createOwnerPasswordHash(password: string): string {
+  const salt = crypto.randomBytes(16).toString("base64url");
+  const key = crypto.scryptSync(password, salt, SCRYPT_KEY_LENGTH, SCRYPT_OPTIONS).toString("base64url");
+  return `scrypt$${salt}$${key}`;
+}
+
+function verifyPasswordHash(password: string, encodedHash: string): boolean {
+  const [algorithm, salt, storedKey] = encodedHash.split("$");
+  if (algorithm !== "scrypt" || !salt || !storedKey) return false;
+
+  const expected = Buffer.from(storedKey, "base64url");
+  const actual = crypto.scryptSync(password, salt, SCRYPT_KEY_LENGTH, SCRYPT_OPTIONS);
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
 export function ownerCookieOptions(maxAgeMs: number) {
@@ -25,6 +48,10 @@ export function ownerCookieOptions(maxAgeMs: number) {
     path: "/",
     maxAge: maxAgeMs,
   };
+}
+
+export function isStrongOwnerPassword(password: string): boolean {
+  return password.length >= 8;
 }
 
 function normalizeNextPath(nextPath: string | null | undefined): string | null {
@@ -46,15 +73,46 @@ function originFromUrl(raw: string | undefined): string | null {
   }
 }
 
+function isLoopbackHost(value: string | undefined): boolean {
+  if (!value?.trim()) return false;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "::1") return true;
+  const host = trimmed.startsWith("[")
+    ? trimmed.slice(1, trimmed.indexOf("]"))
+    : trimmed.includes(":")
+      ? trimmed.split(":")[0]
+      : trimmed;
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+function isLoopbackOrigin(value: string | null): boolean {
+  if (!value) return false;
+  try {
+    return isLoopbackHost(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function isOwnerMutationOriginAllowed(req: Pick<Request, "method" | "headers">): boolean {
   if (isSafeMethod(req.method)) return true;
   if (process.env.NODE_ENV !== "production") return true;
 
+  const requestHost =
+    typeof req.headers["x-forwarded-host"] === "string"
+      ? req.headers["x-forwarded-host"]
+      : typeof req.headers.host === "string"
+        ? req.headers.host
+        : undefined;
+
   const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+  const originValue = originFromUrl(origin);
+  if (isLoopbackHost(requestHost) && isLoopbackOrigin(originValue)) return true;
   if (origin) return isCorsOriginAllowed(origin);
 
   const referer = typeof req.headers.referer === "string" ? req.headers.referer : undefined;
   const refererOrigin = originFromUrl(referer);
+  if (isLoopbackHost(requestHost) && isLoopbackOrigin(refererOrigin)) return true;
   if (refererOrigin) return isCorsOriginAllowed(refererOrigin);
 
   return false;
@@ -84,6 +142,51 @@ export async function createOwnerLoginLink(
   return url.toString();
 }
 
+export async function upsertOwnerPassword(ownerEmail: string, password: string): Promise<void> {
+  const email = normalizeEmail(ownerEmail);
+  const passwordHash = createOwnerPasswordHash(password);
+  await db
+    .insert(ownerCredentialsTable)
+    .values({
+      ownerEmail: email,
+      passwordHash,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: ownerCredentialsTable.ownerEmail,
+      set: {
+        passwordHash,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+export async function createOwnerSession(ownerEmail: string): Promise<string> {
+  const rawSession = crypto.randomBytes(32).toString("base64url");
+  await db.insert(ownerSessionsTable).values({
+    sessionHash: sha256(rawSession),
+    ownerEmail: normalizeEmail(ownerEmail),
+    expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
+  });
+  return rawSession;
+}
+
+export async function loginOwnerWithPassword(
+  ownerEmail: string,
+  password: string,
+): Promise<string | null> {
+  const email = normalizeEmail(ownerEmail);
+  const [credential] = await db
+    .select({ passwordHash: ownerCredentialsTable.passwordHash })
+    .from(ownerCredentialsTable)
+    .where(eq(ownerCredentialsTable.ownerEmail, email))
+    .limit(1);
+  if (!credential || !verifyPasswordHash(password, credential.passwordHash)) {
+    return null;
+  }
+  return createOwnerSession(email);
+}
+
 export async function exchangeOwnerLoginToken(token: string): Promise<string | null> {
   const hash = sha256(token);
   const claimedAt = new Date();
@@ -101,13 +204,7 @@ export async function exchangeOwnerLoginToken(token: string): Promise<string | n
 
   if (!row) return null;
 
-  const rawSession = crypto.randomBytes(32).toString("base64url");
-  await db.insert(ownerSessionsTable).values({
-    sessionHash: sha256(rawSession),
-    ownerEmail: normalizeEmail(row.ownerEmail),
-    expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
-  });
-  return rawSession;
+  return createOwnerSession(row.ownerEmail);
 }
 
 export async function getOwnerEmailFromRequest(req: Request): Promise<string | null> {

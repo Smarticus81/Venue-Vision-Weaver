@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS owner_login_tokens (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS owner_credentials (
+  id SERIAL PRIMARY KEY,
+  owner_email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS owner_sessions (
   id SERIAL PRIMARY KEY,
   session_hash TEXT NOT NULL UNIQUE,

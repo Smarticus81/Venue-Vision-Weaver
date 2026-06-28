@@ -22,16 +22,6 @@ function RedirectVenueToPreview() {
   return <Redirect to={`/preview/${slug}`} />;
 }
 
-function RedirectVenueOwnerToDashboard() {
-  const { slug } = useParams<{ slug: string }>();
-  return <Redirect to={`/dashboard/${slug}`} />;
-}
-
-function RedirectVenueProfileToDashboard() {
-  const { slug } = useParams<{ slug: string }>();
-  return <Redirect to={`/dashboard/${slug}`} />;
-}
-
 function Router() {
   return (
     <Suspense fallback={<RouteLoading />}>
@@ -44,7 +34,8 @@ function Router() {
         {/* Venue owners - marketing, sign-in, registration */}
         <Route path="/venues">{() => <Redirect to="/" />}</Route>
         <Route path="/profiles">{() => <Redirect to="/" />}</Route>
-        <Route path="/owner">{() => <Redirect to="/?owner=sign-in" />}</Route>
+        <Route path="/owner">{() => <Redirect to="/login" />}</Route>
+        <Route path="/login">{() => <OwnerLoginPage />}</Route>
         <Route path="/owner/login">{() => <OwnerLoginPage />}</Route>
         <Route path="/find-my-gallery">{() => <FindMyGalleryPage />}</Route>
         <Route path="/find-my-videos">{() => <Redirect to="/find-my-gallery" />}</Route>
@@ -56,9 +47,10 @@ function Router() {
         </Route>
 
         {/* Owner profile/dashboard */}
-        <Route path="/dashboard/:slug">{() => <VenueOwnerPage />}</Route>
-        <Route path="/profile/:slug" component={RedirectVenueProfileToDashboard} />
-        <Route path="/venue/:slug/owner" component={RedirectVenueOwnerToDashboard} />
+        <Route path="/dashboard">{() => <VenueOwnerPage />}</Route>
+        <Route path="/dashboard/:slug">{() => <Redirect to="/dashboard" />}</Route>
+        <Route path="/profile/:slug">{() => <Redirect to="/dashboard" />}</Route>
+        <Route path="/venue/:slug/owner">{() => <Redirect to="/dashboard" />}</Route>
 
         {/* Couple venue experience */}
         <Route path="/preview/:slug">{() => <CouplePage />}</Route>

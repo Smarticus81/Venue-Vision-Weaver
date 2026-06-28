@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, sql, asc, gte, isNull } from "drizzle-orm";
 import {
   db,
+  ownerCredentialsTable,
   venuesTable,
   venueMediaTable,
   coupleSessionsTable,
@@ -34,8 +35,11 @@ import {
 } from "../lib/objectStorage.js";
 import {
   createOwnerLoginLink,
+  createOwnerPasswordHash,
   exchangeOwnerLoginToken,
   getOwnerEmailFromRequest,
+  isStrongOwnerPassword,
+  loginOwnerWithPassword,
   OWNER_SESSION_COOKIE,
   ownerCookieOptions,
   requireOwnerMutationOrigin,
@@ -192,6 +196,20 @@ async function readyGalleryThumbnailObjectKey(sessionId: number, status: string)
   return assets.find((asset) => asset.assetType === "image" && asset.displayOrder === 1)?.objectKey ?? null;
 }
 
+async function uniqueVenueSlug(baseSlug: string): Promise<string> {
+  const normalizedBase = baseSlug.replace(/-+$/, "") || "venue";
+  for (let suffix = 0; suffix < 100; suffix++) {
+    const candidate = suffix === 0 ? normalizedBase : `${normalizedBase}-${suffix + 1}`;
+    const [existing] = await db
+      .select({ id: venuesTable.id })
+      .from(venuesTable)
+      .where(eq(venuesTable.slug, candidate))
+      .limit(1);
+    if (!existing) return candidate;
+  }
+  return `${normalizedBase}-${Date.now().toString(36)}`;
+}
+
 // POST /venues
 router.post("/venues", async (req, res): Promise<void> => {
   const parsed = CreateVenueBody.safeParse(req.body);
@@ -211,9 +229,14 @@ router.post("/venues", async (req, res): Promise<void> => {
     websiteUrl,
     bookingUrl,
   } = parsed.data;
+  const ownerPassword = typeof req.body?.password === "string" ? req.body.password : "";
   const normalizedOwnerEmail = ownerEmail?.trim().toLowerCase() ?? "";
   if (!normalizedOwnerEmail || !EMAIL_REGEX.test(normalizedOwnerEmail)) {
     res.status(400).json({ error: "Owner email is required" });
+    return;
+  }
+  if (ownerPassword && !isStrongOwnerPassword(ownerPassword)) {
+    res.status(400).json({ error: "Password must be at least 8 characters." });
     return;
   }
 
@@ -229,53 +252,176 @@ router.post("/venues", async (req, res): Promise<void> => {
     return;
   }
 
-  // Check slug uniqueness
-  const existing = await db
-    .select({ id: venuesTable.id })
+  const trimmedName = name.trim();
+  const ownerPasswordHash = ownerPassword ? createOwnerPasswordHash(ownerPassword) : null;
+  const [existingOwnerVenue] = await db
+    .select()
     .from(venuesTable)
-    .where(eq(venuesTable.slug, slug));
+    .where(
+      and(
+        sql`lower(${venuesTable.ownerEmail}) = ${normalizedOwnerEmail}`,
+        sql`lower(${venuesTable.name}) = ${trimmedName.toLowerCase()}`,
+      ),
+    )
+    .limit(1);
 
-  if (existing.length > 0) {
-    res.status(409).json({ error: "This venue URL is already taken. Please choose a different one." });
+  if (existingOwnerVenue && ownerPasswordHash) {
+    let venue;
+    try {
+      venue = await db.transaction(async (tx) => {
+        const [updatedVenue] = await tx
+          .update(venuesTable)
+          .set({
+            contactEmail: normalizedContactEmail ?? existingOwnerVenue.contactEmail,
+            contactPhone: normalizeNullableText(contactPhone) ?? existingOwnerVenue.contactPhone,
+            websiteUrl: normalizedWebsiteUrl ?? existingOwnerVenue.websiteUrl,
+            bookingUrl: normalizedBookingUrl ?? existingOwnerVenue.bookingUrl,
+          })
+          .where(eq(venuesTable.id, existingOwnerVenue.id))
+          .returning();
+
+        await tx
+          .insert(ownerCredentialsTable)
+          .values({
+            ownerEmail: normalizedOwnerEmail,
+            passwordHash: ownerPasswordHash,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: ownerCredentialsTable.ownerEmail,
+            set: {
+              passwordHash: ownerPasswordHash,
+              updatedAt: new Date(),
+            },
+          });
+
+        return updatedVenue ?? existingOwnerVenue;
+      });
+    } catch (err) {
+      const pgError = err instanceof Error ? (err.cause as { code?: string }) : null;
+      if (pgError?.code === "42P01") {
+        res.status(503).json({
+          error: "Database schema needs to be updated. Run pnpm run setup:db or apply supabase/bootstrap.sql.",
+        });
+        return;
+      }
+      throw err;
+    }
+
+    const session = await loginOwnerWithPassword(normalizedOwnerEmail, ownerPassword);
+    if (session) {
+      res.cookie(OWNER_SESSION_COOKIE, session, ownerCookieOptions(30 * 24 * 60 * 60 * 1000));
+    }
+    res.status(200).json(ownerVenueResponse(venue));
     return;
   }
 
+  const internalSlug = await uniqueVenueSlug(slug);
+
   let venue;
   try {
-    [venue] = await db
-      .insert(venuesTable)
-      .values({
-        name,
-        slug,
-        tagline: tagline ?? null,
-        description: description ?? null,
-        ownerEmail: normalizedOwnerEmail,
-        contactEmail: normalizedContactEmail ?? null,
-        contactPhone: normalizeNullableText(contactPhone) ?? null,
-        websiteUrl: normalizedWebsiteUrl ?? null,
-        bookingUrl: normalizedBookingUrl ?? null,
-        plan: "trial",
-        creditsBalance: TRIAL_CREDITS,
-      })
-      .returning();
+    venue = await db.transaction(async (tx) => {
+      const [createdVenue] = await tx
+        .insert(venuesTable)
+        .values({
+          name: trimmedName,
+          slug: internalSlug,
+          tagline: tagline ?? null,
+          description: description ?? null,
+          ownerEmail: normalizedOwnerEmail,
+          contactEmail: normalizedContactEmail ?? null,
+          contactPhone: normalizeNullableText(contactPhone) ?? null,
+          websiteUrl: normalizedWebsiteUrl ?? null,
+          bookingUrl: normalizedBookingUrl ?? null,
+          plan: "trial",
+          creditsBalance: TRIAL_CREDITS,
+        })
+        .returning();
+
+      if (!createdVenue) {
+        throw new Error("Failed to create venue.");
+      }
+
+      await tx.insert(creditTransactionsTable).values({
+        venueId: createdVenue.id,
+        delta: TRIAL_CREDITS,
+        reason: "trial_grant",
+      });
+
+      if (ownerPasswordHash) {
+        await tx
+          .insert(ownerCredentialsTable)
+          .values({
+            ownerEmail: normalizedOwnerEmail,
+            passwordHash: ownerPasswordHash,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: ownerCredentialsTable.ownerEmail,
+            set: {
+              passwordHash: ownerPasswordHash,
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      return createdVenue;
+    });
   } catch (err) {
     const pgError = err instanceof Error ? (err.cause as { code?: string; detail?: string; message?: string }) : null;
     logger.error({ err, pgCode: pgError?.code, pgDetail: pgError?.detail, pgMessage: pgError?.message }, "Failed to insert venue");
     if (pgError?.code === "23505") {
-      res.status(409).json({ error: "This venue URL is already taken. Please choose a different one." });
+      res.status(409).json({ error: "This venue already exists. Try logging in instead." });
+      return;
+    }
+    if (pgError?.code === "42P01") {
+      res.status(503).json({
+        error: "Database schema needs to be updated. Run pnpm run setup:db or apply supabase/bootstrap.sql.",
+      });
       return;
     }
     res.status(500).json({ error: "Failed to create venue. Please try again." });
     return;
   }
 
-  await db.insert(creditTransactionsTable).values({
-    venueId: venue.id,
-    delta: TRIAL_CREDITS,
-    reason: "trial_grant",
-  });
+  if (ownerPassword) {
+    const session = await loginOwnerWithPassword(normalizedOwnerEmail, ownerPassword);
+    if (session) {
+      res.cookie(OWNER_SESSION_COOKIE, session, ownerCookieOptions(30 * 24 * 60 * 60 * 1000));
+    }
+  }
 
   res.status(201).json(ownerVenueResponse(venue));
+});
+
+// POST /owners/password-login
+router.post("/owners/password-login", async (req, res): Promise<void> => {
+  if (!requireOwnerMutationOrigin(req, res)) return;
+
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!email || !EMAIL_REGEX.test(email) || !password) {
+    res.status(400).json({ error: "Email and password are required." });
+    return;
+  }
+
+  if (!rateLimit(`ownerpassword:ip:${clientKey(req)}`, 10, 15 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many login attempts. Try again soon." });
+    return;
+  }
+  if (!rateLimit(`ownerpassword:email:${email}`, 10, 15 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many login attempts. Try again soon." });
+    return;
+  }
+
+  const session = await loginOwnerWithPassword(email, password);
+  if (!session) {
+    res.status(401).json({ error: "Invalid email or password." });
+    return;
+  }
+
+  res.cookie(OWNER_SESSION_COOKIE, session, ownerCookieOptions(30 * 24 * 60 * 60 * 1000));
+  res.json({ accepted: true });
 });
 
 // POST /owners/login-link

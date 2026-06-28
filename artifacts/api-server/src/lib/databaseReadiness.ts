@@ -9,6 +9,7 @@ export const REQUIRED_DATABASE_TABLES = [
   "couple_media",
   "generated_assets",
   "credit_transactions",
+  "owner_credentials",
   "owner_login_tokens",
   "owner_sessions",
 ] as const;
@@ -80,6 +81,13 @@ export const REQUIRED_DATABASE_COLUMNS = {
     "stripe_event_id",
     "created_at",
   ],
+  owner_credentials: [
+    "id",
+    "owner_email",
+    "password_hash",
+    "created_at",
+    "updated_at",
+  ],
   owner_login_tokens: [
     "id",
     "token_hash",
@@ -124,6 +132,7 @@ export const REQUIRED_DATABASE_NOT_NULL_COLUMNS = {
   couple_media: ["id", "session_id", "object_key", "created_at"],
   generated_assets: ["id", "session_id", "object_key", "asset_type", "display_order", "created_at"],
   credit_transactions: ["id", "venue_id", "delta", "reason", "created_at"],
+  owner_credentials: ["id", "owner_email", "password_hash", "created_at", "updated_at"],
   owner_login_tokens: ["id", "token_hash", "owner_email", "expires_at", "created_at"],
   owner_sessions: ["id", "session_hash", "owner_email", "expires_at", "revoked", "created_at"],
 } as const satisfies Partial<Record<(typeof REQUIRED_DATABASE_TABLES)[number], readonly string[]>>;
@@ -168,6 +177,11 @@ export const REQUIRED_DATABASE_INDEXES = [
     name: "credit_transactions_stripe_event_id_unique",
     label: "credit_transactions.stripe_event_id.partial_unique",
     requiredFragments: ["unique", "stripe_event_id", "where", "is not null"],
+  },
+  {
+    table: "owner_credentials",
+    label: "owner_credentials.owner_email.unique",
+    requiredFragments: ["unique", "owner_email"],
   },
   {
     table: "owner_login_tokens",

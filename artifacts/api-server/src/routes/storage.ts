@@ -73,19 +73,24 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       if (!venue) return;
       venueId = venue.id;
     } else {
-      if (!uploadToken || !verifyCoupleUploadToken(uploadToken, venueSlug)) {
-        res.status(401).json({ error: "Upload token expired. Refresh the venue page and try again." });
-        return;
+      const ownerVenue = uploadToken ? null : await requireOwnerVenue(req, res, venueSlug);
+      if (ownerVenue) {
+        venueId = ownerVenue.id;
+      } else {
+        if (!uploadToken || !verifyCoupleUploadToken(uploadToken, venueSlug)) {
+          res.status(401).json({ error: "Upload token expired. Refresh the venue page and try again." });
+          return;
+        }
+        const [venue] = await db
+          .select({ id: venuesTable.id })
+          .from(venuesTable)
+          .where(eq(venuesTable.slug, venueSlug));
+        if (!venue) {
+          res.status(404).json({ error: "Venue not found" });
+          return;
+        }
+        venueId = venue.id;
       }
-      const [venue] = await db
-        .select({ id: venuesTable.id })
-        .from(venuesTable)
-        .where(eq(venuesTable.slug, venueSlug));
-      if (!venue) {
-        res.status(404).json({ error: "Venue not found" });
-        return;
-      }
-      venueId = venue.id;
     }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL(
