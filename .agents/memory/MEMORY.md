@@ -1,1 +1,3 @@
 - [Replit DB SSL fix](replit-db-ssl.md) — Replit internal PostgreSQL adds `?ssl` to DATABASE_URL but doesn't support SSL; pgPool.ts must strip it and skip SSL for `@helium` host.
+- [mockup-sandbox first-run setup](mockup-sandbox-setup.md) — mockup-sandbox needs `npm install` in its own dir before the preview server starts.
+- [Multi-page mockup sites](mockup-multipage.md) — `_`-prefixed files are shared (not routed); relative hrefs make pages browsable; place each page as its own canvas iframe.

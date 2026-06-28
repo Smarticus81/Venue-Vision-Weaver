@@ -6,3 +6,45 @@ id = "8_tah9rp02PhDdu48pGv_"
 uri = "file://artifacts/mockup-sandbox/public/images/couple-venue-tour.png"
 type = "image"
 title = "generated_image"
+
+[[generated]]
+id = "ikvTS9Ns3LVVsjsotvHbA"
+uri = "file://artifacts/mockup-sandbox/public/images/venue-empty.png"
+type = "image"
+title = "empty elegant ballroom"
+
+[[generated]]
+id = "NFxc6-LimVURZsRQ2OonQ"
+uri = "file://artifacts/mockup-sandbox/public/images/venue-styled.png"
+type = "image"
+title = "styled wedding ballroom"
+
+[[generated]]
+id = "41R6fgTk3FxPGk_lAB4DP"
+uri = "file://artifacts/mockup-sandbox/public/images/garden-ceremony.png"
+type = "image"
+title = "garden ceremony"
+
+[[generated]]
+id = "QzM_Pn0mPtc6laeHY_w0U"
+uri = "file://artifacts/mockup-sandbox/public/images/reception-table.png"
+type = "image"
+title = "reception table setting"
+
+[[generated]]
+id = "5B6CFsZ0OXPQUHd5ik7n0"
+uri = "file://artifacts/mockup-sandbox/public/images/couple-entrance.png"
+type = "image"
+title = "couple at venue entrance"
+
+[[generated]]
+id = "Na9iLaQu1saU139xddAVm"
+uri = "file://artifacts/mockup-sandbox/public/images/owner-review.png"
+type = "image"
+title = "venue owner reviewing gallery"
+
+[[generated]]
+id = "wevJAZxQT3WVDiJw48t9S"
+uri = "file://artifacts/mockup-sandbox/public/images/ballroom-evening.png"
+type = "image"
+title = "evening ballroom"
