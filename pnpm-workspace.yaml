@@ -30,7 +30,8 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude: []
 
 packages:
-  - artifacts/*
+  - artifacts/api-server
+  - artifacts/wedding-app
   - lib/*
   - scripts
 
