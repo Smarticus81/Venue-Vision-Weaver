@@ -54,7 +54,7 @@ export default function CreateVenuePage() {
           password: formData.password,
           contactEmail: ownerEmail,
           bookingUrl: formData.bookingUrl.trim() || undefined,
-          tagline: "Personal AI galleries that help tour couples picture the day here.",
+          tagline: "Photoreal preview galleries that help prospects visualize the day and inquire faster.",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -100,9 +100,9 @@ export default function CreateVenuePage() {
               <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] flex items-center justify-center mb-6 text-gold shadow-sm border border-[#f5eedf]">
                 <Building2 className="h-6 w-6" />
               </div>
-              <h1 className="text-3xl font-bold tracking-tight text-[#111111]">Create venue</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-[#111111]">Create venue workspace</h1>
               <p className="mt-2 text-gray-500 font-light">
-                Set up the owner login and dashboard
+                Build the conversion hub for branded preview galleries, tour CTAs, and owner-approved follow-up.
               </p>
             </div>
 
@@ -172,6 +172,12 @@ export default function CreateVenuePage() {
                   data-testid="venue-booking-url-input"
                   autoComplete="url"
                 />
+              </div>
+
+              <div className="rounded-2xl border border-[#f0e6d2] bg-[#fdfbf7] p-4 text-sm leading-relaxed text-[#8a7340]">
+                Designed for wedding and event venues: true-to-space visuals,
+                branded gallery delivery, and compact marketing variants for email,
+                ads, and embeds.
               </div>
 
               <Button

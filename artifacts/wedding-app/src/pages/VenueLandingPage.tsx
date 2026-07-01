@@ -1,10 +1,14 @@
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  BarChart3,
   CalendarCheck,
   Check,
+  Clock3,
   ImageUp,
   Mail,
+  MonitorSmartphone,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -62,14 +66,15 @@ export default function VenueLandingPage() {
               >
                 <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340]">
                   <Sparkles className="h-3.5 w-3.5 text-gold" />
-                  Branded preview galleries for venues
+                  Post-tour booking galleries
                 </div>
                 <h1 className="text-[3rem] md:text-[4rem] leading-[1.05] tracking-tighter font-extrabold text-[#111111] mb-6">
-                  The follow-up couples <span className="text-gold font-playfair italic font-normal">remember.</span>
+                  Turn venue tours into <span className="text-gold font-playfair italic font-normal">bookings.</span>
                 </h1>
                 <p className="text-lg md:text-xl text-gray-500 mb-9 max-w-lg leading-relaxed font-light">
-                  Glimpse gives venues a private dashboard for turning tour photos
-                  into cinematic, email-delivered wedding galleries at the actual property.
+                  Glimpse helps couples picture their wedding in your actual venue after
+                  the tour, with photoreal galleries that place them inside your real
+                  spaces and make the next step feel obvious.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <Button
@@ -79,7 +84,7 @@ export default function VenueLandingPage() {
                     className="w-full sm:w-auto px-8 py-6 text-base shadow-lg shadow-[#C2A36B]/20"
                     data-testid="venue-hero-register"
                   >
-                    Create venue workspace
+                    Start venue workspace
                   </Button>
                   <Button
                     size="lg"
@@ -110,10 +115,10 @@ export default function VenueLandingPage() {
                   <div className="absolute bottom-6 left-6 right-6">
                     <div className="rounded-2xl border border-white/30 bg-white/18 p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-2xl">
                       <p className="text-xs font-semibold tracking-[0.18em] uppercase text-white/90">
-                        Ready gallery
+                        Post-tour follow-up
                       </p>
                       <div className="mt-3 grid grid-cols-3 gap-3">
-                        {["4 stills", "1 reel", "1 email"].map((item) => (
+                        {["See it", "Feel it", "Book it"].map((item) => (
                           <div key={item} className="rounded-xl bg-white/20 px-3 py-2.5 text-center text-sm font-medium">
                             {item}
                           </div>
@@ -131,10 +136,10 @@ export default function VenueLandingPage() {
         <section className="py-24 md:py-32 bg-white">
           <div className="container mx-auto px-6">
             <div className="max-w-2xl text-center mx-auto mb-14">
-              <p className="text-xs font-semibold tracking-widest uppercase text-gold mb-4">Minimal workflow</p>
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#111111] mb-4">Built for booking</h2>
+              <p className="text-xs font-semibold tracking-widest uppercase text-gold mb-4">After the tour</p>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#111111] mb-4">Built to increase bookings</h2>
               <p className="text-gray-500 text-lg font-light leading-relaxed">
-                Everything you need to turn an ordinary tour into a compelling vision.
+                Send each couple a personalized vision of their wedding in your venue while the tour is still fresh.
               </p>
             </div>
             
@@ -142,18 +147,18 @@ export default function VenueLandingPage() {
               {[
                 {
                   icon: <ImageUp className="w-6 h-6" />,
-                  title: "Venue uploads spaces",
-                  text: "One polished profile powers every gallery. Upload once and you're ready.",
+                  title: "Their day, your venue",
+                  text: "Use real venue photos to show each couple inside the rooms, ceremony spaces, light, and details they just toured.",
                 },
                 {
-                  icon: <Mail className="w-6 h-6" />,
-                  title: "Couple receives email",
-                  text: "The private gallery link is delivered gracefully when it is ready.",
+                  icon: <ShieldCheck className="w-6 h-6" />,
+                  title: "Sales team approval",
+                  text: "Preview every gallery before sending so follow-up stays polished, accurate, and aligned with your brand.",
                 },
                 {
-                  icon: <CalendarCheck className="w-6 h-6" />,
-                  title: "Tour CTA stays close",
-                  text: "Every gallery points attention back to booking the visit with you.",
+                  icon: <MonitorSmartphone className="w-6 h-6" />,
+                  title: "Follow-up that moves",
+                  text: "Give couples a reason to reopen the conversation, share the venue, and take the booking step.",
                 },
               ].map((item) => (
                 <div
@@ -175,16 +180,16 @@ export default function VenueLandingPage() {
           <div className="container mx-auto px-6">
             <div className="grid md:grid-cols-[1fr_1.5fr] gap-12 items-center max-w-5xl mx-auto">
               <div>
-                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#111111] mb-6">No portal maze.</h2>
+                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#111111] mb-6">Make the decision feel real.</h2>
                 <p className="text-gray-500 text-lg font-light leading-relaxed mb-8">
-                  We've streamlined the experience so you can focus on your couples, not on software.
+                  A tour shows the venue. Glimpse shows the couple what their wedding could look like there.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-1">
                 {[
-                  "Login with owner credentials",
-                  "Keep venue photos ready",
-                  "Email finished galleries",
+                  "Personalized gallery follow-up after each tour",
+                  "Clear booking CTAs on every gallery",
+                  "Built around tour-to-booking conversion",
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-4 rounded-2xl bg-white border border-[#f0e6d2]/60 p-5 shadow-sm">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#fdfbf7] border border-[#f5eedf] text-gold">
@@ -194,6 +199,38 @@ export default function VenueLandingPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-24 bg-white">
+          <div className="container mx-auto px-6">
+            <div className="grid gap-6 md:grid-cols-3">
+              {[
+                {
+                  icon: <BarChart3 className="h-6 w-6" />,
+                  value: "Tour-to-booking",
+                  label: "Follow up with a branded vision of their day before the venue decision cools off.",
+                },
+                {
+                  icon: <Clock3 className="h-6 w-6" />,
+                  value: "24-72h",
+                  label: "Quick personalized delivery for couples who have already walked the space.",
+                },
+                {
+                  icon: <CalendarCheck className="h-6 w-6" />,
+                  value: "Book next",
+                  label: "Every gallery keeps the next booking step visible, tasteful, and venue-owned.",
+                },
+              ].map((metric) => (
+                <div key={metric.value} className="rounded-3xl border border-gray-100 bg-white p-8 shadow-sm">
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#f5eedf] bg-[#fdfbf7] text-gold">
+                    {metric.icon}
+                  </div>
+                  <p className="text-3xl font-extrabold tracking-tight text-[#111111]">{metric.value}</p>
+                  <p className="mt-3 text-sm font-light leading-relaxed text-gray-500">{metric.label}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>

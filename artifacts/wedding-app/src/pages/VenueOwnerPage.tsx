@@ -56,12 +56,38 @@ interface OwnerSession {
   venues: Array<{ id: number; name: string; slug: string }>;
 }
 
+function normalizeStorageObjectPath(objectKey: string): string {
+  const raw = objectKey.trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:")) return raw;
+  if (raw.startsWith("/api/storage/")) {
+    return raw;
+  }
+  const uploadPath = raw.match(/uploads\/([^/?#]+)/)?.[1];
+  if (uploadPath) {
+    return `/api/storage/objects/uploads/${uploadPath}`;
+  }
+  if (raw.startsWith("/objects/")) {
+    return `/api/storage${raw}`;
+  }
+  if (raw.startsWith("objects/")) {
+    return `/api/storage/${raw}`;
+  }
+  return `/api/storage/objects/${raw.replace(/^\/+/, "")}`;
+}
+
+function withQueryParam(url: string, key: string, value: string): string {
+  if (!url || !value) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+}
+
 function venueReferenceUrl(objectKey: string, venueSlug: string): string {
-  return `/api/storage${objectKey}?venueSlug=${encodeURIComponent(venueSlug)}`;
+  return withQueryParam(normalizeStorageObjectPath(objectKey), "venueSlug", venueSlug);
 }
 
 function ownerAssetUrl(objectKey: string): string {
-  return `/api/storage${objectKey}`;
+  return normalizeStorageObjectPath(objectKey);
 }
 
 export default function VenueOwnerPage() {
@@ -495,7 +521,8 @@ export default function VenueOwnerPage() {
                   {venue?.name ?? "Your venue"}
                 </h1>
                 <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-muted-foreground">
-                  Keep the venue ready and send finished galleries to couples by email.
+                  Manage branded, true-to-space preview galleries that help prospects
+                  visualize their event and move toward an inquiry.
                 </p>
               </div>
               <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340] shadow-sm" : "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-700 shadow-sm"}>
@@ -505,9 +532,9 @@ export default function VenueOwnerPage() {
 
             <div className="mt-10 grid gap-4 sm:grid-cols-4">
               <Metric label="Credits" value={venue?.creditsBalance ?? 0} />
-              <Metric label="Ready" value={readySessions} />
-              <Metric label="Processing" value={processingSessions} />
-              <Metric label="Photos" value={`${media.length}/${MIN_VENUE_PHOTOS}`} />
+              <Metric label="Approved" value={readySessions} />
+              <Metric label="In production" value={processingSessions} />
+              <Metric label="Venue refs" value={`${media.length}/${MIN_VENUE_PHOTOS}`} />
             </div>
           </motion.div>
 
@@ -522,7 +549,7 @@ export default function VenueOwnerPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fdfbf7] border border-[#f5eedf] text-gold shadow-sm">
                 <Building2 className="h-5 w-5" />
               </div>
-              <h2 className="text-xl font-bold text-foreground">Conversion details</h2>
+              <h2 className="text-xl font-bold text-foreground">Inquiry details</h2>
             </div>
             <div className="space-y-5">
               <div className="space-y-2">
@@ -568,13 +595,14 @@ export default function VenueOwnerPage() {
               <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gold">
                 New couple
               </p>
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Start a gallery from the tour</h2>
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Start a prospect gallery</h2>
               <p className="mt-3 text-base font-light leading-relaxed text-muted-foreground">
-                Add the couple's email and reference photos. Glimpse generates the gallery and emails their private link automatically.
+                Add the couple's email and reference photos. Glimpse creates a photoreal,
+                venue-branded preview and emails their private link after generation.
               </p>
             </div>
             <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340] shadow-sm" : "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-700 shadow-sm"}>
-              {venueReady ? "Ready to generate" : "Venue setup needed"}
+              {venueReady ? "Owner approval enabled" : "Venue setup needed"}
             </Badge>
           </div>
 
@@ -694,21 +722,33 @@ export default function VenueOwnerPage() {
                 ) : (
                   <Sparkles className="mr-2 h-5 w-5" />
                 )}
-                Start gallery
+                Generate preview
               </Button>
             </div>
           </form>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {[
+              "Photoreal scale, lighting, and shadow cues",
+              "Tasteful venue branding and inquiry CTA",
+              "Preview first, then email or reuse in marketing",
+            ].map((item) => (
+              <div key={item} className="rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-medium text-muted-foreground">
+                {item}
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[420px_1fr]">
           <div className="glimpse-card p-6 md:p-8 flex flex-col">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-foreground">Venue photo readiness</h2>
+                <h2 className="text-xl font-bold text-foreground">True-space readiness</h2>
                 <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
                   {venueReady
-                    ? "The venue has the coverage needed for gallery generation."
-                    : "Add the missing room views before tours use Glimpse."}
+                    ? "The venue has the visual coverage needed for accurate branded previews."
+                    : "Add the missing room views so output can preserve space, scale, and atmosphere."}
                 </p>
               </div>
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border text-muted-foreground shadow-sm">
@@ -766,8 +806,8 @@ export default function VenueOwnerPage() {
           <div className="glimpse-card p-6 md:p-8">
             <div className="mb-6 flex items-center justify-between gap-4 border-b border-border pb-4">
               <div>
-                <h2 className="text-xl font-bold text-foreground">Venue images</h2>
-                <p className="mt-1 text-sm font-light text-muted-foreground">Real spaces power the gallery output.</p>
+                <h2 className="text-xl font-bold text-foreground">Venue reference library</h2>
+                <p className="mt-1 text-sm font-light text-muted-foreground">Real spaces power accurate scale, lighting, and shadows.</p>
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground">
                 {media.length} photos
@@ -788,6 +828,9 @@ export default function VenueOwnerPage() {
                     <img
                       src={venueReferenceUrl(item.objectKey, selectedSlug)}
                       alt="Venue reference"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
                       className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
@@ -812,9 +855,9 @@ export default function VenueOwnerPage() {
         <section className="glimpse-card p-6 md:p-8">
           <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">Couple galleries</h2>
+              <h2 className="text-2xl font-bold text-foreground">Prospect galleries</h2>
               <p className="mt-2 text-base font-light text-muted-foreground">
-                Finished galleries are sent by email to the bride or couple.
+                Review output, approve delivery, and reuse compact variants for follow-up campaigns.
               </p>
             </div>
           </div>
@@ -822,7 +865,7 @@ export default function VenueOwnerPage() {
           <div className="overflow-hidden rounded-2xl border border-border bg-background">
             {sessions.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-center text-sm font-medium text-muted-foreground bg-secondary/50">
-                No couple galleries yet.
+                No prospect galleries yet.
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -836,6 +879,9 @@ export default function VenueOwnerPage() {
                         <img
                           src={ownerAssetUrl(session.thumbnailObjectKey)}
                           alt="Gallery thumbnail"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -846,7 +892,7 @@ export default function VenueOwnerPage() {
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-3 mb-1">
-                        <p className="font-bold text-base text-foreground">{session.coupleName || "Couple gallery"}</p>
+                        <p className="font-bold text-base text-foreground">{session.coupleName || "Prospect gallery"}</p>
                         <StatusBadge status={session.status} />
                       </div>
                       <p className="text-sm font-light text-muted-foreground flex items-center gap-2">
