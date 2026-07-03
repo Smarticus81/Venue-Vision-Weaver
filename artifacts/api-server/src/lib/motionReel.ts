@@ -212,20 +212,25 @@ async function renderKenBurnsClip(
   const frames = secondsPerSlide * fps;
   const imgPath = await tmpFile(".jpg");
 
+  // zoompan rounds its pan position to whole pixels of the working frame, so
+  // panning at output resolution makes the slow zoom shake. Supersample: run
+  // zoompan on a 4x frame (rounding error becomes 1/4 output pixel), and
+  // drive the zoom linearly off the output frame counter instead of the
+  // recursive form, which stalled when it hit its cap mid-clip.
+  const superWidth = REEL_WIDTH * 4;
+  const superHeight = REEL_HEIGHT * 4;
   const zoomExpr = zoomIn
-    ? "min(zoom+0.0012,1.1)"
-    : "if(lte(zoom,1.0),1.1,max(1.001,zoom-0.0012))";
+    ? `1+0.1*on/${frames - 1}`
+    : `1.1-0.1*on/${frames - 1}`;
 
   try {
     await fs.writeFile(imgPath, slide);
     await runFfmpeg([
-      "-loop",
-      "1",
       "-i",
       imgPath,
       "-vf",
-      `scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,` +
-        `zoompan=z='${zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1280x720:fps=${fps}`,
+      `scale=${superWidth}:${superHeight}:force_original_aspect_ratio=increase,crop=${superWidth}:${superHeight},` +
+        `zoompan=z='${zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${REEL_WIDTH}x${REEL_HEIGHT}:fps=${fps}`,
       "-frames:v",
       String(frames),
       "-an",
