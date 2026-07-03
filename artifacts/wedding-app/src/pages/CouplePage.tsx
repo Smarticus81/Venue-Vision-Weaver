@@ -38,7 +38,7 @@ function venueMediaUrl(objectKey: string | undefined, venueSlug: string): string
 
 const MAX_COUPLE_PHOTOS = 3;
 const MIN_COUPLE_PHOTOS = 1;
-const MIN_COUPLE_PHOTO_EDGE = 512;
+const MIN_COUPLE_PHOTO_EDGE = 256;
 const MAX_COUPLE_PHOTO_BYTES = 50 * 1024 * 1024;
 const ALLOWED_COUPLE_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const COUPLE_REFERENCE_ROLES = ["Together", "Partner A", "Partner B"] as const;
@@ -130,7 +130,7 @@ export default function CouplePage() {
       if (!ok) {
         toast({
           title: "Photo too small",
-          description: "Use clear photos at least 512px wide and tall, with both faces visible and well lit.",
+          description: "Use clear photos at least 256px wide and tall, with both faces visible and well lit.",
           variant: "destructive",
         });
         continue;
@@ -496,7 +496,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
         </div>
         <p className="text-xl text-[#111111] font-bold mb-3">Tap to add photographs</p>
         <p className="text-base text-gray-500 font-light max-w-md mx-auto">
-          One to three JPG, PNG, or WebP photos under 50MB — distinct angles or expressions, at least 512px wide.
+          One to three JPG, PNG, or WebP photos under 50MB — distinct angles or expressions, at least 256px wide.
         </p>
         <p className="mt-6 text-sm font-semibold tracking-wide text-gold uppercase" data-testid="couple-photo-status">
           {uploadStatus}

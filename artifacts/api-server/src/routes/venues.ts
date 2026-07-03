@@ -57,7 +57,7 @@ import { hasCompletePublicGalleryAssets } from "../lib/sessionVisibility.js";
 import { logger } from "../lib/logger.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_VENUE_PHOTO_EDGE_PX = 512;
+const MIN_VENUE_PHOTO_EDGE_PX = 256;
 const MAX_VENUE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const VENUE_NEAR_DUPLICATE_HASH_DISTANCE = 2;
 const ALLOWED_VENUE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
