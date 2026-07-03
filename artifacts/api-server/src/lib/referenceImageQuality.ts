@@ -21,16 +21,16 @@ const PROFILE_THRESHOLDS: Record<
   }
 > = {
   couple: {
-    minBrightness: 30,
-    maxBrightness: 238,
-    minContrast: 12,
-    minSharpness: 14,
+    minBrightness: 16,
+    maxBrightness: 246,
+    minContrast: 6,
+    minSharpness: 6,
   },
   venue: {
-    minBrightness: 24,
-    maxBrightness: 242,
-    minContrast: 10,
-    minSharpness: 10,
+    minBrightness: 12,
+    maxBrightness: 248,
+    minContrast: 5,
+    minSharpness: 4,
   },
 };
 

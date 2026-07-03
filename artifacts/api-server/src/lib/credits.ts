@@ -1,11 +1,10 @@
 import { db, venuesTable, creditTransactionsTable, coupleSessionsTable } from "@workspace/db";
 import { eq, and, sql, gte } from "drizzle-orm";
 import { logger } from "./logger.js";
-import { venueMediaCoverageStatus } from "./venueMediaCoverage.js";
 
 export const CREDITS_STANDARD = 1;
 export const VENUE_DAILY_SESSION_CAP = 50;
-export const MIN_VENUE_PHOTOS = 5;
+export const MIN_VENUE_PHOTOS = 1;
 
 export function creditsForSession(): number {
   return CREDITS_STANDARD;
@@ -28,7 +27,6 @@ export function toPublicVenue(
   },
   media: Array<{ coverage?: string | null }>,
 ) {
-  const coverage = venueMediaCoverageStatus(media);
   return {
     id: venue.id,
     name: venue.name,
@@ -41,7 +39,7 @@ export function toPublicVenue(
     bookingUrl: venue.bookingUrl,
     createdAt: venue.createdAt,
     media,
-    isReady: media.length >= MIN_VENUE_PHOTOS && coverage.ready,
+    isReady: media.length >= MIN_VENUE_PHOTOS,
   };
 }
 

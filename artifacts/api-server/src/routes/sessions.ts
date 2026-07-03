@@ -32,10 +32,6 @@ import {
   sendRecoveryEmail,
 } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
-import {
-  venueCoverageReadinessMessage,
-  venueMediaCoverageStatus,
-} from "../lib/venueMediaCoverage.js";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
 import { requireOwnerVenue } from "../lib/ownerAuth.js";
 import {
@@ -57,9 +53,9 @@ import { findGalleryStyle } from "../lib/galleryStyles.js";
 const router: IRouter = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_COUPLE_PHOTOS = 2;
+const MIN_COUPLE_PHOTOS = 1;
 const MAX_COUPLE_PHOTOS = 3;
-const MIN_COUPLE_PHOTO_EDGE_PX = 1024;
+const MIN_COUPLE_PHOTO_EDGE_PX = 512;
 const MAX_COUPLE_UPLOAD_BYTES = 8 * 1024 * 1024;
 const DEFAULT_STYLE_ID = "cinematic-editorial";
 const objectStorageService = new ObjectStorageService();
@@ -163,7 +159,7 @@ async function validateCouplePhotoObjectKeys(objectKeys: string[], venueId: numb
 
   for (let i = 0; i < qualities.length; i++) {
     for (let j = i + 1; j < qualities.length; j++) {
-      if (hammingDistance(qualities[i]!.perceptualHash, qualities[j]!.perceptualHash) <= 4) {
+      if (hammingDistance(qualities[i]!.perceptualHash, qualities[j]!.perceptualHash) <= 2) {
         throw new Error(
           `Couple photos ${i + 1} and ${j + 1} look nearly identical. Upload distinct angles or expressions for better likeness.`,
         );
@@ -287,17 +283,12 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     .from(venueMediaTable)
     .where(eq(venueMediaTable.venueId, venue.id));
   const venueMediaCount = venueMediaForReadiness.length;
-  const coverage = venueMediaCoverageStatus(venueMediaForReadiness);
 
   if (!venueMediaCount || venueMediaCount < MIN_VENUE_PHOTOS) {
     res.status(409).json({
       error:
-        `This venue isn't ready yet. The owner needs to upload at least ${MIN_VENUE_PHOTOS} venue photos before couples can create a gallery.`,
+        `This venue isn't ready yet. The owner needs to upload at least ${MIN_VENUE_PHOTOS} venue photo${MIN_VENUE_PHOTOS === 1 ? "" : "s"} before couples can create a gallery.`,
     });
-    return;
-  }
-  if (!coverage.ready) {
-    res.status(409).json({ error: venueCoverageReadinessMessage(coverage.missing) });
     return;
   }
 
