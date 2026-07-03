@@ -407,13 +407,12 @@ export const CreateSessionParams = zod.object({
   slug: zod.coerce.string(),
 });
 
-export const createSessionBodyCouplePhotoKeysMin = 2;
 export const createSessionBodyCouplePhotoKeysMax = 3;
 
 export const CreateSessionBody = zod.object({
   couplePhotoKeys: zod
     .array(zod.string())
-    .min(createSessionBodyCouplePhotoKeysMin)
+    .min(1)
     .max(createSessionBodyCouplePhotoKeysMax),
   styleId: zod
     .string()

@@ -273,7 +273,7 @@ export interface VenueStatsResponse {
 
 export interface CreateSessionBody {
   /**
-   * @minItems 2
+   * @minItems 1
    * @maxItems 3
    */
   couplePhotoKeys: string[];
