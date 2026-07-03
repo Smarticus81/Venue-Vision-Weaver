@@ -26,7 +26,7 @@ interface UseUploadOptions {
 type AllowedImageContentType = "image/jpeg" | "image/png" | "image/webp";
 
 const MAX_IMAGE_UPLOAD_BYTES = 50 * 1024 * 1024;
-const MIN_IMAGE_EDGE_PX = 512;
+const MIN_IMAGE_EDGE_PX = 256;
 
 function allowedImageContentType(type: string | null | undefined): AllowedImageContentType {
   if (type === "image/jpeg" || type === "image/png" || type === "image/webp") {

@@ -920,7 +920,7 @@ try {
   );
   assert.match(
     uploadHookSource,
-    /MAX_IMAGE_UPLOAD_BYTES = 50 \* 1024 \* 1024[\s\S]*MIN_IMAGE_EDGE_PX = 512[\s\S]*assertValidImageUpload\(file\)[\s\S]*fetch\(`\$\{basePath\}\/uploads\/request-url`/s,
+    /MAX_IMAGE_UPLOAD_BYTES = 50 \* 1024 \* 1024[\s\S]*MIN_IMAGE_EDGE_PX = 256[\s\S]*assertValidImageUpload\(file\)[\s\S]*fetch\(`\$\{basePath\}\/uploads\/request-url`/s,
     "shared upload hook validates image type, size, and dimensions before requesting upload URLs",
   );
   assert.match(
