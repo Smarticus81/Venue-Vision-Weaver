@@ -11,7 +11,7 @@ import {
 type ImageRef = { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null };
 
 const GEMINI_API_BASE =
-  process.env.GEMINI_API_BASE_URL ?? "https://generativelanguage.googleapis.com/v1";
+  process.env.GEMINI_API_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta";
 const VENUE_SELECTOR_MODEL =
   process.env.GEMINI_VENUE_SELECTOR_MODEL ??
   process.env.GEMINI_QUALITY_MODEL ??

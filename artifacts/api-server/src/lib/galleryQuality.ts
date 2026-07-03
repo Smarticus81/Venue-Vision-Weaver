@@ -10,7 +10,7 @@ import {
 type ImageRef = { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null };
 
 const GEMINI_API_BASE =
-  process.env.GEMINI_API_BASE_URL ?? "https://generativelanguage.googleapis.com/v1";
+  process.env.GEMINI_API_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta";
 const QUALITY_MODEL = process.env.GEMINI_QUALITY_MODEL ?? "gemini-2.5-pro";
 const QUALITY_ENABLED = process.env.GALLERY_QUALITY_GATE !== "off";
 const MIN_LIKENESS_SCORE = Number(process.env.GALLERY_MIN_LIKENESS_SCORE ?? "0.82");

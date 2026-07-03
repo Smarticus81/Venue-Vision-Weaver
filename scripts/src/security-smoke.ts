@@ -510,7 +510,7 @@ try {
     GEMINI_IMAGE_MODEL: "gemini-2.5-flash-image",
     GEMINI_QUALITY_MODEL: "gemini-2.5-flash",
     GEMINI_IMAGE_SIZE: "2k",
-    GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
+    GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1",
     EMAIL_FROM: "glimpse <onboarding@resend.dev>",
     STRIPE_SECRET_KEY: "sk_test_placeholder",
     STRIPE_PRICE_STARTER_MONTHLY: "price_starter",
@@ -585,8 +585,8 @@ try {
     "production env requires a Pro quality judge",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("stable v1 Gemini API")),
-    "production env rejects beta Gemini API base URLs",
+    envErrors.some((error) => error.includes("v1beta Gemini API")),
+    "production env rejects v1 Gemini API base URLs that lack image generation config",
   );
 
   const corsEnv = {
@@ -918,12 +918,12 @@ try {
   );
   assert.match(
     uploadHookSource,
-    /MAX_IMAGE_UPLOAD_BYTES = 8 \* 1024 \* 1024[\s\S]*MIN_IMAGE_EDGE_PX = 1024[\s\S]*assertValidImageUpload\(file\)[\s\S]*fetch\(`\$\{basePath\}\/uploads\/request-url`/s,
+    /MAX_IMAGE_UPLOAD_BYTES = 50 \* 1024 \* 1024[\s\S]*MIN_IMAGE_EDGE_PX = 512[\s\S]*assertValidImageUpload\(file\)[\s\S]*fetch\(`\$\{basePath\}\/uploads\/request-url`/s,
     "shared upload hook validates image type, size, and dimensions before requesting upload URLs",
   );
   assert.match(
     objectUploaderSource,
-    /maxFileSize = 8 \* 1024 \* 1024[\s\S]*allowedFileTypes = \["image\/jpeg", "image\/png", "image\/webp"\][\s\S]*allowedFileTypes/s,
+    /maxFileSize = 50 \* 1024 \* 1024[\s\S]*allowedFileTypes = \["image\/jpeg", "image\/png", "image\/webp"\][\s\S]*allowedFileTypes/s,
     "Uppy uploader defaults match the production image upload type and size contract",
   );
   const databaseReadinessSource = fs.readFileSync(
@@ -1136,7 +1136,7 @@ try {
   );
   assert.match(
     couplePreviewSource,
-    /COUPLE_REFERENCE_ROLES = \["Together", "Partner A", "Partner B"\][\s\S]*Upload in this order when possible: together, Partner A, then Partner B[\s\S]*distinct angles or expressions/s,
+    /COUPLE_REFERENCE_ROLES = \["Together", "Partner A", "Partner B"\][\s\S]*distinct angles or expressions/s,
     "couple upload UI guides couples toward ordered partner-specific likeness references",
   );
   assert.match(
@@ -1212,8 +1212,8 @@ try {
   );
   assert.match(
     sessionsRoute,
-    /venueMediaForReadiness[\s\S]*select\({ coverage: venueMediaTable\.coverage }\)[\s\S]*venueMediaCoverageStatus\(venueMediaForReadiness\)[\s\S]*if \(!coverage\.ready\)[\s\S]*venueCoverageReadinessMessage\(coverage\.missing\)[\s\S]*const normalizedEmail/s,
-    "session creation blocks incomplete venue coverage before debiting credits or consuming couple uploads",
+    /venueMediaForReadiness[\s\S]*select\({ coverage: venueMediaTable\.coverage }\)[\s\S]*venueMediaCount < MIN_VENUE_PHOTOS[\s\S]*const normalizedEmail/s,
+    "session creation blocks venues without media before debiting credits or consuming couple uploads",
   );
   assert.match(
     sessionsRoute,
@@ -1337,7 +1337,7 @@ try {
   );
   assert.match(
     spaRouteSource,
-    /Route path="\/"[\s\S]*VenueLandingPage[\s\S]*Route path="\/owner"[\s\S]*Redirect to="\/\?owner=sign-in"[\s\S]*Route path="\/profile\/:slug"[\s\S]*RedirectVenueProfileToDashboard/s,
+    /Route path="\/"[\s\S]*VenueLandingPage[\s\S]*Route path="\/owner"[\s\S]*Redirect to="\/login"[\s\S]*Route path="\/profile\/:slug"[\s\S]*Redirect to="\/dashboard"/s,
     "main site is venue-facing and legacy owner entry opens profile access separately from couple preview URLs",
   );
   assert.ok(
@@ -1622,11 +1622,11 @@ try {
   const gemini3Body = gemini3RequestBody as {
     contents?: unknown[];
     generationConfig?: {
-      responseFormat?: { image?: { aspectRatio?: string; imageSize?: string } };
+      imageConfig?: { aspectRatio?: string; imageSize?: string };
     };
   } | null;
-  assert.equal(gemini3Body?.generationConfig?.responseFormat?.image?.aspectRatio, "1:1");
-  assert.equal(gemini3Body?.generationConfig?.responseFormat?.image?.imageSize, "2K");
+  assert.equal(gemini3Body?.generationConfig?.imageConfig?.aspectRatio, "1:1");
+  assert.equal(gemini3Body?.generationConfig?.imageConfig?.imageSize, "2K");
   const gemini3Parts = ((gemini3Body?.contents?.[0] as { parts?: unknown[] } | undefined)
     ?.parts ?? []) as Array<{ text?: string; inlineData?: unknown }>;
   assert.equal(

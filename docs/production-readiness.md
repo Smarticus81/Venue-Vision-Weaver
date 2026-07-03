@@ -105,7 +105,7 @@ Production startup refuses:
 - generated image local contrast or sharpness floors below the production
   defaults
 - non-Pro quality judge models
-- beta Gemini `v1beta` API base URLs
+- Gemini `v1` API base URLs (image generation config requires `v1beta`)
 
 Manual review is still required before launch: both partners must be instantly
 recognizable as two distinct real identities in all four stills, the venue must
