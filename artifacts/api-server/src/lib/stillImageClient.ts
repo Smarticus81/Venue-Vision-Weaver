@@ -6,6 +6,7 @@ import {
   isVenueMediaCoverage,
   type VenueMediaCoverage,
 } from "./venueMediaCoverage.js";
+import { GalleryQualityError } from "./galleryQuality.js";
 
 const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_INTERACTIONS_API_REVISION =
@@ -53,9 +54,15 @@ async function normalizeReferenceBuffer(image: {
   buffer: Buffer;
   mimeType: string;
 }): Promise<Buffer> {
+  // Deterministic cleanup for imperfect venue-taken photos: percentile
+  // contrast/exposure stretch plus a mild sharpen. Unlike AI restoration,
+  // this never invents facial detail, so likeness stays trustworthy. On
+  // already-good photos both operations are close to no-ops.
   return sharp(image.buffer)
     .rotate()
     .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
+    .normalize({ lower: 1, upper: 99 })
+    .sharpen({ sigma: 0.8 })
     .jpeg({ quality: 92, mozjpeg: true })
     .toBuffer();
 }
@@ -643,6 +650,28 @@ function aspectRatioInstruction(ratio: StillAspectRatio): string {
 export function userMessageForStillError(err: unknown): string {
   if (err instanceof StillImageBlockedError) {
     return "A reference photo was flagged by content safety. Upload different photos of the real couple (no celebrities, public figures, or restricted likenesses).";
+  }
+
+  if (err instanceof GalleryQualityError) {
+    const r = err.report;
+    const pct = (value: number) => `${Math.round(value * 100)}%`;
+    const partnerMin = Math.min(r.partnerOneLikenessScore, r.partnerTwoLikenessScore);
+    const notes = [
+      `face match ${pct(partnerMin)}`,
+      `venue match ${pct(r.venueScore)}`,
+      `realism ${pct(r.compositionScore)}`,
+    ];
+    if (!r.facesVisible) notes.push("faces were not clearly visible");
+    if (!r.exactlyTwoPartners || !r.partnerIdentitySeparation) {
+      notes.push("both partners' identities could not be kept distinct");
+    }
+    if (r.extraPeople) notes.push("extra people appeared");
+    if (r.textArtifacts) notes.push("text artifacts appeared");
+    return (
+      `We couldn't render an accurate enough gallery from these photos, even after several attempts ` +
+      `(closest attempt: ${notes.join(", ")}). Clear, sharp, well-lit photos of both faces give the ` +
+      `best results - swap in stronger couple photos and try again. Your venue credit was refunded.`
+    );
   }
 
   const e = err as {

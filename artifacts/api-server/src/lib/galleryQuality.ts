@@ -172,9 +172,14 @@ export function qualityRetryGuidanceForError(err: unknown): string | null {
 }
 
 async function normalizeForJudge(image: ImageRef): Promise<Buffer> {
+  // Mirror the generation-side reference cleanup (contrast stretch + mild
+  // sharpen) so the judge compares the generated frame against the same
+  // enhanced references the generator saw.
   return sharp(image.buffer)
     .rotate()
     .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
+    .normalize({ lower: 1, upper: 99 })
+    .sharpen({ sigma: 0.8 })
     .jpeg({ quality: 88, mozjpeg: true })
     .toBuffer();
 }
