@@ -1262,7 +1262,7 @@ components:
           type: array
           items:
             type: string
-          minItems: 2
+          minItems: 1
           maxItems: 3
         styleId:
           type: string
