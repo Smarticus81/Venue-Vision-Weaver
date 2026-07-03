@@ -100,6 +100,11 @@ Production startup refuses:
   production frame must preserve all couple references and strong venue context
 - disabled gallery quality review
 - lowered likeness, per-partner likeness, venue, or composition thresholds
+  (targets that retries aim for), or lowered best-effort acceptance floors
+  (the minimum a delivered frame may score when no retry reaches the targets;
+  frames between floor and target ship for owner review instead of failing
+  the session, but integrity checks - two distinct real partners, visible
+  faces, no extra people or text - are never waived)
 - fewer than 4 frame attempts
 - generated image minimum edge below 1024px
 - generated image local contrast or sharpness floors below the production

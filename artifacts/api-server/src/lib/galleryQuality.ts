@@ -17,6 +17,15 @@ const MIN_LIKENESS_SCORE = Number(process.env.GALLERY_MIN_LIKENESS_SCORE ?? "0.8
 const MIN_PARTNER_LIKENESS_SCORE = Number(process.env.GALLERY_MIN_PARTNER_LIKENESS_SCORE ?? "0.78");
 const MIN_VENUE_SCORE = Number(process.env.GALLERY_MIN_VENUE_SCORE ?? "0.8");
 const MIN_COMPOSITION_SCORE = Number(process.env.GALLERY_MIN_COMPOSITION_SCORE ?? "0.74");
+// Acceptance floors: when no attempt reaches the strict targets above, the
+// best-scoring attempt is still delivered if it clears these floors and every
+// hard integrity check (two distinct real partners, faces visible, no extra
+// people or text). The venue owner reviews galleries before sending, so
+// near-target frames reach a human judge instead of failing the whole session.
+const FLOOR_LIKENESS_SCORE = Number(process.env.GALLERY_FLOOR_LIKENESS_SCORE ?? "0.7");
+const FLOOR_PARTNER_LIKENESS_SCORE = Number(process.env.GALLERY_FLOOR_PARTNER_LIKENESS_SCORE ?? "0.66");
+const FLOOR_VENUE_SCORE = Number(process.env.GALLERY_FLOOR_VENUE_SCORE ?? "0.68");
+const FLOOR_COMPOSITION_SCORE = Number(process.env.GALLERY_FLOOR_COMPOSITION_SCORE ?? "0.6");
 const MAX_TOTAL_JUDGE_IMAGES = 14;
 const MAX_COUPLE_JUDGE_REFERENCES = 3;
 
@@ -50,10 +59,66 @@ export class GalleryQualityError extends Error {
   constructor(
     message: string,
     public readonly report: GalleryQualityReport,
+    public readonly generated: { buffer: Buffer; mimeType: string },
+    public readonly generatedModel: string,
   ) {
     super(message);
     this.name = "GalleryQualityError";
   }
+}
+
+/**
+ * Aggregate score used to rank below-target attempts so the best one can be
+ * kept. The weakest partner likeness dominates: a gallery that loses one
+ * partner's identity is worse than one that is slightly soft everywhere.
+ */
+export function frameQualityScore(report: GalleryQualityReport): number {
+  const partnerMin = Math.min(
+    report.partnerOneLikenessScore,
+    report.partnerTwoLikenessScore,
+  );
+  return (
+    partnerMin * 0.35 +
+    report.likenessScore * 0.25 +
+    report.venueScore * 0.25 +
+    report.compositionScore * 0.15
+  );
+}
+
+/**
+ * Hard requirements for delivering a frame that missed the strict targets.
+ * Integrity checks are never negotiable; scores may sit between the floor and
+ * the target because the venue owner reviews the gallery before sending it.
+ */
+export function acceptanceFloorFailures(report: GalleryQualityReport): string[] {
+  const failures: string[] = [];
+  if (!report.partnerIdentitySeparation) {
+    failures.push("generated partners do not map to two distinct real identities");
+  }
+  if (!report.exactlyTwoPartners) failures.push("output does not contain exactly two partners");
+  if (!report.facesVisible) failures.push("faces are not clearly visible");
+  if (report.extraPeople) failures.push("extra people detected");
+  if (report.textArtifacts) failures.push("text/logo artifacts detected");
+  if (report.likenessScore < FLOOR_LIKENESS_SCORE) {
+    failures.push(`likeness ${report.likenessScore.toFixed(2)} < floor ${FLOOR_LIKENESS_SCORE}`);
+  }
+  if (report.partnerOneLikenessScore < FLOOR_PARTNER_LIKENESS_SCORE) {
+    failures.push(
+      `partner one likeness ${report.partnerOneLikenessScore.toFixed(2)} < floor ${FLOOR_PARTNER_LIKENESS_SCORE}`,
+    );
+  }
+  if (report.partnerTwoLikenessScore < FLOOR_PARTNER_LIKENESS_SCORE) {
+    failures.push(
+      `partner two likeness ${report.partnerTwoLikenessScore.toFixed(2)} < floor ${FLOOR_PARTNER_LIKENESS_SCORE}`,
+    );
+  }
+  if (report.venueScore < FLOOR_VENUE_SCORE) {
+    failures.push(`venue ${report.venueScore.toFixed(2)} < floor ${FLOOR_VENUE_SCORE}`);
+  }
+  if (report.compositionScore < FLOOR_COMPOSITION_SCORE) {
+    failures.push(`composition ${report.compositionScore.toFixed(2)} < floor ${FLOOR_COMPOSITION_SCORE}`);
+  }
+  return failures;
 }
 
 export function qualityRetryGuidanceForError(err: unknown): string | null {
@@ -197,6 +262,7 @@ export async function assertGalleryFrameQuality(params: {
   sessionId: number;
   scene: WeddingScene;
   generated: ImageRef;
+  generatedModel?: string;
   coupleReferences: ImageRef[];
   venueReferences: ImageRef[];
 }): Promise<GalleryQualityReport | null> {
@@ -312,6 +378,8 @@ export async function assertGalleryFrameQuality(params: {
     throw new GalleryQualityError(
       `Generated frame failed quality gate: ${[...failures, ...report.reasons].join("; ")}`,
       report,
+      { buffer: params.generated.buffer, mimeType: params.generated.mimeType },
+      params.generatedModel ?? "unknown",
     );
   }
 

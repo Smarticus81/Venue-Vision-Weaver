@@ -77,6 +77,8 @@ const galleryQualityModule = (await import(
       pass: boolean;
       reasons: string[];
     },
+    generated: { buffer: Buffer; mimeType: string },
+    generatedModel: string,
   ) => Error;
   qualityRetryGuidanceForError: (err: unknown) => string | null;
 };
@@ -1440,7 +1442,7 @@ try {
       textArtifacts: false,
       pass: false,
       reasons: ["partner two looked generic", "venue became a generic ballroom"],
-    }),
+    }, { buffer: Buffer.alloc(4), mimeType: "image/jpeg" }, "gemini-3-pro-image"),
   );
   assert.ok(retryGuidance?.includes("partner two likeness"), "retry guidance targets weak partner likeness");
   assert.ok(
