@@ -101,7 +101,7 @@ export async function assertReferenceImageQuality(params: {
   profile: ReferenceProfile;
 }): Promise<ReferenceImageQuality> {
   const { buffer, label, minEdgePx, profile } = params;
-  const image = sharp(buffer, { limitInputPixels: 48_000_000 }).rotate();
+  const image = sharp(buffer, { limitInputPixels: 120_000_000 }).rotate();
   const meta = await image.metadata();
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;

@@ -810,7 +810,7 @@ export const ListGalleryStylesResponse = zod.object({
  * @summary Request a presigned URL for file upload
  */
 
-export const requestUploadUrlBodySizeMax = 8388608;
+export const requestUploadUrlBodySizeMax = 52428800;
 
 export const RequestUploadUrlBody = zod.object({
   name: zod.string().min(1),
@@ -818,7 +818,7 @@ export const RequestUploadUrlBody = zod.object({
     .number()
     .min(1)
     .max(requestUploadUrlBodySizeMax)
-    .describe("Maximum upload size is 8MB."),
+    .describe("Maximum upload size is 50MB."),
   contentType: zod.enum(["image/jpeg", "image/png", "image/webp"]),
   purpose: zod.enum(["couple", "venue"]),
   venueSlug: zod.string().min(1),
@@ -830,7 +830,7 @@ export const RequestUploadUrlBody = zod.object({
     ),
 });
 
-export const requestUploadUrlResponseMetadataSizeMax = 8388608;
+export const requestUploadUrlResponseMetadataSizeMax = 52428800;
 
 export const RequestUploadUrlResponse = zod.object({
   uploadURL: zod.string().url(),
@@ -842,7 +842,7 @@ export const RequestUploadUrlResponse = zod.object({
         .number()
         .min(1)
         .max(requestUploadUrlResponseMetadataSizeMax)
-        .describe("Maximum upload size is 8MB."),
+        .describe("Maximum upload size is 50MB."),
       contentType: zod.enum(["image/jpeg", "image/png", "image/webp"]),
       purpose: zod.enum(["couple", "venue"]),
       venueSlug: zod.string().min(1),

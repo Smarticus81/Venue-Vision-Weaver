@@ -435,9 +435,9 @@ export interface UploadUrlRequest {
   /** @minLength 1 */
   name: string;
   /**
-   * Maximum upload size is 8MB.
+   * Maximum upload size is 50MB.
    * @minimum 1
-   * @maximum 8388608
+   * @maximum 52428800
    */
   size: number;
   contentType: UploadUrlRequestContentType;

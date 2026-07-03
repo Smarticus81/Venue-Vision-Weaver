@@ -61,7 +61,7 @@ interface ObjectUploaderProps {
  */
 export function ObjectUploader({
   maxNumberOfFiles = 1,
-  maxFileSize = 8 * 1024 * 1024,
+  maxFileSize = 50 * 1024 * 1024,
   allowedFileTypes = ["image/jpeg", "image/png", "image/webp"],
   onGetUploadParameters,
   onComplete,

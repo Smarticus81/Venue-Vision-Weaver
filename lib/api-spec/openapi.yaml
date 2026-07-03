@@ -1497,8 +1497,8 @@ components:
         size:
           type: integer
           minimum: 1
-          maximum: 8388608
-          description: Maximum upload size is 8MB.
+          maximum: 52428800
+          description: Maximum upload size is 50MB.
         contentType:
           type: string
           enum: [image/jpeg, image/png, image/webp]

@@ -56,7 +56,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_COUPLE_PHOTOS = 1;
 const MAX_COUPLE_PHOTOS = 3;
 const MIN_COUPLE_PHOTO_EDGE_PX = 512;
-const MAX_COUPLE_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_COUPLE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const DEFAULT_STYLE_ID = "cinematic-editorial";
 const objectStorageService = new ObjectStorageService();
 const ALLOWED_COUPLE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -130,7 +130,7 @@ async function validateCouplePhotoObjectKeys(objectKeys: string[], venueId: numb
       const file = await objectStorageService.getObjectEntityFile(objectKey);
       const [buffer] = await file.download();
       if (buffer.length > MAX_COUPLE_UPLOAD_BYTES) {
-        throw new Error(`Couple photo ${index + 1} is too large. Upload images up to 8MB.`);
+        throw new Error(`Couple photo ${index + 1} is too large. Upload images up to 50MB.`);
       }
 
       const metadata = await file.getMetadata().catch(() => null);
