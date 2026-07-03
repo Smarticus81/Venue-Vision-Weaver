@@ -439,6 +439,63 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   res.json(buildSessionDetailPayload(session, venue, venueMedia, generatedAssets, { includeEmail: true }));
 });
 
+// DELETE /sessions/:id  (owner session)
+router.delete("/sessions/:id", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid session id" });
+    return;
+  }
+  const sessionId = params.data.id;
+
+  const [session] = await db
+    .select({ id: coupleSessionsTable.id, venueId: coupleSessionsTable.venueId })
+    .from(coupleSessionsTable)
+    .where(eq(coupleSessionsTable.id, sessionId));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const [venue] = await db
+    .select({ slug: venuesTable.slug })
+    .from(venuesTable)
+    .where(eq(venuesTable.id, session.venueId));
+  if (!venue) {
+    res.status(404).json({ error: "Venue not found" });
+    return;
+  }
+
+  const ownerVenue = await requireOwnerVenue(req, res, venue.slug);
+  if (!ownerVenue) return;
+
+  const generated = await db
+    .select({ objectKey: generatedAssetsTable.objectKey })
+    .from(generatedAssetsTable)
+    .where(eq(generatedAssetsTable.sessionId, sessionId));
+  const coupleMedia = await db
+    .select({ objectKey: coupleMediaTable.objectKey })
+    .from(coupleMediaTable)
+    .where(eq(coupleMediaTable.sessionId, sessionId));
+
+  // couple_media and generated_assets cascade with the session row;
+  // credit_transactions keep their history with session_id set null.
+  await db.delete(coupleSessionsTable).where(eq(coupleSessionsTable.id, sessionId));
+
+  // Storage cleanup is best-effort after the DB delete: a leftover object is
+  // unreachable (no DB row grants read access), while a failed delete must
+  // not resurrect the session.
+  for (const { objectKey } of [...generated, ...coupleMedia]) {
+    try {
+      await objectStorageService.deleteObjectEntity(objectKey);
+    } catch (err) {
+      req.log.warn({ err, sessionId, objectKey }, "Failed to delete stored object for removed session");
+    }
+  }
+
+  res.json({ deleted: true });
+});
+
 // GET /sessions/by-token/:shareToken  (public read, never returns email)
 router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => {
   const { shareToken } = req.params;

@@ -331,6 +331,10 @@ export interface SendSessionEmailResponse {
   sent: boolean;
 }
 
+export interface DeleteSessionResponse {
+  deleted: boolean;
+}
+
 export interface RecoverSessionsBody {
   /** Email to look up. Server emails a magic-link list if sessions exist. */
   email: string;

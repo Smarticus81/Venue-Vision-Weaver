@@ -597,6 +597,20 @@ export const GetSessionResponse = zod
   );
 
 /**
+ * Owner-only. Permanently removes the session along with its couple
+photos and generated assets, both database rows and stored objects.
+
+ * @summary Delete a prospect gallery session (owner-only)
+ */
+export const DeleteSessionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteSessionResponse = zod.object({
+  deleted: zod.boolean(),
+});
+
+/**
  * Public read-only access via unguessable share token. Never returns PII like coupleEmail.
  * @summary Get a session by share token (couple-facing public view)
  */

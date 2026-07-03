@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useAddVenueMedia,
   useCreateSession,
+  useDeleteSession,
   useDeleteVenueMedia,
   useGetVenueDashboard,
   useListVenueMedia,
@@ -149,6 +150,7 @@ export default function VenueOwnerPage() {
   const deleteMedia = useDeleteVenueMedia({ request: {} });
   const updateVenue = useUpdateVenue({ request: {} });
   const createSession = useCreateSession();
+  const deleteSession = useDeleteSession();
   const { uploadFile: uploadVenueFile, isUploading: isUploadingVenue, progress: venueUploadProgress } = useUpload({
     purpose: "venue",
     venueSlug: selectedSlug,
@@ -315,6 +317,31 @@ export default function VenueOwnerPage() {
     } finally {
       setSendingSessionId(null);
     }
+  };
+
+  const handleDeleteSession = (sessionId: number, coupleName?: string | null) => {
+    const confirmed = window.confirm(
+      `Delete ${coupleName || "this prospect gallery"}? This permanently removes the gallery, its photos, and its share link.`,
+    );
+    if (!confirmed) return;
+    deleteSession.mutate(
+      { id: sessionId },
+      {
+        onSuccess: () => {
+          toast({ title: "Gallery deleted" });
+          void queryClient.invalidateQueries({
+            queryKey: getGetVenueDashboardQueryKey(selectedSlug),
+          });
+        },
+        onError: (err: ErrorType<ErrorEnvelope>) => {
+          toast({
+            title: "Delete failed",
+            description: err.data?.error ?? "Try again.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
   };
 
   const handleViewGallery = (shareToken?: string | null) => {
@@ -929,6 +956,21 @@ export default function VenueOwnerPage() {
                           <Mail className="mr-2 h-4 w-4" />
                         )}
                         Email gallery
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={deleteSession.isPending && deleteSession.variables?.id === session.id}
+                        onClick={() => handleDeleteSession(session.id, session.coupleName)}
+                        className="bg-background text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                        data-testid={`delete-gallery-${session.id}`}
+                      >
+                        {deleteSession.isPending && deleteSession.variables?.id === session.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-2 h-4 w-4" />
+                        )}
+                        Delete
                       </Button>
                     </div>
                   </div>
