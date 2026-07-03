@@ -162,15 +162,12 @@ export default function VenueOwnerPage() {
       });
     },
   });
+  const lastCoupleUploadError = useRef<string | null>(null);
   const { uploadFile: uploadCoupleFile, isUploading: isUploadingCouple } = useUpload({
     purpose: "couple",
     venueSlug: selectedSlug,
     onError: (err) => {
-      toast({
-        title: "Couple photo failed",
-        description: err.message,
-        variant: "destructive",
-      });
+      lastCoupleUploadError.current = err.message;
     },
   });
 
@@ -432,13 +429,16 @@ export default function VenueOwnerPage() {
 
     setIsStartingGallery(true);
     try {
+      lastCoupleUploadError.current = null;
       const couplePhotoKeys: string[] = [];
       for (const file of coupleFiles) {
         const uploaded = await uploadCoupleFile(file);
         if (uploaded) couplePhotoKeys.push(uploaded.objectPath);
       }
       if (couplePhotoKeys.length < MIN_COUPLE_PHOTOS) {
-        throw new Error("At least one couple photo must upload successfully.");
+        throw new Error(
+          lastCoupleUploadError.current ?? "At least one couple photo must upload successfully.",
+        );
       }
 
       createSession.mutate(

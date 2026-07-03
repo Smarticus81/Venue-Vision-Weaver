@@ -63,7 +63,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       res.status(400).json({ error: "Upload must be a JPG, PNG, or WebP image up to 50MB." });
       return;
     }
-    if (!rateLimit(`upload:${clientKey(req)}`, 30, 60 * 60 * 1000)) {
+    if (!rateLimit(`upload:${clientKey(req)}`, 120, 60 * 60 * 1000)) {
       res.status(429).json({ error: "Too many uploads. Try again later." });
       return;
     }
@@ -76,25 +76,26 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       const venue = await requireOwnerVenue(req, res, venueSlug);
       if (!venue) return;
       venueId = venue.id;
-    } else {
-      const ownerVenue = uploadToken ? null : await requireOwnerVenue(req, res, venueSlug);
-      if (ownerVenue) {
-        venueId = ownerVenue.id;
-      } else {
-        if (!uploadToken || !verifyCoupleUploadToken(uploadToken, venueSlug)) {
-          res.status(401).json({ error: "Upload token expired. Refresh the venue page and try again." });
-          return;
-        }
-        const [venue] = await db
-          .select({ id: venuesTable.id })
-          .from(venuesTable)
-          .where(eq(venuesTable.slug, venueSlug));
-        if (!venue) {
-          res.status(404).json({ error: "Venue not found" });
-          return;
-        }
-        venueId = venue.id;
+    } else if (uploadToken) {
+      if (!verifyCoupleUploadToken(uploadToken, venueSlug)) {
+        res.status(401).json({ error: "Upload token expired. Refresh the venue page and try again." });
+        return;
       }
+      const [venue] = await db
+        .select({ id: venuesTable.id })
+        .from(venuesTable)
+        .where(eq(venuesTable.slug, venueSlug));
+      if (!venue) {
+        res.status(404).json({ error: "Venue not found" });
+        return;
+      }
+      venueId = venue.id;
+    } else {
+      // Owner-driven couple upload from the dashboard. requireOwnerVenue
+      // writes its own error response, so never write a second one here.
+      const ownerVenue = await requireOwnerVenue(req, res, venueSlug);
+      if (!ownerVenue) return;
+      venueId = ownerVenue.id;
     }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL(
