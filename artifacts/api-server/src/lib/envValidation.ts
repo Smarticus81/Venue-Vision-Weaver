@@ -269,8 +269,10 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
   }
 
   const apiBase = env.GEMINI_API_BASE_URL?.trim();
-  if (apiBase && /\/v1beta(?:\/|$)/i.test(apiBase)) {
-    errors.push("GEMINI_API_BASE_URL must use the stable v1 Gemini API in production, not v1beta");
+  if (apiBase && /\/v1(?!beta)(?:\/|$)/i.test(apiBase)) {
+    errors.push(
+      "GEMINI_API_BASE_URL must use the v1beta Gemini API; image generation config (responseModalities/imageConfig) is not available on v1",
+    );
   }
 
   const imageSize = env.GEMINI_IMAGE_SIZE ?? "2K";

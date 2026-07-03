@@ -7,7 +7,7 @@ import {
   type VenueMediaCoverage,
 } from "./venueMediaCoverage.js";
 
-const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1";
+const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_INTERACTIONS_API_REVISION =
   process.env.GEMINI_INTERACTIONS_API_REVISION ?? "2026-05-20";
 const DEFAULT_IMAGE_MODELS = [
@@ -461,12 +461,10 @@ export async function generateCinematicStillWithMetadata(params: {
         },
       ],
       generationConfig: {
-        responseModalities: ["IMAGE"],
-        responseFormat: {
-          image: {
-            aspectRatio,
-            ...(imageSize ? { imageSize } : {}),
-          },
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: {
+          aspectRatio,
+          ...(imageSize ? { imageSize } : {}),
         },
         temperature: 0.25,
       },
