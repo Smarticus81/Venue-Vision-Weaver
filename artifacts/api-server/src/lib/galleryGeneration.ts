@@ -215,6 +215,14 @@ export async function renderGalleryFrameWithQuality(ctx: {
       { sessionId, sceneId: scene.id, sceneIndex, floorFailures },
       "Best gallery frame attempt is below the acceptance floor",
     );
+    // Fail with the BEST attempt's report so the stored error message reflects
+    // how close the photos got, not whichever attempt happened to run last.
+    throw new GalleryQualityError(
+      `Best gallery frame attempt is below the acceptance floor: ${floorFailures.join("; ")}`,
+      bestFallback.report,
+      { buffer: bestFallback.raw, mimeType: "image/jpeg" },
+      bestFallback.model,
+    );
   }
   throw lastErr instanceof Error ? lastErr : new Error("Gallery frame generation failed");
 }
