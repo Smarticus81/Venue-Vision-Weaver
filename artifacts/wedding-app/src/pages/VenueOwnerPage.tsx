@@ -38,8 +38,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
-const MIN_VENUE_PHOTOS = 5;
-const MIN_COUPLE_PHOTOS = 2;
+const MIN_VENUE_PHOTOS = 1;
+const MIN_COUPLE_PHOTOS = 1;
 const MAX_COUPLE_PHOTOS = 3;
 const COVERAGE_OPTIONS = [
   { value: "exterior", label: "Exterior" },
@@ -185,7 +185,7 @@ export default function VenueOwnerPage() {
   const processingSessions = sessions.filter(
     (session) => session.status === "processing" || session.status === "pending",
   ).length;
-  const venueReady = media.length >= MIN_VENUE_PHOTOS && missingCoverage.length === 0;
+  const venueReady = media.length >= MIN_VENUE_PHOTOS;
 
   useEffect(() => {
     if (!venue) return;
@@ -396,7 +396,7 @@ export default function VenueOwnerPage() {
     }
     if (coupleFiles.length < MIN_COUPLE_PHOTOS) {
       toast({
-        title: "Add at least two couple photos",
+        title: "Add at least one couple photo",
         description: "Use clear, well-lit photos for better likeness.",
         variant: "destructive",
       });
@@ -411,7 +411,7 @@ export default function VenueOwnerPage() {
         if (uploaded) couplePhotoKeys.push(uploaded.objectPath);
       }
       if (couplePhotoKeys.length < MIN_COUPLE_PHOTOS) {
-        throw new Error("At least two couple photos must upload successfully.");
+        throw new Error("At least one couple photo must upload successfully.");
       }
 
       createSession.mutate(
@@ -534,7 +534,7 @@ export default function VenueOwnerPage() {
               <Metric label="Credits" value={venue?.creditsBalance ?? 0} />
               <Metric label="Approved" value={readySessions} />
               <Metric label="In production" value={processingSessions} />
-              <Metric label="Venue refs" value={`${media.length}/${MIN_VENUE_PHOTOS}`} />
+              <Metric label="Venue refs" value={media.length} />
             </div>
           </motion.div>
 
@@ -746,9 +746,9 @@ export default function VenueOwnerPage() {
               <div>
                 <h2 className="text-xl font-bold text-foreground">True-space readiness</h2>
                 <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
-                  {venueReady
+                  {missingCoverage.length === 0
                     ? "The venue has the visual coverage needed for accurate branded previews."
-                    : "Add the missing room views so output can preserve space, scale, and atmosphere."}
+                    : "Recommended: add the missing room views so output can better preserve space, scale, and atmosphere."}
                 </p>
               </div>
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border text-muted-foreground shadow-sm">
