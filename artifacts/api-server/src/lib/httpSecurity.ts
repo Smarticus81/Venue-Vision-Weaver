@@ -61,6 +61,10 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=()",
   );
+  // Browser uploads go straight to Supabase Storage via presigned URLs, so
+  // connect-src must include the Supabase origin when it is configured.
+  const supabaseOrigin = normalizeOrigin(process.env.SUPABASE_URL);
+  const connectSrc = supabaseOrigin ? `connect-src 'self' ${supabaseOrigin}` : "connect-src 'self'";
   res.setHeader(
     "Content-Security-Policy",
     [
@@ -73,7 +77,7 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
       "img-src 'self' data: blob:",
       "media-src 'self' blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self'",
+      connectSrc,
       "form-action 'self'",
     ].join("; "),
   );
