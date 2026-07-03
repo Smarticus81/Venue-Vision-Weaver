@@ -18,7 +18,10 @@ import {
 import { rankVenueReferencesForScene } from "./venueReferenceSelector.js";
 import { sendGalleryReadyNotification } from "./emailService.js";
 import {
+  GalleryQualityError,
+  acceptanceFloorFailures,
   assertGalleryFrameQuality,
+  frameQualityScore,
   qualityRetryGuidanceForError,
   type GalleryQualityReport,
 } from "./galleryQuality.js";
@@ -120,6 +123,12 @@ export async function renderGalleryFrameWithQuality(ctx: {
 
   let lastErr: unknown = null;
   let retryGuidance: string | null = null;
+  let bestFallback: {
+    score: number;
+    raw: Buffer;
+    report: GalleryQualityReport;
+    model: string;
+  } | null = null;
   for (let attempt = 1; attempt <= FRAME_ATTEMPTS; attempt++) {
     try {
       const basePrompt = buildSceneKontextPrompt(scene, style);
@@ -135,6 +144,7 @@ export async function renderGalleryFrameWithQuality(ctx: {
         sessionId,
         scene,
         generated: { buffer: generated.buffer, mimeType: "image/jpeg" },
+        generatedModel: generated.model,
         coupleReferences: coupleBuffers.slice(0, MAX_COUPLE_REFERENCES),
         venueReferences: venueRefs,
       });
@@ -147,6 +157,20 @@ export async function renderGalleryFrameWithQuality(ctx: {
       };
     } catch (err) {
       lastErr = err;
+      // A frame that missed the strict targets is still a candidate: keep the
+      // best-scoring one so imperfect input photos degrade the gallery
+      // gracefully instead of failing the whole session.
+      if (err instanceof GalleryQualityError) {
+        const score = frameQualityScore(err.report);
+        if (!bestFallback || score > bestFallback.score) {
+          bestFallback = {
+            score,
+            raw: err.generated.buffer,
+            report: err.report,
+            model: err.generatedModel,
+          };
+        }
+      }
       const nextGuidance = qualityRetryGuidanceForError(err);
       if (nextGuidance) retryGuidance = nextGuidance;
       logger.warn(
@@ -163,6 +187,34 @@ export async function renderGalleryFrameWithQuality(ctx: {
         "Gallery frame attempt failed",
       );
     }
+  }
+
+  if (bestFallback) {
+    const floorFailures = acceptanceFloorFailures(bestFallback.report);
+    if (floorFailures.length === 0) {
+      logger.info(
+        {
+          sessionId,
+          sceneId: scene.id,
+          sceneIndex,
+          attempts: FRAME_ATTEMPTS,
+          score: bestFallback.score,
+          report: bestFallback.report,
+        },
+        "Accepting best-effort gallery frame below target thresholds; owner reviews before delivery",
+      );
+      return {
+        raw: bestFallback.raw,
+        qualityReport: bestFallback.report,
+        venueReferenceIndexes,
+        attempts: FRAME_ATTEMPTS,
+        model: bestFallback.model,
+      };
+    }
+    logger.warn(
+      { sessionId, sceneId: scene.id, sceneIndex, floorFailures },
+      "Best gallery frame attempt is below the acceptance floor",
+    );
   }
   throw lastErr instanceof Error ? lastErr : new Error("Gallery frame generation failed");
 }

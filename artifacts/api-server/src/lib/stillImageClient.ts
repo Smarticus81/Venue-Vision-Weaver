@@ -659,7 +659,7 @@ export function userMessageForStillError(err: unknown): string {
     (err as { name?: string })?.name === "GalleryQualityError" ||
     /failed quality gate|likeness|venueScore|compositionScore/i.test(detail)
   ) {
-    return "The generated gallery did not pass our likeness and venue quality review. Please try again with clear, well-lit couple photos and complete venue coverage. Your venue credit was refunded.";
+    return "We couldn't render an accurate enough gallery from these photos, even after several attempts. Photos with both faces clearly visible, sharp, and well lit give the best results - swap in stronger couple photos and try again. Your venue credit was refunded.";
   }
 
   if (
