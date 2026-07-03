@@ -16,10 +16,7 @@ import {
   type WeddingScene,
 } from "./scenePlan.js";
 import { rankVenueReferencesForScene } from "./venueReferenceSelector.js";
-import {
-  sendGalleryReadyNotification,
-  sendGalleryToCouple,
-} from "./emailService.js";
+import { sendGalleryReadyNotification } from "./emailService.js";
 import {
   assertGalleryFrameQuality,
   qualityRetryGuidanceForError,
@@ -269,11 +266,10 @@ export async function processGallerySession(ctx: GalleryGenerationContext): Prom
     .from(coupleSessionsTable)
     .where(eq(coupleSessionsTable.id, sessionId));
 
+  // Notify the venue owner only. The gallery is never auto-sent to the couple;
+  // the owner reviews it first and sends it from the dashboard.
   if (updatedSession && venue) {
     void sendGalleryReadyNotification(venue.ownerEmail, updatedSession, venue);
-    if (updatedSession.coupleEmail) {
-      void sendGalleryToCouple(updatedSession.coupleEmail, updatedSession, venue);
-    }
   }
 
   logger.info(

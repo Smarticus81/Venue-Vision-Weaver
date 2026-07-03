@@ -599,6 +599,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: deleteSession
+      tags: [sessions]
+      summary: Delete a prospect gallery session (owner-only)
+      description: |
+        Owner-only. Permanently removes the session along with its couple
+        photos and generated assets, both database rows and stored objects.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteSessionResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /sessions/by-token/{shareToken}:
     get:
@@ -1369,6 +1401,13 @@ components:
       required: [sent]
       properties:
         sent:
+          type: boolean
+
+    DeleteSessionResponse:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
           type: boolean
 
     RecoverSessionsBody:

@@ -13,6 +13,7 @@ export * from "./billingCheckoutResponse";
 export * from "./billingPortalResponse";
 export * from "./createSessionBody";
 export * from "./createVenueBody";
+export * from "./deleteSessionResponse";
 export * from "./errorEnvelope";
 export * from "./exchangeOwnerLoginTokenBody";
 export * from "./galleryStyleSummary";
