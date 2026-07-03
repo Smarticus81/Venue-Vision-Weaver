@@ -29,7 +29,7 @@ import { canReadGeneratedAssetWithShareToken } from "../lib/sessionVisibility";
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const UPLOAD_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 function storedObjectMatchesPath(storedObjectKey: string, objectPath: string): boolean {
@@ -60,7 +60,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     const { name, size, contentType, purpose, venueSlug, uploadToken } = parsed.data;
 
     if (!ALLOWED_IMAGE_TYPES.has(contentType) || size > MAX_UPLOAD_BYTES) {
-      res.status(400).json({ error: "Upload must be a JPG, PNG, or WebP image up to 8MB." });
+      res.status(400).json({ error: "Upload must be a JPG, PNG, or WebP image up to 50MB." });
       return;
     }
     if (!rateLimit(`upload:${clientKey(req)}`, 30, 60 * 60 * 1000)) {

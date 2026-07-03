@@ -25,8 +25,8 @@ interface UseUploadOptions {
 
 type AllowedImageContentType = "image/jpeg" | "image/png" | "image/webp";
 
-const MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024;
-const MIN_IMAGE_EDGE_PX = 1024;
+const MAX_IMAGE_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MIN_IMAGE_EDGE_PX = 512;
 
 function allowedImageContentType(type: string | null | undefined): AllowedImageContentType {
   if (type === "image/jpeg" || type === "image/png" || type === "image/webp") {
@@ -69,7 +69,7 @@ async function assertValidImageUpload(file: File | UppyFile<Record<string, unkno
   const contentType = allowedImageContentType(file.type);
   const size = fileSizeBytes(file);
   if (size > MAX_IMAGE_UPLOAD_BYTES) {
-    throw new Error("Upload images up to 8MB.");
+    throw new Error("Upload images up to 50MB.");
   }
 
   const blob = file instanceof Blob

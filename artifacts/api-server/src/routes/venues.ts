@@ -58,7 +58,7 @@ import { logger } from "../lib/logger.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_VENUE_PHOTO_EDGE_PX = 512;
-const MAX_VENUE_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_VENUE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const VENUE_NEAR_DUPLICATE_HASH_DISTANCE = 2;
 const ALLOWED_VENUE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const objectStorageService = new ObjectStorageService();
@@ -105,7 +105,7 @@ async function validateVenueMediaObjectKey(objectKey: string, label = "Venue pho
     const file = await objectStorageService.getObjectEntityFile(objectKey);
     const [buffer] = await file.download();
     if (buffer.length > MAX_VENUE_UPLOAD_BYTES) {
-      throw new Error(`${label} is too large. Upload images up to 8MB.`);
+      throw new Error(`${label} is too large. Upload images up to 50MB.`);
     }
 
     const metadata = await file.getMetadata().catch(() => null);
