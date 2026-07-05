@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+For landing-page, marketing-surface, or other visual design work, follow the design doctrine in `DESIGN.md` and keep `design-notes.md` up to date.
+
 ## Commands
 
 ```bash
