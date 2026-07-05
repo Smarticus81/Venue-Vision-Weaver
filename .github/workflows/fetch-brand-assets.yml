@@ -5,6 +5,9 @@ name: Fetch brand assets
 # Exists because the authoring sandbox cannot reach the studio CDN directly.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/new-session-4t9nnq
 
 permissions:
   contents: write
