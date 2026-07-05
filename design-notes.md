@@ -3,6 +3,32 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-07-05 (fourth pass) — Direct copy, bespoke imagery, business framing
+
+Owner direction: restore the direct wording, cut copy volume, sell business
+outcomes (bookings, revenue, follow-up marketing) not ease-of-use, and use the
+Higgsfield studio for real assets.
+
+- Hero claim restored to the direct line: "TURN TOURS / INTO BOOKINGS." with a
+  one-sentence mechanism sub. Couple page back to "SEE YOURSELVES AT THE
+  VENUE / before the day arrives."
+- Copy throughout cut to one-liners; scene 005 reframed from trust guardrails
+  to business outcomes (more toured couples book · marketing assets made for
+  you · your brand does the traveling), with the trust facts condensed to one
+  mono footnote.
+- Marquee now sells outcomes: "more bookings · faster yeses · follow-up that
+  sells · four portraits + a reel".
+- Generated in Higgsfield (~5 credits, job IDs in scripts/fetch-brand-assets.mjs):
+  a 21:9 candlelit-ballroom atmosphere plate (Soul Cinema) now behind both
+  heroes at 50% under a background gradient, and four consistent couple frames
+  (Nano Banana, same couple spec) that replace the outline placeholders in
+  scene 003 — the contact sheet now shows the actual deliverable, dealt in
+  frame by frame on scroll.
+- Sandbox network policy blocks the studio CDN, so assets are hotlinked for
+  now; `scripts/fetch-brand-assets.mjs` + `VITE_LOCAL_BRAND_ASSETS=1`
+  localizes them (run from an open network). Old tablet-mockup hero images
+  deleted.
+
 ## 2026-07-05 (third pass) — The motion rebuild
 
 Owner verdict on the first rebrand pass: "all you did was turn it dark" —

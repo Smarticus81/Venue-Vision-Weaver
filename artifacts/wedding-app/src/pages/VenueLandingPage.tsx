@@ -18,8 +18,7 @@ import {
   RiseLines,
 } from "@/components/motion";
 import { cn } from "@/lib/utils";
-
-const HERO_IMAGE = "/brand/venue-landing-hero.webp";
+import { BRAND_ASSETS, GALLERY_FRAMES } from "@/lib/brandAssets";
 
 function useIsWide() {
   const [wide, setWide] = useState(false);
@@ -139,27 +138,39 @@ export default function VenueLandingPage() {
 function HeroScene({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void }) {
   return (
     <section className="grain relative flex min-h-screen flex-col justify-end overflow-hidden pt-24">
+      <img
+        src={BRAND_ASSETS.heroAtmosphere}
+        alt=""
+        aria-hidden
+        fetchPriority="high"
+        decoding="async"
+        className="absolute inset-0 h-full w-full object-cover opacity-50"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/55 via-background/70 to-background"
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_70%_10%,hsl(var(--rose)/0.1),transparent_70%)]"
       />
 
       <div className="relative z-10 px-5 md:px-10">
-        <p className="mono-label mb-6 text-rose">001 — The claim</p>
+        <p className="mono-label mb-6 text-rose">For wedding venues</p>
         <h1 className="font-display font-medium uppercase leading-[0.92] tracking-[-0.02em] text-[clamp(3.2rem,11.5vw,11.5rem)]">
-          <RiseLines lines={["Empty rooms", <>don't{" "}<em className="text-rose">book.</em></>]} />
+          <RiseLines lines={["Turn tours", <>into{" "}<em className="text-rose">bookings.</em></>]} />
         </h1>
 
         <div className="mt-8 grid grid-cols-1 gap-10 pb-16 md:mt-12 md:grid-cols-[1fr_auto] md:items-end md:pb-20">
           <p className="font-display italic text-[clamp(1.6rem,3.4vw,3rem)] leading-tight text-muted-foreground max-w-3xl">
-            Their wedding does — <span className="text-foreground">shown inside your venue.</span>
+            Couples see their wedding <span className="text-foreground">in your rooms</span> — before they decide.
           </p>
 
           <div className="max-w-sm md:justify-self-end">
             <p className="mb-6 text-base leading-relaxed text-muted-foreground">
-              After each tour, glimpse hands the couple a private gallery of
-              themselves in your actual rooms — four photoreal portraits and a
-              branded motion reel — while they're still deciding.
+              After each tour, glimpse sends the couple four photoreal portraits
+              of themselves in your venue, plus a branded motion reel — with
+              your booking link on it.
             </p>
             <TickButton onClick={onStart} testId="venue-hero-register">
               Start with 5 free galleries
@@ -180,7 +191,7 @@ function HeroScene({ onStart, onSignIn }: { onStart: () => void; onSignIn: () =>
       </div>
 
       <Marquee className="relative z-10 border-y border-border py-4 md:py-6" speed={30}>
-        {["four portraits", "one motion reel", "their faces", "your rooms", "48 hours"].map((t) => (
+        {["more bookings", "faster yeses", "follow-up that sells", "four portraits + a reel"].map((t) => (
           <span key={t} className="mx-6 inline-flex items-baseline gap-12 font-display italic text-[clamp(1.6rem,3.2vw,3rem)] leading-none text-foreground/90">
             {t}
             <span aria-hidden className="inline-block h-[0.5em] w-[0.5em] translate-y-[-0.05em] rounded-full bg-rose/70" />
@@ -211,14 +222,14 @@ function ProblemScene() {
           </h2>
           <div className="space-y-6 self-end text-lg font-light leading-relaxed text-muted-foreground max-w-md">
             <p>
-              Then they tour three more venues, and your thank-you email lands in
-              the same inbox as everyone else's. The couple who fell quiet in
-              your ceremony room is now comparing you on price per plate.
+              Then they tour three more venues, and every unbooked tour is
+              revenue you already paid to earn — the ads, the inquiry, the
+              walkthrough.
             </p>
             <p>
-              The venue that stays vivid wins the booking. Photos of empty rooms
-              don't stay vivid — photos of{" "}
-              <em className="font-display text-foreground">them</em> in your rooms do.
+              The venue that stays vivid wins the date. Photos of{" "}
+              <em className="font-display text-foreground">them</em> in your
+              rooms stay vivid.
             </p>
           </div>
         </div>
@@ -227,14 +238,28 @@ function ProblemScene() {
   );
 }
 
-/* ————————————————— 003 · The developing print ————————————————— */
+/* ————————————————— 003 · The contact sheet ————————————————— */
 
-const FRAME_LABELS = [
-  { index: "Frame 01", label: "Ceremony aisle" },
-  { index: "Frame 02", label: "First dance" },
-  { index: "Frame 03", label: "Golden hour" },
-  { index: "Frame 04", label: "The motion reel" },
-];
+function ContactFrame({ frame }: { frame: (typeof GALLERY_FRAMES)[number] }) {
+  return (
+    <figure className="relative">
+      <div className="relative aspect-[4/5] overflow-hidden bg-card">
+        <img
+          src={frame.src}
+          alt={frame.alt}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
+        <FrameTicks size={14} className="text-foreground/60" />
+      </div>
+      <figcaption className="mt-3 flex items-baseline gap-3">
+        <span className="mono-label text-rose">{frame.index}</span>
+        <span className="text-xs text-muted-foreground">{frame.label}</span>
+      </figcaption>
+    </figure>
+  );
+}
 
 function DevelopingPrintScene() {
   const reduce = useReducedMotion();
@@ -244,106 +269,78 @@ function DevelopingPrintScene() {
     return (
       <section className="px-5 py-24 md:px-10">
         <SceneLabel index="003" title="The deliverable" />
-        <h2 className="mt-10 mb-10 font-display text-[clamp(2rem,4.5vw,4rem)] leading-[1.05] font-medium max-w-3xl">
+        <h2 className="mt-10 mb-12 font-display text-[clamp(2rem,4.5vw,4rem)] leading-[1.05] font-medium max-w-3xl">
           One tour becomes a <em className="text-rose">contact sheet</em> of their day.
         </h2>
-        <div className="relative">
-          <img
-            src={HERO_IMAGE}
-            alt="A couple's four-frame glimpse gallery on a tablet inside a bright ceremony room"
-            width={1240}
-            height={698}
-            loading="lazy"
-            decoding="async"
-            className="h-auto w-full"
-          />
-          <FrameTicks size={22} />
-        </div>
-        <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-3">
-          {FRAME_LABELS.map((f) => (
-            <li key={f.index} className="flex items-baseline gap-3 border-t border-border pt-3">
-              <span className="mono-label text-rose">{f.index}</span>
-              <span className="text-sm text-muted-foreground">{f.label}</span>
-            </li>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-5">
+          {GALLERY_FRAMES.map((f) => (
+            <ContactFrame key={f.index} frame={f} />
           ))}
-        </ul>
+        </div>
       </section>
     );
   }
 
-  return <PinnedPrint />;
+  return <PinnedContactSheet />;
 }
 
-function PinnedPrint() {
+function PinnedContactSheet() {
   const trackRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: trackRef, offset: ["start start", "end end"] });
 
-  const scale = useTransform(scrollYProgress, [0, 0.45], [0.36, 1]);
-  const exposureOpacity = useTransform(scrollYProgress, [0.36, 0.46], [1, 0]);
-  const deliveredOpacity = useTransform(scrollYProgress, [0.5, 0.6], [0, 1]);
+  const sheetScale = useTransform(scrollYProgress, [0, 0.28], [0.62, 1]);
+  const exposureOpacity = useTransform(scrollYProgress, [0.6, 0.72], [1, 0]);
+  const deliveredOpacity = useTransform(scrollYProgress, [0.72, 0.84], [0, 1]);
 
   return (
-    <section ref={trackRef} className="relative" style={{ height: "280vh" }}>
+    <section ref={trackRef} className="relative" style={{ height: "300vh" }}>
       <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-10">
-        <div className="mb-8 flex items-end justify-between">
-          <SceneLabel index="003" title="The deliverable" />
-          <div className="relative text-right">
+        <div className="mb-10 flex items-end justify-between">
+          <div>
+            <SceneLabel index="003" title="The deliverable" />
+            <h2 className="mt-6 font-display text-[clamp(1.8rem,3vw,2.8rem)] font-medium leading-tight">
+              One tour becomes a <em className="text-rose">contact sheet</em> of their day.
+            </h2>
+          </div>
+          <div className="relative w-80 shrink-0 text-right">
             <motion.p style={{ opacity: exposureOpacity }} className="mono-label text-muted-foreground">
-              Exposure — their tour
+              Developing…
             </motion.p>
             <motion.p style={{ opacity: deliveredOpacity }} className="mono-label absolute inset-0 text-rose">
-              Developed — their gallery
+              Delivered — booking link attached
             </motion.p>
           </div>
         </div>
 
-        <div className="relative mx-auto w-full" style={{ maxWidth: "86vw" }}>
-          <motion.div style={{ scale }} className="relative origin-center">
-            <img
-              src={HERO_IMAGE}
-              alt="A couple's four-frame glimpse gallery on a tablet inside a bright ceremony room"
-              width={1240}
-              height={698}
-              loading="lazy"
-              decoding="async"
-              className="h-auto max-h-[68vh] w-full object-cover"
-            />
-            <FrameTicks size={26} />
-
-            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-              {FRAME_LABELS.map((f, i) => (
-                <DevelopFrame key={f.index} frame={f} index={i} progress={scrollYProgress} />
-              ))}
-            </div>
-          </motion.div>
-        </div>
+        <motion.div style={{ scale: sheetScale }} className="origin-center">
+          <div className="grid grid-cols-4 gap-5">
+            {GALLERY_FRAMES.map((f, i) => (
+              <DealtFrame key={f.index} frame={f} index={i} progress={scrollYProgress} />
+            ))}
+          </div>
+        </motion.div>
       </div>
     </section>
   );
 }
 
-function DevelopFrame({
+function DealtFrame({
   frame,
   index,
   progress,
 }: {
-  frame: { index: string; label: string };
+  frame: (typeof GALLERY_FRAMES)[number];
   index: number;
   progress: MotionValue<number>;
 }) {
-  const start = 0.52 + index * 0.09;
-  const opacity = useTransform(progress, [start, start + 0.08], [0, 1]);
-  const y = useTransform(progress, [start, start + 0.08], [18, 0]);
+  // Frame 01 is the exposure — always present. 02–04 deal in one by one.
+  const start = 0.18 + index * 0.14;
+  const opacity = useTransform(progress, [start, start + 0.1], index === 0 ? [1, 1] : [0, 1]);
+  const x = useTransform(progress, [start, start + 0.1], index === 0 ? [0, 0] : [56, 0]);
 
   return (
-    <motion.div
-      style={{ opacity, y }}
-      className="relative border border-foreground/25 backdrop-blur-[1px]"
-    >
-      <div className="absolute bottom-0 left-0 flex items-baseline gap-3 bg-background/70 px-3 py-2">
-        <span className="mono-label text-rose">{frame.index}</span>
-        <span className="text-xs text-foreground/90">{frame.label}</span>
-      </div>
+    <motion.div style={{ opacity, x }}>
+      <ContactFrame frame={frame} />
     </motion.div>
   );
 }
@@ -354,22 +351,22 @@ const MECHANISM_STEPS = [
   {
     index: "01",
     title: "The tour ends",
-    text: "You hand the couple a card with your QR code, or drop your glimpse link into the thank-you email. That's the whole lift on your side.",
+    text: "Your QR card or link goes home with the couple.",
   },
   {
     index: "02",
     title: "They add three photos",
-    text: "The couple opens your branded page, uploads portraits of themselves, and picks the style closest to their day.",
+    text: "Your branded page. Their portraits. One style pick.",
   },
   {
     index: "03",
     title: "glimpse develops the gallery",
-    text: "Four photoreal portraits of them in your actual rooms — likeness preserved and quality-reviewed — plus a motion reel carrying your brand.",
+    text: "Four photoreal portraits in your rooms, plus a branded motion reel.",
   },
   {
     index: "04",
-    title: "You stay in the conversation",
-    text: "The gallery lands while they're still deciding, on a share page with your venue's name and the booking step in view.",
+    title: "The booking step arrives with it",
+    text: "Delivered while they're deciding — your venue's name and booking link on the share page.",
   },
 ];
 
@@ -454,27 +451,27 @@ function HorizontalMechanism() {
 const GUARDRAILS = [
   {
     index: "01",
-    title: "Likeness comes first",
-    text: "Galleries are generated from the couple's own portraits and reviewed for accuracy before delivery. A render that misses the bar isn't sent — the credit is refunded.",
+    title: "More toured couples book",
+    text: "Personal, vivid follow-up lands while the decision is still open — not another thank-you email.",
   },
   {
     index: "02",
-    title: "You approve the send",
-    text: "Preview every gallery before it goes out, so follow-up stays polished, accurate, and yours.",
+    title: "Marketing assets, made for you",
+    text: "Every gallery ships as a branded share page and motion reel — ready to reuse in your follow-up emails, ads, and socials.",
   },
   {
     index: "03",
-    title: "Your brand on every frame",
-    text: "The motion reel and the share page carry your venue's name — couples pass it to parents and friends, and your booking step travels with it.",
+    title: "Your brand does the traveling",
+    text: "Couples pass the gallery to parents and friends. Your venue's name and booking step travel with every share.",
   },
 ];
 
 function GuardrailScene() {
   return (
     <section className="border-t border-border px-5 py-24 md:px-10 md:py-32">
-      <SceneLabel index="005" title="Why venues trust the send" />
+      <SceneLabel index="005" title="What it does for the business" />
       <h2 className="mt-10 mb-16 max-w-4xl font-display text-[clamp(2rem,4.5vw,4rem)] font-medium leading-[1.05]">
-        Their faces. Your rooms. <em className="text-rose">Nothing generic.</em>
+        Follow-up that <em className="text-rose">sells the date.</em>
       </h2>
       <div>
         {GUARDRAILS.map((g) => (
@@ -493,6 +490,9 @@ function GuardrailScene() {
           </div>
         ))}
       </div>
+      <p className="mono-label mt-8 text-muted-foreground/70 normal-case tracking-[0.08em]">
+        Likeness reviewed before every send · you approve every gallery · failed renders refund the credit
+      </p>
     </section>
   );
 }
@@ -514,10 +514,8 @@ function OfferScene({ onStart }: { onStart: () => void }) {
           <em className="text-rose">On us.</em>
         </h2>
         <p className="mx-auto mt-8 max-w-xl text-lg font-light leading-relaxed text-muted-foreground">
-          Create a workspace, add your venue photos, and hand the link to the
-          next couple who tours. No card, no subscription. When the galleries
-          start reopening conversations, add credits — one credit is one
-          couple's complete gallery.
+          Hand the link to the next couple who tours. No card, no subscription —
+          add credits when the bookings follow.
         </p>
         <Magnetic className="mt-12 inline-block">
           <TickButton onClick={onStart} size="xl" testId="venue-trial-register">

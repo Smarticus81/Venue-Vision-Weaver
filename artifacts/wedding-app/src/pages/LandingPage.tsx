@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 import { DarkroomCursor, FrameTicks, Marquee, RiseLines } from "@/components/motion";
 import { toVenueSlug } from "@/lib/venueSlug";
+import { BRAND_ASSETS } from "@/lib/brandAssets";
 
 const STEPS = [
   {
@@ -60,6 +61,18 @@ export default function LandingPage() {
       <main className="flex-1">
         {/* Hero — typographic, paints statically. */}
         <section className="grain relative flex min-h-screen flex-col justify-end overflow-hidden pt-24">
+          <img
+            src={BRAND_ASSETS.heroAtmosphere}
+            alt=""
+            aria-hidden
+            fetchPriority="high"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover opacity-50"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/55 via-background/70 to-background"
+          />
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_30%_10%,hsl(var(--rose)/0.1),transparent_70%)]"
@@ -67,12 +80,12 @@ export default function LandingPage() {
 
           <div className="relative z-10 px-5 md:px-10">
             <p className="mono-label mb-6 text-rose">Your venue sent you here</p>
-            <h1 className="font-display font-medium uppercase leading-[0.92] tracking-[-0.02em] text-[clamp(2.9rem,9.5vw,9.5rem)]">
+            <h1 className="font-display font-medium uppercase leading-[0.92] tracking-[-0.02em] text-[clamp(2.6rem,8.5vw,8.5rem)]">
               <RiseLines
                 lines={[
                   "See yourselves",
                   <>
-                    there <em className="text-rose">first.</em>
+                    at the <em className="text-rose">venue</em>
                   </>,
                 ]}
               />
@@ -80,7 +93,8 @@ export default function LandingPage() {
 
             <div className="mt-8 grid grid-cols-1 gap-10 pb-16 md:mt-12 md:grid-cols-[1fr_auto] md:items-end md:pb-20">
               <p className="max-w-2xl font-display italic text-[clamp(1.4rem,2.8vw,2.4rem)] leading-tight text-muted-foreground">
-                Four portraits of the two of you, inside the venue you just toured.
+                before the day arrives — four portraits of the two of you, in the
+                space you just toured.
               </p>
 
               {/* The venue-code ticket */}
