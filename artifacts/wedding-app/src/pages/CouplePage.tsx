@@ -25,11 +25,11 @@ import {
   Check,
   Home,
   Mail,
-  Sparkles,
   ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GlimpseShell } from "@/components/layout/GlimpseShell";
+import { FrameTicks } from "@/components/motion";
 
 function venueMediaUrl(objectKey: string | undefined, venueSlug: string): string {
   if (!objectKey) return "";
@@ -232,17 +232,18 @@ export default function CouplePage() {
 
   if (venueQuery.isError || !venueQuery.data) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center font-sans selection:bg-gold selection:text-white">
-        <Heart className="h-12 w-12 text-gray-200 mb-6" />
-        <h1 className="font-playfair text-4xl mb-4 text-[#111111]">We couldn't find that venue</h1>
-        <p className="text-lg text-gray-500 mb-8 max-w-md font-light">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
+        <Heart className="h-12 w-12 text-muted-foreground/40 mb-6" />
+        <p className="mono-label text-rose mb-4">Venue code</p>
+        <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">We couldn't find that venue</h1>
+        <p className="text-lg text-muted-foreground mb-8 max-w-md font-light">
           No venue answers to the code "{slug}". Double-check the code from
           your venue and try again.
         </p>
         <Button
           onClick={() => setLocation("/couple")}
-          variant="gold"
-          className="rounded-full px-8 py-6 text-base font-medium shadow-lg shadow-gold/20"
+          variant="rose"
+          className="px-8 py-6 text-base font-medium"
           data-testid="venue-notfound-home"
         >
           Enter another code
@@ -256,23 +257,24 @@ export default function CouplePage() {
   // Guard rail: if the venue has too few photos, the AI has no reliable venue reference
   if (!venue.media || venue.media.length < 5) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center font-sans selection:bg-gold selection:text-white">
-        <Heart className="h-12 w-12 text-gold/40 mb-6" />
-        <h1 className="font-playfair text-4xl md:text-5xl mb-4 text-[#111111]">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
+        <Heart className="h-12 w-12 text-rose/40 mb-6" />
+        <p className="mono-label text-rose mb-4">Not ready yet</p>
+        <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">
           {venue.name} is still being prepared
         </h1>
-        <p className="text-lg text-gray-500 mb-3 max-w-md font-light">
+        <p className="text-lg text-muted-foreground mb-3 max-w-md font-light">
           This venue needs at least one photograph before glimpse can compose
           your wedding gallery.
         </p>
-        <p className="text-sm text-gray-400 mb-10 max-w-md">
+        <p className="text-sm text-muted-foreground mb-10 max-w-md">
           Ask your venue team to finish setting up glimpse by adding the required
           venue photographs before couples can begin.
         </p>
         <Button
           onClick={() => setLocation("/couple")}
-          variant="gold"
-          className="rounded-full px-8 py-6 text-base font-medium shadow-lg shadow-gold/20"
+          variant="rose"
+          className="px-8 py-6 text-base font-medium"
           data-testid="venue-not-ready-browse"
         >
           Try another venue code
@@ -282,7 +284,7 @@ export default function CouplePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-[#111111] font-sans relative flex flex-col selection:bg-gold selection:text-white overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground font-sans relative flex flex-col overflow-x-hidden">
       <AnimatePresence mode="wait">
         {step === 1 && (
           <VenueShowcase key="step1" venue={venue} onNext={() => setStep(2)} />
@@ -345,7 +347,7 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-0 overflow-hidden bg-black"
+      className="fixed inset-0 z-0 overflow-hidden bg-background"
     >
       <div className="absolute inset-0 z-0">
         {hasMedia ? (
@@ -361,18 +363,18 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
             />
           </AnimatePresence>
         ) : (
-          <div className="w-full h-full bg-gray-900" />
+          <div className="w-full h-full bg-card" />
         )}
       </div>
 
-      <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#111111]/90 via-[#111111]/30 to-black/40" />
+      <div className="absolute inset-0 z-10 bg-gradient-to-t from-background/90 via-background/30 to-background/40" />
 
       <div className="absolute top-6 left-6 z-30 flex gap-2">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setLocation("/couple")}
-          className="text-white/80 hover:text-white hover:bg-white/20 backdrop-blur rounded-full px-5 py-2 font-medium"
+          className="text-foreground/80 hover:text-foreground hover:bg-foreground/10 backdrop-blur px-5 py-2 font-medium"
           data-testid="venueshow-home"
         >
           <Home className="mr-2 h-4 w-4" /> Home
@@ -386,32 +388,29 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
           transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
           className="max-w-4xl"
         >
-          <div className="mb-6 mx-auto inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/40 backdrop-blur-md px-4 py-1.5 text-xs font-semibold tracking-wide text-white">
-            <Sparkles className="w-3.5 h-3.5 text-gold" />
-            <span>Interactive Preview</span>
-          </div>
+          <p className="mono-label mb-6 text-rose drop-shadow-md">Interactive preview</p>
 
-          <h1 className="font-playfair text-5xl md:text-7xl font-bold mb-6 text-white tracking-tight drop-shadow-2xl">
+          <h1 className="font-display text-5xl md:text-7xl font-medium mb-6 text-foreground tracking-[-0.02em] drop-shadow-2xl">
             {venue.name}
           </h1>
           
           {venue.tagline && (
-            <p className="text-xl md:text-2xl text-gold mb-8 font-light drop-shadow-lg italic font-playfair">
+            <p className="text-xl md:text-2xl text-rose mb-8 font-light drop-shadow-lg italic font-display">
               {venue.tagline}
             </p>
           )}
           
           {venue.description && (
-            <p className="text-lg md:text-xl text-gray-200 mb-12 max-w-2xl mx-auto drop-shadow-lg leading-relaxed font-light">
+            <p className="text-lg md:text-xl text-foreground/90 mb-12 max-w-2xl mx-auto drop-shadow-lg leading-relaxed font-light">
               {venue.description}
             </p>
           )}
           
           <Button
             size="lg"
-            variant="gold"
+            variant="rose"
             onClick={onNext}
-            className="rounded-full px-10 py-7 text-lg shadow-2xl shadow-gold/20 font-medium group"
+            className="px-10 py-7 text-lg font-medium group"
             data-testid="visualize-cta"
           >
             Step inside your wedding day
@@ -454,7 +453,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           variant="ghost"
           size="sm"
           onClick={() => setLocation("/couple")}
-          className="text-gray-500 hover:text-[#111111] hover:bg-gray-50 rounded-full font-medium"
+          className="text-muted-foreground hover:text-foreground hover:bg-accent font-medium"
           data-testid="upload-home"
         >
           <Home className="mr-2 h-4 w-4" /> Home
@@ -462,13 +461,11 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
       </div>
 
       <div className="text-center mb-12">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-gold">
-          Step 01
-        </div>
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-[#111111] mb-4">
+        <p className="mono-label text-rose mb-4">Step 01 / 03</p>
+        <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">
           You and your partner
         </h2>
-        <p className="text-gray-500 font-light text-lg max-w-lg mx-auto">
+        <p className="text-muted-foreground font-light text-lg max-w-lg mx-auto">
           Upload clear, well-lit photos in this order: together, Partner A, then Partner B.
         </p>
       </div>
@@ -479,16 +476,16 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           return (
             <div
               key={role}
-              className={`rounded-3xl border p-6 transition-all duration-300 ${
+              className={`rounded-lg border p-6 transition-colors duration-300 ${
                 isFilled
-                  ? "border-gold/30 bg-[#fdfbf7]"
-                  : "border-gray-100 bg-white shadow-sm"
+                  ? "border-rose bg-card"
+                  : "border-border bg-card/50"
               }`}
             >
-              <p className={`font-bold mb-1 ${isFilled ? "text-[#111111]" : "text-gray-400"}`}>
-                {index + 1}. {role}
+              <p className={`mono-label mb-2 ${isFilled ? "text-rose" : "text-muted-foreground"}`}>
+                0{index + 1} — {role}
               </p>
-              <p className={`font-light text-sm ${isFilled ? "text-gray-600" : "text-gray-400"}`}>
+              <p className={`font-light text-sm ${isFilled ? "text-muted-foreground" : "text-muted-foreground/60"}`}>
                 {COUPLE_REFERENCE_GUIDANCE[index]}
               </p>
             </div>
@@ -498,7 +495,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
 
       <button
         type="button"
-        className="w-full rounded-[2rem] border-dashed border-2 border-gray-200 bg-gray-50/50 shadow-sm hover:border-gold/50 hover:bg-[#fdfbf7] active:border-gold transition-colors cursor-pointer flex flex-col items-center justify-center py-12 md:py-16 px-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-gold disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-gray-200 disabled:hover:bg-gray-50/50"
+        className="w-full rounded-lg border border-dashed border-border bg-card/50 hover:border-rose/50 hover:bg-card active:border-rose transition-colors cursor-pointer flex flex-col items-center justify-center py-12 md:py-16 px-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-card/50"
         onClick={() => fileInputRef.current?.click()}
         disabled={!canAddMoreReferences || isUploading}
         aria-label="Add photos"
@@ -513,14 +510,15 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           accept="image/jpeg,image/png,image/webp"
           data-testid="couple-photo-input"
         />
-        <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center mb-6 shadow-sm border border-gray-100 text-gold">
+        <div className="relative w-16 h-16 bg-card flex items-center justify-center mb-6 border border-border text-rose">
+          <FrameTicks size={8} className="text-foreground/40" />
           <Camera className="h-7 w-7" />
         </div>
-        <p className="text-xl text-[#111111] font-bold mb-3">Tap to add photographs</p>
-        <p className="text-base text-gray-500 font-light max-w-md mx-auto">
+        <p className="font-display text-xl font-medium text-foreground mb-3">Tap to add photographs</p>
+        <p className="text-base text-muted-foreground font-light max-w-md mx-auto">
           One to three JPG, PNG, or WebP photos under 50MB — distinct angles or expressions, at least 256px wide.
         </p>
-        <p className="mt-6 text-sm font-semibold tracking-wide text-gold uppercase" data-testid="couple-photo-status">
+        <p className="mono-label mt-6 text-rose" data-testid="couple-photo-status">
           {uploadStatus}
         </p>
       </button>
@@ -532,13 +530,14 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
               key={i}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="relative group aspect-square rounded-3xl overflow-hidden border border-gray-100 shadow-sm"
+              className="relative group aspect-square overflow-hidden border border-border"
             >
               <img src={src} className="w-full h-full object-cover" alt={`${COUPLE_REFERENCE_ROLES[i] ?? "Reference"} preview`} />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute left-4 bottom-4 rounded-full bg-white/90 backdrop-blur px-3 py-1.5 text-xs font-semibold text-[#111111] shadow-sm">
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <FrameTicks size={14} className="text-foreground/40" />
+              <p className="absolute left-4 bottom-4 mono-label text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                 {COUPLE_REFERENCE_ROLES[i] ?? `Reference ${i + 1}`}
-              </div>
+              </p>
               <button
                 type="button"
                 onClick={(e) => {
@@ -548,7 +547,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
                 disabled={isUploading}
                 aria-label={`Remove photo ${i + 1}`}
                 data-testid={`remove-couple-photo-${i}`}
-                className="absolute top-4 right-4 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-red-500 hover:scale-110 shadow-sm backdrop-blur-sm"
+                className="absolute top-4 right-4 h-8 w-8 bg-black/60 text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive backdrop-blur-sm"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -558,14 +557,14 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
       )}
 
       <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-lg mx-auto">
-        <Button variant="ghost" onClick={onBack} className="w-full sm:w-1/3 rounded-full py-6 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-[#111111]">
+        <Button variant="ghost" onClick={onBack} className="w-full sm:w-1/3 py-6 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
           Back
         </Button>
         <Button
-          variant="gold"
+          variant="rose"
           onClick={onContinue}
           disabled={!hasEnoughReferences || isUploading}
-          className="w-full sm:w-2/3 rounded-full py-6 text-base font-medium shadow-lg shadow-gold/20"
+          className="w-full sm:w-2/3 py-6 text-base font-medium"
           data-testid="choose-style-button"
         >
           Continue to styles
@@ -605,7 +604,7 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
           size="sm"
           onClick={() => setLocation("/couple")}
           disabled={isSubmitting}
-          className="text-gray-500 hover:text-[#111111] hover:bg-gray-50 rounded-full font-medium"
+          className="text-muted-foreground hover:text-foreground hover:bg-accent font-medium"
           data-testid="style-home"
         >
           <Home className="mr-2 h-4 w-4" /> Home
@@ -613,11 +612,9 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
       </div>
 
       <div className="text-center mb-12">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-gold">
-          Step 02
-        </div>
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-[#111111] mb-4">Set the scene</h2>
-        <p className="text-gray-500 font-light text-lg max-w-xl mx-auto">
+        <p className="mono-label text-rose mb-4">Step 02 / 03</p>
+        <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">Set the scene</h2>
+        <p className="text-muted-foreground font-light text-lg max-w-xl mx-auto">
           Choose the editorial direction for your venue-branded glimpse gallery.
         </p>
       </div>
@@ -625,12 +622,12 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-3xl" />
+            <Skeleton key={i} className="h-32 w-full rounded-lg" />
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
-          {styles.map((style) => {
+          {styles.map((style, index) => {
             const isSelected = selectedStyleId === style.id;
             return (
               <button
@@ -639,25 +636,28 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
                 onClick={() => onSelect(style.id)}
                 disabled={isSubmitting}
                 data-testid={`style-option-${style.id}`}
-                className={`relative text-left rounded-3xl p-6 md:p-8 border transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`relative text-left rounded-lg p-6 md:p-8 border transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed ${
                   isSelected
-                    ? "border-gold bg-[#fdfbf7] shadow-lg shadow-gold/10"
-                    : "border-gray-100 bg-white hover:border-gray-300 hover:bg-gray-50/50 shadow-sm"
+                    ? "border-rose bg-card"
+                    : "border-border bg-card hover:border-rose/40 hover:bg-accent/40"
                 }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-xl md:text-2xl mb-2 tracking-tight text-[#111111]">{style.name}</h3>
-                    <p className="text-sm md:text-base text-gray-500 font-light leading-relaxed">
+                    <p className={`mono-label mb-2 ${isSelected ? "text-rose" : "text-muted-foreground"}`}>
+                      Style {String(index + 1).padStart(2, "0")}
+                    </p>
+                    <h3 className="font-display font-medium text-xl md:text-2xl mb-2 tracking-tight text-foreground">{style.name}</h3>
+                    <p className="text-sm md:text-base text-muted-foreground font-light leading-relaxed">
                       {style.description}
                     </p>
                   </div>
                   <div
                     aria-hidden
-                    className={`shrink-0 h-6 w-6 rounded-full border flex items-center justify-center transition-colors mt-1 ${
+                    className={`shrink-0 h-6 w-6 border flex items-center justify-center transition-colors mt-1 ${
                       isSelected
-                        ? "bg-gold border-gold text-white"
-                        : "border-gray-300 text-transparent"
+                        ? "bg-rose border-rose text-rose-foreground"
+                        : "border-border text-transparent"
                     }`}
                   >
                     <Check className="h-3.5 w-3.5" />
@@ -677,14 +677,14 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
         }}
       >
       <div className="mt-16 w-full max-w-2xl space-y-6">
-        <div className="rounded-3xl bg-white border border-gray-100 p-6 md:p-8 shadow-sm">
+        <div className="rounded-lg bg-card border border-border p-6 md:p-8">
           <label
             htmlFor="couple-email"
-            className="text-xs font-semibold tracking-widest uppercase text-gold flex items-center gap-2 mb-2"
+            className="mono-label text-rose flex items-center gap-2 mb-2"
           >
             <Mail className="h-4 w-4" /> Your email
           </label>
-          <p className="text-sm text-gray-500 font-light mb-4">
+          <p className="text-sm text-muted-foreground font-light mb-4">
             Required so we can send your gallery link and you can find it again later.
           </p>
           <input
@@ -697,14 +697,14 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
             disabled={isSubmitting}
             autoComplete="email"
             data-testid="style-couple-email"
-            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 md:py-4 text-base text-[#111111] focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold disabled:opacity-50 transition-all placeholder:text-gray-400"
+            className="w-full bg-background border border-input rounded-none px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
           />
         </div>
 
-        <div className="rounded-3xl bg-white border border-gray-100 p-6 md:p-8 shadow-sm">
+        <div className="rounded-lg bg-card border border-border p-6 md:p-8">
           <label
             htmlFor="couple-name-optional"
-            className="text-xs font-semibold tracking-widest uppercase text-gold mb-4 block"
+            className="mono-label text-rose mb-4 block"
           >
             Your names (optional)
           </label>
@@ -718,19 +718,19 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
             autoComplete="name"
             maxLength={80}
             data-testid="style-couple-name"
-            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 md:py-4 text-base text-[#111111] focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold disabled:opacity-50 transition-all placeholder:text-gray-400"
+            className="w-full bg-background border border-input rounded-none px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
           />
         </div>
 
-        <div className="rounded-3xl bg-[#fdfbf7] border border-[#f0e6d2] p-6 md:p-8 shadow-sm">
+        <div className="relative rounded-lg bg-card border border-border p-6 md:p-8">
           <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-5 w-5 text-gold" />
-            <p className="text-xs font-semibold tracking-widest uppercase text-gold">
+            <Clock className="h-5 w-5 text-rose" />
+            <p className="mono-label text-rose">
               Gallery Delivery
             </p>
           </div>
-          <div className="font-playfair text-xl md:text-2xl font-bold text-[#111111] mb-2">4 portraits + motion reel</div>
-          <div className="text-base text-gray-600 font-light leading-relaxed">
+          <div className="font-display text-xl md:text-2xl font-medium text-foreground mb-2">4 portraits + motion reel</div>
+          <div className="text-base text-muted-foreground font-light leading-relaxed">
             Editorial portraits anchored to this venue, compiled into a gentle branded reel. Usually ready in a few minutes.
           </div>
         </div>
@@ -742,16 +742,16 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
           variant="ghost"
           onClick={onBack}
           disabled={isSubmitting}
-          className="w-full sm:w-1/3 rounded-full py-6 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-[#111111]"
+          className="w-full sm:w-1/3 py-6 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           data-testid="style-back-button"
         >
           Back
         </Button>
         <Button
           type="submit"
-          variant="gold"
+          variant="rose"
           disabled={!selectedStyleId || !coupleEmail.trim() || isSubmitting}
-          className="w-full sm:w-2/3 rounded-full py-6 text-base font-medium shadow-lg shadow-gold/20"
+          className="w-full sm:w-2/3 py-6 text-base font-medium"
           data-testid="generate-button"
         >
           {isSubmitting ? (
@@ -775,13 +775,15 @@ function SubmittingStep() {
       exit={{ opacity: 0 }}
       className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto"
     >
-      <div className="w-20 h-20 rounded-full bg-[#fdfbf7] border border-[#f0e6d2] flex items-center justify-center mb-8 shadow-sm">
-        <Loader2 className="h-8 w-8 animate-spin text-gold" />
+      <div className="relative w-20 h-20 bg-card border border-border flex items-center justify-center mb-8">
+        <FrameTicks size={10} className="text-foreground/40" />
+        <Loader2 className="h-8 w-8 animate-spin text-rose" />
       </div>
-      <h2 className="font-playfair text-4xl md:text-5xl font-bold text-[#111111] mb-6">
+      <p className="mono-label text-rose mb-4">Developing…</p>
+      <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-6">
         Sending your photographs...
       </h2>
-      <p className="text-lg text-gray-500 font-light leading-relaxed">
+      <p className="text-lg text-muted-foreground font-light leading-relaxed">
         Keep this page open. We are preparing to place you inside your venue for review.
       </p>
     </motion.div>
@@ -790,12 +792,12 @@ function SubmittingStep() {
 
 function CoupleSkeleton() {
   return (
-    <div className="min-h-screen bg-white p-6 flex flex-col">
-      <Skeleton className="h-24 w-full mb-12 rounded-3xl" />
+    <div className="min-h-screen bg-background p-6 flex flex-col">
+      <Skeleton className="h-24 w-full mb-12 rounded-lg" />
       <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full">
-        <Skeleton className="h-12 w-64 mb-6 rounded-full" />
-        <Skeleton className="h-6 w-96 mb-16 rounded-full" />
-        <Skeleton className="h-80 w-full rounded-[2.5rem]" />
+        <Skeleton className="h-12 w-64 mb-6 rounded-md" />
+        <Skeleton className="h-6 w-96 mb-16 rounded-md" />
+        <Skeleton className="h-80 w-full rounded-lg" />
       </div>
     </div>
   );

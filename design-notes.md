@@ -3,7 +3,117 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
-## 2026-07-05 — Venue landing page rebuild (`/`)
+## 2026-07-05 (fifth pass) — App surfaces + self-hosted imagery
+
+- Photos weren't rendering for the owner: the studio CDN doesn't serve reliably
+  cross-origin, and this sandbox can't download it directly. Fix: a one-shot
+  GitHub Actions workflow (`fetch-brand-assets.yml`) fetched the five plates on
+  a runner and committed them to the branch; then trimmed the baked-in white
+  mattes (`sharp .trim()`), resized (900w frames / 2000w hero), and pointed
+  `brandAssets.ts` at local `/brand/*` paths permanently. Total imagery ~270KB.
+- The MCP gateway strips `input_images` on every image model, so the four
+  frames drifted to different couples. Honest fix for now: mono footnote
+  "Frames from sample glimpse galleries" under the contact sheet. Future fix:
+  Soul character pipeline (create character from the ceremony frame, generate
+  the other scenes with soul_id) for a true single-couple sheet.
+- Post-login/app surfaces carried into the darkroom editorial language (mono
+  kickers + Fraunces headings, hairline-ruled sections, index rows with wine
+  hover, FrameTicks on media, rose primaries, mono status lines): owner
+  dashboard, couple flow, share page, and the auth/entry pages restyled as
+  corner-ticked "tickets".
+
+## 2026-07-05 (fourth pass) — Direct copy, bespoke imagery, business framing
+
+Owner direction: restore the direct wording, cut copy volume, sell business
+outcomes (bookings, revenue, follow-up marketing) not ease-of-use, and use the
+Higgsfield studio for real assets.
+
+- Hero claim restored to the direct line: "TURN TOURS / INTO BOOKINGS." with a
+  one-sentence mechanism sub. Couple page back to "SEE YOURSELVES AT THE
+  VENUE / before the day arrives."
+- Copy throughout cut to one-liners; scene 005 reframed from trust guardrails
+  to business outcomes (more toured couples book · marketing assets made for
+  you · your brand does the traveling), with the trust facts condensed to one
+  mono footnote.
+- Marquee now sells outcomes: "more bookings · faster yeses · follow-up that
+  sells · four portraits + a reel".
+- Generated in Higgsfield (~5 credits, job IDs in scripts/fetch-brand-assets.mjs):
+  a 21:9 candlelit-ballroom atmosphere plate (Soul Cinema) now behind both
+  heroes at 50% under a background gradient, and four consistent couple frames
+  (Nano Banana, same couple spec) that replace the outline placeholders in
+  scene 003 — the contact sheet now shows the actual deliverable, dealt in
+  frame by frame on scroll.
+- Sandbox network policy blocks the studio CDN, so assets are hotlinked for
+  now; `scripts/fetch-brand-assets.mjs` + `VITE_LOCAL_BRAND_ASSETS=1`
+  localizes them (run from an open network). Old tablet-mockup hero images
+  deleted.
+
+## 2026-07-05 (third pass) — The motion rebuild
+
+Owner verdict on the first rebrand pass: "all you did was turn it dark" —
+correct. Same compositions, new tokens. This pass rebuilt every marketing
+composition from zero; only the user workflow survived.
+
+**New motion vocabulary** (`components/motion/index.tsx` + CSS utilities):
+custom viewfinder cursor (fine-pointer only), marquee ribbons, magnetic CTA,
+masked CSS line-rise reveals (nothing waits on JS), corner-tick frames,
+ghost/outline numerals (`.text-stroke`), mono labels (Space Mono), safelight
+`--wine` scene band.
+
+**Venue landing (`/`) — six numbered scenes:**
+001 manifesto hero ("EMPTY ROOMS / DON'T BOOK.", ~11vw uppercase Fraunces) with
+right-rail CTA and an italic marquee at the fold · 002 problem band on wine
+with a 30vw ghost numeral · 003 signature: pinned "developing print" — the
+venue photo scales from a small exposure to full width while four contact-sheet
+frames (FRAME 01–04) develop over it · 004 pinned horizontal mechanism, four
+100vw panels with outline numerals and a rose progress rail · 005 guardrails as
+editorial index rows (hover: wine fill + title shift) · 006 offer with 8vw
+italic display and a magnetic XXL tick-button · footer with a 17vw lowercase
+wordmark that is itself the final CTA.
+
+**Couple landing (`/couple`):** same language — manifesto hero, venue-code
+"ticket" card with corner ticks, marquee, steps as index rows.
+
+**Discipline kept:** every pinned/scrubbed scene has a static fallback for
+`prefers-reduced-motion` and <1024px; hero copy reveals are pure CSS; scrubbed
+motion is transform/opacity only; one rose CTA per viewport; all
+data-testids and routes unchanged.
+
+**Kills:** the hero split-with-product-screenshot layout, all card grids, the
+vertical fade timeline from the first pass, pill badges. The product photo now
+appears exactly once (scene 003).
+
+## 2026-07-05 (second pass) — Full rebrand: "editorial darkroom"
+
+Owner asked for a nuclear transformation — no remnants of the old white +
+antique-gold + Playfair stationery look, logo included.
+
+**Direction (one line):** editorial darkroom — warm near-black surfaces
+(`hsl(20 9% 6%)`), porcelain type, silver-halide film grain, Fraunces display +
+Instrument Sans body, one candlelight-rose accent (`hsl(355 58% 71%)`, ≤10% of
+any screen). Derived from the product's world: film photography, evening
+venues, the darkroom where the gallery "develops."
+
+**Token-level changes (`index.css`):**
+- Entire `:root` flipped to dark; `color-scheme: dark`. All shadcn components
+  inherit the theme through tokens.
+- `--gold` family deleted; `--rose` family added. Button `gold` variant →
+  `rose` (dark ink text on rose — never white on rose).
+- Fonts: Playfair Display + Plus Jakarta Sans → Fraunces + Instrument Sans.
+  Legacy `.font-playfair`/`.serif` classes intentionally map to Fraunces so no
+  stale class can resurrect the old face.
+- Shape language: pills → rounded-md buttons; big 2xl/3xl card radii → xl.
+- `.grain` utility: static SVG turbulence tile, screen-blended at 5% — the
+  signature texture, applied to hero/final sections only (not body copy).
+
+**Logo:** old bold-sans "Glimpse." wordmark with gold period is gone. New mark:
+a camera-viewfinder (four corner brackets) with a rose aperture dot, wordmark
+lowercase Fraunces. Same system in `favicon.svg`. Old logo PNGs deleted.
+
+**Kills:** gold everywhere, cream bands, glass chips, pill buttons, uppercase
+gold kickers (now rose), white dashboard panels.
+
+## 2026-07-05 — Venue landing page rebuild (`/`) [pre-rebrand: colors below no longer apply]
 
 **Conversion spine:** this page exists to get wedding-venue owners and sales
 managers to create a venue workspace, because a personalized post-tour gallery

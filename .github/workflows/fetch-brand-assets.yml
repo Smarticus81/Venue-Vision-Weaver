@@ -1,0 +1,29 @@
+name: Fetch brand assets
+
+# One-shot utility: downloads the Higgsfield-generated brand imagery into
+# artifacts/wedding-app/public/brand and commits it to the triggering branch.
+# Exists because the authoring sandbox cannot reach the studio CDN directly.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download assets
+        run: node scripts/fetch-brand-assets.mjs
+      - name: Commit assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/wedding-app/public/brand
+          git diff --cached --quiet && echo "nothing to commit" && exit 0
+          git commit -m "Add self-hosted brand imagery (fetched from studio CDN)"
+          git push

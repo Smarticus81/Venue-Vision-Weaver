@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { FrameTicks } from "@/components/motion";
 
 export default function OwnerLoginPage() {
   const [, setLocation] = useLocation();
@@ -107,61 +108,63 @@ export default function OwnerLoginPage() {
 
   if (isTokenExchange) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-gold" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-rose" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white text-[#111111] font-sans selection:bg-gold selection:text-white flex flex-col">
+    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
       <header className="absolute top-0 w-full p-6 sm:p-10 flex items-center justify-between z-10">
         <GlimpseLogo href="/" />
-        <Button variant="ghost" onClick={() => setLocation("/")} className="text-sm font-medium text-gray-500 hover:text-[#111111]">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to site
-        </Button>
+        <button
+          type="button"
+          onClick={() => setLocation("/")}
+          className="mono-label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to site
+        </button>
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-6 relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(194,163,107,0.05),transparent_50%)] pointer-events-none" />
-        
+      <main className="grain flex-1 flex items-center justify-center p-6 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_50%_0%,hsl(var(--rose)/0.08),transparent_70%)] pointer-events-none" />
+
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="w-full max-w-md"
         >
-          <div className="bg-white rounded-3xl border border-gray-100 p-8 sm:p-10 shadow-xl shadow-black/5 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gold/20" />
-            
+          <div className="relative bg-card p-8">
+            <FrameTicks size={16} className="text-foreground/40" />
+
             <div className="mb-8">
-              <div className="w-12 h-12 rounded-2xl bg-[#fdfbf7] flex items-center justify-center mb-6 text-gold shadow-sm border border-[#f5eedf]">
-                <LockKeyhole className="h-6 w-6" />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight text-[#111111]">Owner login</h1>
-              <p className="mt-2 text-gray-500 font-light">
+              <p className="mono-label mb-4 text-rose">Venue dashboard</p>
+              <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">Owner login</h1>
+              <p className="mt-2 text-muted-foreground font-light">
                 Sign in to your venue dashboard
               </p>
             </div>
 
             {tokenError && (
-              <div className="mb-6 rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-sm text-rose-600">
+              <p className="mono-label mb-6 normal-case tracking-normal text-red-400" role="alert">
                 {tokenError}
-              </div>
+              </p>
             )}
 
             <form onSubmit={handlePasswordLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="owner-email" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Email</Label>
+                <Label htmlFor="owner-email" className="mono-label text-muted-foreground">Email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="owner-email"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    className="h-12 pl-11 rounded-none border-input bg-background focus-visible:ring-ring"
                     placeholder="owner@venue.com"
                     data-testid="owner-login-email"
                     autoComplete="email"
@@ -170,16 +173,16 @@ export default function OwnerLoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="owner-password" className="text-xs font-semibold uppercase tracking-widest text-gray-500">Password</Label>
+                <Label htmlFor="owner-password" className="mono-label text-muted-foreground">Password</Label>
                 <div className="relative">
-                  <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="owner-password"
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="h-12 pl-11 rounded-xl border-gray-200 bg-gray-50/50 focus-visible:ring-gold"
+                    className="h-12 pl-11 rounded-none border-input bg-background focus-visible:ring-ring"
                     placeholder="Your password"
                     data-testid="owner-login-password"
                     autoComplete="current-password"
@@ -189,8 +192,9 @@ export default function OwnerLoginPage() {
 
               <Button
                 type="submit"
+                variant="rose"
                 disabled={isSubmitting}
-                className="w-full h-12 bg-black hover:bg-gray-800 text-white rounded-full font-medium mt-2 transition-all shadow-md"
+                className="w-full h-12 rounded-none font-medium mt-2"
                 data-testid="owner-login-submit"
               >
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -198,42 +202,35 @@ export default function OwnerLoginPage() {
               </Button>
             </form>
 
-            <div className="mt-8 flex flex-col gap-3">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-100" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase font-semibold">
-                  <span className="bg-white px-2 text-gray-400">Or</span>
-                </div>
+            <div className="mt-8 flex flex-col gap-4">
+              <div className="glimpse-divider">
+                <span className="mono-label text-muted-foreground">Or</span>
               </div>
-              <Button
+              <button
                 type="button"
-                variant="outline"
                 onClick={handleMagicLink}
                 disabled={isSendingLink}
-                className="w-full h-12 rounded-full font-medium border-gray-200 hover:bg-gray-50 text-gray-700 mt-2"
+                className="mx-auto inline-flex items-center gap-2 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 data-testid="owner-magic-link"
               >
                 {isSendingLink ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Mail className="mr-2 h-4 w-4 text-gray-400" />
+                  <Mail className="h-4 w-4" />
                 )}
                 Send sign-in link
-              </Button>
+              </button>
             </div>
-            
+
             <div className="mt-8 text-center">
-              <Button
+              <button
                 type="button"
-                variant="ghost"
                 onClick={() => setLocation("/create-venue")}
-                className="text-gray-500 hover:text-[#111111]"
+                className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 data-testid="owner-create-account"
               >
                 Create a new venue workspace
-              </Button>
+              </button>
             </div>
           </div>
         </motion.div>

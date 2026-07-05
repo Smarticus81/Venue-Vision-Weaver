@@ -17,8 +17,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
-  ArrowRight,
-  Building2,
   Check,
   Eye,
   Image as ImageIcon,
@@ -35,7 +33,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { FrameTicks } from "@/components/motion";
 import { useToast } from "@/hooks/use-toast";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
@@ -487,19 +485,19 @@ export default function VenueOwnerPage() {
   if (!authChecked || dashboard.isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-gold" />
+        <Loader2 className="h-10 w-10 animate-spin text-rose" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20 selection:bg-gold selection:text-white">
+    <div className="min-h-screen bg-background text-foreground pb-20">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-4">
             <GlimpseLogo className="h-12" />
             <div className="hidden h-4 w-px bg-border sm:block"></div>
-            <p className="hidden text-xs font-medium text-muted-foreground sm:block">
+            <p className="mono-label hidden normal-case tracking-normal text-muted-foreground sm:block">
               {ownerSession?.ownerEmail}
             </p>
           </div>
@@ -508,7 +506,7 @@ export default function VenueOwnerPage() {
               <select
                 value={selectedSlug}
                 onChange={(e) => setSelectedSlug(e.target.value)}
-                className="h-9 rounded-full border border-border bg-background px-4 text-sm font-medium outline-none shadow-sm focus:border-gold focus:ring-1 focus:ring-gold"
+                className="h-9 rounded-md border border-border bg-background px-4 text-sm font-medium outline-none focus:border-rose focus:ring-1 focus:ring-ring"
                 aria-label="Switch venue"
               >
                 {ownerSession.venues.map((ownedVenue) => (
@@ -531,20 +529,18 @@ export default function VenueOwnerPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-12 space-y-8">
-        <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-12 space-y-14">
+        <section className="grid gap-10 lg:grid-cols-[1fr_360px]">
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45 }}
-            className="glimpse-card p-6 md:p-8 flex flex-col justify-between"
+            className="flex flex-col justify-between border-t border-border pt-6"
           >
             <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gold">
-                  Venue dashboard
-                </p>
-                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
+                <p className="mono-label mb-4 text-rose">001 — Venue dashboard</p>
+                <h1 className="font-display text-3xl md:text-4xl font-medium tracking-tight text-foreground">
                   {venue?.name ?? "Your venue"}
                 </h1>
                 <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-muted-foreground">
@@ -552,13 +548,14 @@ export default function VenueOwnerPage() {
                   visualize their event and move toward an inquiry.
                 </p>
               </div>
-              <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340] shadow-sm" : "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-700 shadow-sm"}>
+              <p className={venueReady ? "mono-label shrink-0 inline-flex items-center gap-2 text-emerald-400" : "mono-label shrink-0 inline-flex items-center gap-2 text-rose"}>
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
                 {venueReady ? "Ready for tours" : "Needs photos"}
-              </Badge>
+              </p>
             </div>
 
-            <div className="mt-10 grid gap-4 sm:grid-cols-4">
-              <Metric label="Credits" value={venue?.creditsBalance ?? 0} />
+            <div className="mt-10 grid gap-6 sm:grid-cols-4">
+              <Metric label="Credits" value={venue?.creditsBalance ?? 0} hero />
               <Metric label="Approved" value={readySessions} />
               <Metric label="In production" value={processingSessions} />
               <Metric label="Venue refs" value={media.length} />
@@ -570,45 +567,43 @@ export default function VenueOwnerPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.05 }}
             onSubmit={handleSaveProfile}
-            className="glimpse-card p-6 md:p-8"
+            className="bg-card border border-card-border rounded-lg p-6 md:p-8"
           >
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fdfbf7] border border-[#f5eedf] text-gold shadow-sm">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <h2 className="text-xl font-bold text-foreground">Inquiry details</h2>
+            <div className="mb-6">
+              <p className="mono-label mb-3 text-rose">Settings</p>
+              <h2 className="font-display text-2xl font-medium text-foreground">Inquiry details</h2>
             </div>
             <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="venue-name" className="text-foreground font-medium">Venue name</Label>
+                <Label htmlFor="venue-name" className="mono-label text-muted-foreground">Venue name</Label>
                 <Input
                   id="venue-name"
                   value={profile.name}
                   onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
-                  className="bg-background border-border h-11 px-4 shadow-sm"
+                  className="bg-background border-border h-11 px-4"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="contact-email" className="text-foreground font-medium">Inquiry email</Label>
+                <Label htmlFor="contact-email" className="mono-label text-muted-foreground">Inquiry email</Label>
                 <Input
                   id="contact-email"
                   type="email"
                   value={profile.contactEmail}
                   onChange={(e) => setProfile((prev) => ({ ...prev, contactEmail: e.target.value }))}
-                  className="bg-background border-border h-11 px-4 shadow-sm"
+                  className="bg-background border-border h-11 px-4"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="booking-url" className="text-foreground font-medium">Tour booking link</Label>
+                <Label htmlFor="booking-url" className="mono-label text-muted-foreground">Tour booking link</Label>
                 <Input
                   id="booking-url"
                   value={profile.bookingUrl}
                   onChange={(e) => setProfile((prev) => ({ ...prev, bookingUrl: e.target.value }))}
-                  className="bg-background border-border h-11 px-4 shadow-sm"
+                  className="bg-background border-border h-11 px-4"
                   placeholder="https://yourvenue.com/tours"
                 />
               </div>
-              <Button type="submit" disabled={saving} className="w-full h-11 bg-foreground text-background hover:bg-foreground/90 font-medium">
+              <Button type="submit" variant="outline" disabled={saving} className="w-full h-11 font-medium">
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save details
               </Button>
@@ -616,45 +611,44 @@ export default function VenueOwnerPage() {
           </motion.form>
         </section>
 
-        <section className="glimpse-card p-6 md:p-8">
+        <section className="border-t border-border pt-6">
           <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="max-w-2xl">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gold">
-                New couple
-              </p>
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Start a prospect gallery</h2>
+              <p className="mono-label mb-4 text-rose">002 — New couple</p>
+              <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-foreground">Start a prospect gallery</h2>
               <p className="mt-3 text-base font-light leading-relaxed text-muted-foreground">
                 Add the couple's email and reference photos. Glimpse creates a photoreal,
                 venue-branded preview and emails their private link after generation.
               </p>
             </div>
-            <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340] shadow-sm" : "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-700 shadow-sm"}>
+            <p className={venueReady ? "mono-label shrink-0 inline-flex items-center gap-2 text-emerald-400" : "mono-label shrink-0 inline-flex items-center gap-2 text-rose"}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
               {venueReady ? "Owner approval enabled" : "Venue setup needed"}
-            </Badge>
+            </p>
           </div>
 
-          <form onSubmit={handleStartGallery} className="grid gap-8 lg:grid-cols-[1fr_1fr_auto] lg:items-start bg-secondary/50 p-6 rounded-2xl border border-border/60">
+          <form onSubmit={handleStartGallery} className="grid gap-8 lg:grid-cols-[1fr_1fr_auto] lg:items-start bg-card p-6 rounded-lg border border-card-border">
             <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="couple-name" className="text-foreground font-medium">Names</Label>
+                <Label htmlFor="couple-name" className="mono-label text-muted-foreground">Names</Label>
                 <Input
                   id="couple-name"
                   value={coupleName}
                   onChange={(e) => setCoupleName(e.target.value)}
-                  className="bg-background border-border h-11 px-4 shadow-sm"
+                  className="bg-background border-border h-11 px-4"
                   placeholder="Avery & Jordan"
                   maxLength={80}
                   data-testid="owner-couple-name"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="couple-email" className="text-foreground font-medium">Email</Label>
+                <Label htmlFor="couple-email" className="mono-label text-muted-foreground">Email</Label>
                 <Input
                   id="couple-email"
                   type="email"
                   value={coupleEmail}
                   onChange={(e) => setCoupleEmail(e.target.value)}
-                  className="bg-background border-border h-11 px-4 shadow-sm"
+                  className="bg-background border-border h-11 px-4"
                   placeholder="bride@example.com"
                   data-testid="owner-couple-email"
                 />
@@ -662,7 +656,7 @@ export default function VenueOwnerPage() {
             </div>
 
             <div>
-              <Label className="text-foreground font-medium block mb-2">Couple photos</Label>
+              <Label className="mono-label text-muted-foreground block mb-2">Couple photos</Label>
               <input
                 ref={coupleFileInputRef}
                 type="file"
@@ -682,12 +676,13 @@ export default function VenueOwnerPage() {
                       onClick={() => {
                         if (!preview) coupleFileInputRef.current?.click();
                       }}
-                      className="relative aspect-square overflow-hidden rounded-xl border border-border bg-background shadow-sm text-muted-foreground transition-all hover:border-gold hover:text-gold group"
+                      className="relative aspect-square overflow-hidden border border-border bg-background text-muted-foreground transition-colors hover:border-rose hover:text-rose group"
                       aria-label={preview ? `Couple photo ${slot + 1}` : "Add couple photo"}
                     >
                       {preview ? (
                         <>
                           <img src={preview} alt={`Couple reference ${slot + 1}`} className="h-full w-full object-cover" />
+                          <FrameTicks size={14} className="text-foreground/40" />
                           <span
                             role="button"
                             tabIndex={0}
@@ -709,7 +704,7 @@ export default function VenueOwnerPage() {
                           </span>
                         </>
                       ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-xs font-medium">
+                        <div className="mono-label flex h-full w-full flex-col items-center justify-center gap-2">
                           <ImageUp className="h-5 w-5 opacity-70 group-hover:opacity-100 transition-opacity" />
                           Photo {slot + 1}
                         </div>
@@ -733,7 +728,7 @@ export default function VenueOwnerPage() {
             <div className="lg:pt-8">
               <Button
                 type="submit"
-                variant="gold"
+                variant="rose"
                 disabled={
                   !venueReady ||
                   isStartingGallery ||
@@ -741,7 +736,7 @@ export default function VenueOwnerPage() {
                   createSession.isPending ||
                   coupleFiles.length < MIN_COUPLE_PHOTOS
                 }
-                className="w-full lg:w-auto h-14 px-8 text-base shadow-lg shadow-[#C2A36B]/20"
+                className="w-full lg:w-auto h-14 px-8 text-base"
                 data-testid="owner-start-gallery"
               >
                 {isStartingGallery || isUploadingCouple || createSession.isPending ? (
@@ -754,59 +749,54 @@ export default function VenueOwnerPage() {
             </div>
           </form>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-8 grid md:grid-cols-3 md:gap-10">
             {[
               "Photoreal scale, lighting, and shadow cues",
               "Tasteful venue branding and inquiry CTA",
               "Preview first, then email or reuse in marketing",
-            ].map((item) => (
-              <div key={item} className="rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-medium text-muted-foreground">
-                {item}
+            ].map((item, index) => (
+              <div key={item} className="flex items-baseline gap-4 border-t border-border py-4">
+                <span className="mono-label text-rose">{String(index + 1).padStart(2, "0")}</span>
+                <p className="text-sm text-muted-foreground">{item}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[420px_1fr]">
-          <div className="glimpse-card p-6 md:p-8 flex flex-col">
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">True-space readiness</h2>
-                <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
-                  {missingCoverage.length === 0
-                    ? "The venue has the visual coverage needed for accurate branded previews."
-                    : "Recommended: add the missing room views so output can better preserve space, scale, and atmosphere."}
-                </p>
-              </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border text-muted-foreground shadow-sm">
-                <ImageUp className="h-5 w-5" />
-              </div>
+        <section className="grid gap-10 border-t border-border pt-6 lg:grid-cols-[420px_1fr]">
+          <div className="flex flex-col">
+            <div className="mb-6">
+              <p className="mono-label mb-4 text-rose">003 — Coverage</p>
+              <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">True-space readiness</h2>
+              <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
+                {missingCoverage.length === 0
+                  ? "The venue has the visual coverage needed for accurate branded previews."
+                  : "Recommended: add the missing room views so output can better preserve space, scale, and atmosphere."}
+              </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-8">
+            <div className="mb-8">
               {COVERAGE_OPTIONS.map((option) => {
                 const complete = presentCoverage.has(option.value);
                 return (
                   <div
                     key={option.value}
-                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-                      complete
-                        ? "border-[#f0e6d2] bg-[#fdfbf7] text-[#8a7340]"
-                        : "border-border bg-background text-muted-foreground"
-                    }`}
+                    className="flex items-center justify-between border-t border-border py-3 transition-colors hover:bg-wine last:border-b"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${complete ? "bg-gold text-white" : "bg-muted"}`}>
-                        {complete ? <Check className="h-3 w-3" /> : null}
-                      </span>
+                    <span className={`text-sm font-medium ${complete ? "text-foreground" : "text-muted-foreground"}`}>
                       {option.label}
-                    </div>
+                    </span>
+                    {complete ? (
+                      <Check className="h-4 w-4 shrink-0 text-rose" />
+                    ) : (
+                      <span className="h-4 w-4 shrink-0 rounded-full border border-border" />
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-auto pt-4 border-t border-border">
+            <div className="mt-auto pt-4">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -816,9 +806,10 @@ export default function VenueOwnerPage() {
               />
               <Button
                 type="button"
+                variant="rose"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploadingVenue || addMedia.isPending}
-                className="h-12 w-full bg-foreground text-background hover:bg-foreground/90 font-medium"
+                className="h-12 w-full font-medium"
               >
                 {isUploadingVenue || addMedia.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -830,28 +821,29 @@ export default function VenueOwnerPage() {
             </div>
           </div>
 
-          <div className="glimpse-card p-6 md:p-8">
-            <div className="mb-6 flex items-center justify-between gap-4 border-b border-border pb-4">
+          <div>
+            <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-4">
               <div>
-                <h2 className="text-xl font-bold text-foreground">Venue reference library</h2>
+                <p className="mono-label mb-4 text-rose">004 — Library</p>
+                <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">Venue reference library</h2>
                 <p className="mt-1 text-sm font-light text-muted-foreground">Real spaces power accurate scale, lighting, and shadows.</p>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground">
+              <p className="mono-label shrink-0 text-muted-foreground">
                 {media.length} photos
-              </div>
+              </p>
             </div>
 
             {media.length === 0 ? (
-              <div className="flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/50">
+              <div className="flex min-h-64 items-center justify-center border border-dashed border-border">
                 <div className="text-center text-muted-foreground">
                   <ImageIcon className="mx-auto mb-3 h-8 w-8 opacity-50" />
-                  <p className="text-sm font-medium">No venue photos yet.</p>
+                  <p className="mono-label">No venue photos yet.</p>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {media.map((item) => (
-                  <div key={item.id} className="group relative aspect-square overflow-hidden rounded-xl bg-secondary border border-border shadow-sm">
+                  <div key={item.id} className="group relative aspect-square overflow-hidden bg-secondary border border-border">
                     <img
                       src={venueReferenceUrl(item.objectKey, selectedSlug)}
                       alt="Venue reference"
@@ -860,16 +852,17 @@ export default function VenueOwnerPage() {
                       }}
                       className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                     />
+                    <FrameTicks size={14} className="text-foreground/40" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                     <button
                       type="button"
                       onClick={() => handleDeleteMedia(item.id)}
-                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-red-600 shadow-sm backdrop-blur-sm opacity-0 transition group-hover:opacity-100 hover:bg-red-600 hover:text-white"
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-black/60 text-red-400 backdrop-blur-sm opacity-0 transition group-hover:opacity-100 hover:bg-red-500 hover:text-white"
                       aria-label="Delete venue photo"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
-                    <span className="absolute bottom-3 left-3 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 capitalize drop-shadow-md">
+                    <span className="mono-label absolute bottom-3 left-3 text-foreground opacity-0 transition-opacity group-hover:opacity-100">
                       {item.coverage.replace("_", " ")}
                     </span>
                   </div>
@@ -879,29 +872,33 @@ export default function VenueOwnerPage() {
           </div>
         </section>
 
-        <section className="glimpse-card p-6 md:p-8">
+        <section className="border-t border-border pt-6">
           <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">Prospect galleries</h2>
+              <p className="mono-label mb-4 text-rose">005 — Deliveries</p>
+              <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">Prospect galleries</h2>
               <p className="mt-2 text-base font-light text-muted-foreground">
                 Review output, approve delivery, and reuse compact variants for follow-up campaigns.
               </p>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-border bg-background">
+          <div>
             {sessions.length === 0 ? (
-              <div className="flex min-h-[200px] items-center justify-center text-center text-sm font-medium text-muted-foreground bg-secondary/50">
-                No prospect galleries yet.
+              <div className="flex min-h-[200px] items-center justify-center border border-dashed border-border text-center">
+                <p className="mono-label text-muted-foreground">No prospect galleries yet.</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
+              <div>
                 {sessions.map((session) => (
                   <div
                     key={session.id}
-                    className="grid gap-4 p-5 md:grid-cols-[72px_1fr_auto] md:items-center hover:bg-secondary/50 transition-colors"
+                    className="grid gap-4 border-t border-border py-4 last:border-b md:grid-cols-[96px_72px_1fr_auto] md:items-center md:px-2 hover:bg-wine transition-colors"
                   >
-                    <div className="h-18 w-18 overflow-hidden rounded-xl border border-border bg-secondary shadow-sm">
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {new Date(session.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    <div className="relative h-18 w-18 overflow-hidden border border-border bg-secondary">
                       {session.thumbnailObjectKey ? (
                         <img
                           src={ownerAssetUrl(session.thumbnailObjectKey)}
@@ -916,16 +913,15 @@ export default function VenueOwnerPage() {
                           <ImageIcon className="h-6 w-6" />
                         </div>
                       )}
+                      <FrameTicks size={14} className="text-foreground/40" />
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-3 mb-1">
-                        <p className="font-bold text-base text-foreground">{session.coupleName || "Prospect gallery"}</p>
+                        <p className="font-display text-lg font-medium text-foreground">{session.coupleName || "Prospect gallery"}</p>
                         <StatusBadge status={session.status} />
                       </div>
-                      <p className="text-sm font-light text-muted-foreground flex items-center gap-2">
-                        <span>{session.coupleEmail || "No email provided"}</span>
-                        <span className="text-border">•</span>
-                        <span>{new Date(session.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <p className="text-sm font-light text-muted-foreground">
+                        {session.coupleEmail || "No email provided"}
                       </p>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row md:justify-end mt-2 md:mt-0">
@@ -934,7 +930,6 @@ export default function VenueOwnerPage() {
                         variant="outline"
                         disabled={!session.shareToken}
                         onClick={() => handleViewGallery(session.shareToken)}
-                        className="bg-background"
                         data-testid={`view-gallery-${session.id}`}
                       >
                         <Eye className="mr-2 h-4 w-4" />
@@ -942,13 +937,13 @@ export default function VenueOwnerPage() {
                       </Button>
                       <Button
                         type="button"
+                        variant="rose"
                         disabled={
                           session.status !== "ready" ||
                           !session.coupleEmail ||
                           sendingSessionId === session.id
                         }
                         onClick={() => handleSendGallery(session.id, session.coupleEmail)}
-                        className="bg-foreground text-background hover:bg-foreground/90"
                       >
                         {sendingSessionId === session.id ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -959,10 +954,10 @@ export default function VenueOwnerPage() {
                       </Button>
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         disabled={deleteSession.isPending && deleteSession.variables?.id === session.id}
                         onClick={() => handleDeleteSession(session.id, session.coupleName)}
-                        className="bg-background text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                        className="text-red-400 hover:text-red-300"
                         data-testid={`delete-gallery-${session.id}`}
                       >
                         {deleteSession.isPending && deleteSession.variables?.id === session.id ? (
@@ -984,26 +979,30 @@ export default function VenueOwnerPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number | string }) {
+function Metric({ label, value, hero = false }: { label: string; value: number | string; hero?: boolean }) {
   return (
-    <div className="rounded-2xl border border-border bg-background p-6 shadow-sm hover:shadow-md transition-shadow">
-      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="mt-3 text-3xl font-extrabold tracking-tight text-foreground">{value}</p>
+    <div className="border-t border-border pt-4">
+      <p className="mono-label text-muted-foreground">{label}</p>
+      <p
+        className={
+          hero
+            ? "mt-2 font-display text-4xl md:text-5xl font-medium tracking-tight text-rose"
+            : "mt-2 font-mono text-3xl tracking-tight text-foreground"
+        }
+      >
+        {value}
+      </p>
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const classes =
-    status === "ready"
-      ? "inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-700"
-      : status === "failed"
-        ? "inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold tracking-wide text-red-700"
-        : "inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold tracking-wide text-amber-700";
-  
+  const color =
+    status === "ready" ? "text-emerald-400" : status === "failed" ? "text-red-400" : "text-rose";
+
   return (
-    <span className={classes}>
-      <span className={`h-1.5 w-1.5 rounded-full ${status === "ready" ? "bg-emerald-500" : status === "failed" ? "bg-red-500" : "bg-amber-500"}`}></span>
+    <span className={`mono-label inline-flex items-center gap-1.5 ${color}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current"></span>
       {status}
     </span>
   );
