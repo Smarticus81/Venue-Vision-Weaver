@@ -3,6 +3,25 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-07-05 (fifth pass) — App surfaces + self-hosted imagery
+
+- Photos weren't rendering for the owner: the studio CDN doesn't serve reliably
+  cross-origin, and this sandbox can't download it directly. Fix: a one-shot
+  GitHub Actions workflow (`fetch-brand-assets.yml`) fetched the five plates on
+  a runner and committed them to the branch; then trimmed the baked-in white
+  mattes (`sharp .trim()`), resized (900w frames / 2000w hero), and pointed
+  `brandAssets.ts` at local `/brand/*` paths permanently. Total imagery ~270KB.
+- The MCP gateway strips `input_images` on every image model, so the four
+  frames drifted to different couples. Honest fix for now: mono footnote
+  "Frames from sample glimpse galleries" under the contact sheet. Future fix:
+  Soul character pipeline (create character from the ceremony frame, generate
+  the other scenes with soul_id) for a true single-couple sheet.
+- Post-login/app surfaces carried into the darkroom editorial language (mono
+  kickers + Fraunces headings, hairline-ruled sections, index rows with wine
+  hover, FrameTicks on media, rose primaries, mono status lines): owner
+  dashboard, couple flow, share page, and the auth/entry pages restyled as
+  corner-ticked "tickets".
+
 ## 2026-07-05 (fourth pass) — Direct copy, bespoke imagery, business framing
 
 Owner direction: restore the direct wording, cut copy volume, sell business

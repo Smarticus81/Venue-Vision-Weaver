@@ -1,40 +1,20 @@
 /**
  * Brand imagery generated in the Higgsfield studio, art-directed to the
- * editorial-darkroom token system (warm near-black, candlelight rose).
+ * editorial-darkroom token system (warm near-black, candlelight rose),
+ * self-hosted under public/brand (fetched + committed by the
+ * fetch-brand-assets workflow, then trimmed/optimized).
  *
- * Served from the studio CDN by default. To self-host: run
- * `node scripts/fetch-brand-assets.mjs` from the repo root (needs open
- * network), then build with VITE_LOCAL_BRAND_ASSETS=1.
+ * To regenerate or re-fetch originals: scripts/fetch-brand-assets.mjs
+ * (source job URLs live there).
  */
 
-const CDN_BASE = "https://d8j0ntlcm91z4.cloudfront.net/user_3FvUSDWlpMZmeo552NjYHGJ67RL";
-
-type BrandAssetSet = {
-  heroAtmosphere: string;
-  frameCeremony: string;
-  frameFirstDance: string;
-  frameGoldenHour: string;
-  frameReelStill: string;
-};
-
-const CDN: BrandAssetSet = {
-  heroAtmosphere: `${CDN_BASE}/hf_20260705_205658_eb2a1a7c-4ce0-444d-82d7-4aa96873ce73_min.webp`,
-  frameCeremony: `${CDN_BASE}/hf_20260705_205704_73ea4c99-08d9-435e-852a-5a4a1eabab32_min.webp`,
-  frameFirstDance: `${CDN_BASE}/hf_20260705_205829_1a4cd4b3-bc16-4489-b1e9-1ec6893e1a5a_min.webp`,
-  frameGoldenHour: `${CDN_BASE}/hf_20260705_205832_fd9973ea-4be7-4105-9076-2b4767cea833_min.webp`,
-  frameReelStill: `${CDN_BASE}/hf_20260705_205835_eee8b83b-0301-44a7-aca4-0a0bb7b50e70_min.webp`,
-};
-
-const LOCAL: BrandAssetSet = {
+export const BRAND_ASSETS = {
   heroAtmosphere: "/brand/hero-atmosphere.webp",
   frameCeremony: "/brand/frame-ceremony.webp",
   frameFirstDance: "/brand/frame-first-dance.webp",
   frameGoldenHour: "/brand/frame-golden-hour.webp",
   frameReelStill: "/brand/frame-reel-still.webp",
-};
-
-export const BRAND_ASSETS =
-  import.meta.env.VITE_LOCAL_BRAND_ASSETS === "1" ? LOCAL : CDN;
+} as const;
 
 export const GALLERY_FRAMES = [
   {

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { toVenueSlug } from "@/lib/venueSlug";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { FrameTicks } from "@/components/motion";
 
 export default function CreateVenuePage() {
   const [, setLocation] = useLocation();
@@ -79,13 +80,17 @@ export default function CreateVenuePage() {
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
       <header className="absolute top-0 w-full p-6 sm:p-10 flex items-center justify-between z-10">
         <GlimpseLogo href="/" />
-        <Button variant="ghost" onClick={() => setLocation("/")} className="text-sm font-medium text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to site
-        </Button>
+        <button
+          type="button"
+          onClick={() => setLocation("/")}
+          className="mono-label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to site
+        </button>
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-6 relative py-20">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--rose)/0.06),transparent_50%)] pointer-events-none" />
+      <main className="grain flex-1 flex items-center justify-center p-6 relative py-20">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_50%_0%,hsl(var(--rose)/0.08),transparent_70%)] pointer-events-none" />
         
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -93,14 +98,12 @@ export default function CreateVenuePage() {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="w-full max-w-md mt-10"
         >
-          <div className="bg-card rounded-xl border border-card-border p-8 sm:p-10 shadow-xl shadow-black/40 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-rose/20" />
+          <div className="relative bg-card p-8">
+            <FrameTicks size={16} className="text-foreground/40" />
 
             <div className="mb-8">
-              <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mb-6 text-rose border border-border">
-                <Building2 className="h-6 w-6" />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">Create venue workspace</h1>
+              <p className="mono-label mb-4 text-rose">For venues</p>
+              <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">Create venue workspace</h1>
               <p className="mt-2 text-muted-foreground font-light">
                 Build the conversion hub for branded preview galleries, tour CTAs, and owner-approved follow-up.
               </p>
@@ -108,7 +111,7 @@ export default function CreateVenuePage() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="venue-name" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Venue name</Label>
+                <Label htmlFor="venue-name" className="mono-label text-muted-foreground">Venue name</Label>
                 <div className="relative">
                   <Building2 className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -116,7 +119,7 @@ export default function CreateVenuePage() {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                    className="h-12 pl-11 rounded-xl border-border bg-background focus-visible:ring-ring"
+                    className="h-12 pl-11 rounded-none border-input bg-background focus-visible:ring-ring"
                     placeholder="The Willow House"
                     data-testid="venue-name-input"
                     autoComplete="organization"
@@ -125,7 +128,7 @@ export default function CreateVenuePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="owner-email" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Owner email</Label>
+                <Label htmlFor="owner-email" className="mono-label text-muted-foreground">Owner email</Label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -134,7 +137,7 @@ export default function CreateVenuePage() {
                     required
                     value={formData.ownerEmail}
                     onChange={(e) => setFormData((prev) => ({ ...prev, ownerEmail: e.target.value }))}
-                    className="h-12 pl-11 rounded-xl border-border bg-background focus-visible:ring-ring"
+                    className="h-12 pl-11 rounded-none border-input bg-background focus-visible:ring-ring"
                     placeholder="owner@venue.com"
                     data-testid="venue-owner-email-input"
                     autoComplete="email"
@@ -143,7 +146,7 @@ export default function CreateVenuePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="owner-password" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Password</Label>
+                <Label htmlFor="owner-password" className="mono-label text-muted-foreground">Password</Label>
                 <div className="relative">
                   <LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -153,7 +156,7 @@ export default function CreateVenuePage() {
                     minLength={8}
                     value={formData.password}
                     onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                    className="h-12 pl-11 rounded-xl border-border bg-background focus-visible:ring-ring"
+                    className="h-12 pl-11 rounded-none border-input bg-background focus-visible:ring-ring"
                     placeholder="At least 8 characters"
                     data-testid="venue-password-input"
                     autoComplete="new-password"
@@ -162,19 +165,19 @@ export default function CreateVenuePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="booking-url" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Tour booking link <span className="text-muted-foreground font-normal normal-case">(optional)</span></Label>
+                <Label htmlFor="booking-url" className="mono-label text-muted-foreground">Tour booking link <span className="text-muted-foreground font-normal normal-case">(optional)</span></Label>
                 <Input
                   id="booking-url"
                   value={formData.bookingUrl}
                   onChange={(e) => setFormData((prev) => ({ ...prev, bookingUrl: e.target.value }))}
-                  className="h-12 rounded-xl border-border bg-background focus-visible:ring-ring"
+                  className="h-12 rounded-none border-input bg-background focus-visible:ring-ring"
                   placeholder="https://yourvenue.com/tours"
                   data-testid="venue-booking-url-input"
                   autoComplete="url"
                 />
               </div>
 
-              <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm leading-relaxed text-muted-foreground">
+              <div className="border-l-2 border-rose/40 pl-4 text-sm font-light leading-relaxed text-muted-foreground">
                 Designed for wedding and event venues: true-to-space visuals,
                 branded gallery delivery, and compact marketing variants for email,
                 ads, and embeds.
@@ -184,7 +187,7 @@ export default function CreateVenuePage() {
                 type="submit"
                 variant="rose"
                 disabled={isSubmitting}
-                className="w-full h-12 font-medium mt-4 transition-all"
+                className="w-full h-12 rounded-none font-medium mt-4"
                 data-testid="create-venue-submit"
               >
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -193,15 +196,14 @@ export default function CreateVenuePage() {
             </form>
             
             <div className="mt-8 text-center">
-              <Button
+              <button
                 type="button"
-                variant="ghost"
                 onClick={() => setLocation("/login")}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 data-testid="venue-existing-login"
               >
                 Already have an account? Sign in
-              </Button>
+              </button>
             </div>
           </div>
         </motion.div>

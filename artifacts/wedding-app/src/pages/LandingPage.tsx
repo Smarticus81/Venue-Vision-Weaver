@@ -67,7 +67,7 @@ export default function LandingPage() {
             aria-hidden
             fetchPriority="high"
             decoding="async"
-            className="absolute inset-0 h-full w-full object-cover opacity-50"
+            className="absolute inset-0 h-full w-full object-cover opacity-70"
           />
           <div
             aria-hidden

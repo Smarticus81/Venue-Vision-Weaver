@@ -31,4 +31,4 @@ for (const [name, url] of Object.entries(ASSETS)) {
   await writeFile(join(outDir, name), Buffer.from(await res.arrayBuffer()));
   console.log(`saved ${name}`);
 }
-console.log("Done. Build with VITE_LOCAL_BRAND_ASSETS=1 to serve these locally.");
+console.log("Done. Files land in artifacts/wedding-app/public/brand (the app serves them from /brand).");

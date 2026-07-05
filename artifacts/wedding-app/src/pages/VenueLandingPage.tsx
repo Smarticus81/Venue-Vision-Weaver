@@ -144,7 +144,7 @@ function HeroScene({ onStart, onSignIn }: { onStart: () => void; onSignIn: () =>
         aria-hidden
         fetchPriority="high"
         decoding="async"
-        className="absolute inset-0 h-full w-full object-cover opacity-50"
+        className="absolute inset-0 h-full w-full object-cover opacity-70"
       />
       <div
         aria-hidden
@@ -277,6 +277,9 @@ function DevelopingPrintScene() {
             <ContactFrame key={f.index} frame={f} />
           ))}
         </div>
+        <p className="mono-label mt-6 text-muted-foreground/70 normal-case tracking-[0.08em]">
+          Frames from sample glimpse galleries
+        </p>
       </section>
     );
   }
@@ -319,6 +322,9 @@ function PinnedContactSheet() {
             ))}
           </div>
         </motion.div>
+        <p className="mono-label mt-6 text-muted-foreground/70 normal-case tracking-[0.08em]">
+          Frames from sample glimpse galleries
+        </p>
       </div>
     </section>
   );
