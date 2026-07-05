@@ -487,13 +487,13 @@ export default function VenueOwnerPage() {
   if (!authChecked || dashboard.isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-gold" />
+        <Loader2 className="h-10 w-10 animate-spin text-rose" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-20 selection:bg-gold selection:text-white">
+    <div className="min-h-screen bg-background text-foreground pb-20">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-4">
@@ -508,7 +508,7 @@ export default function VenueOwnerPage() {
               <select
                 value={selectedSlug}
                 onChange={(e) => setSelectedSlug(e.target.value)}
-                className="h-9 rounded-full border border-border bg-background px-4 text-sm font-medium outline-none shadow-sm focus:border-gold focus:ring-1 focus:ring-gold"
+                className="h-9 rounded-md border border-border bg-background px-4 text-sm font-medium outline-none focus:border-rose focus:ring-1 focus:ring-ring"
                 aria-label="Switch venue"
               >
                 {ownerSession.venues.map((ownedVenue) => (
@@ -541,7 +541,7 @@ export default function VenueOwnerPage() {
           >
             <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gold">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-rose">
                   Venue dashboard
                 </p>
                 <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
@@ -552,7 +552,7 @@ export default function VenueOwnerPage() {
                   visualize their event and move toward an inquiry.
                 </p>
               </div>
-              <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340] shadow-sm" : "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-700 shadow-sm"}>
+              <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-emerald-400" : "inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-400"}>
                 {venueReady ? "Ready for tours" : "Needs photos"}
               </Badge>
             </div>
@@ -573,7 +573,7 @@ export default function VenueOwnerPage() {
             className="glimpse-card p-6 md:p-8"
           >
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fdfbf7] border border-[#f5eedf] text-gold shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary border border-border text-rose">
                 <Building2 className="h-5 w-5" />
               </div>
               <h2 className="text-xl font-bold text-foreground">Inquiry details</h2>
@@ -619,7 +619,7 @@ export default function VenueOwnerPage() {
         <section className="glimpse-card p-6 md:p-8">
           <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="max-w-2xl">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gold">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-rose">
                 New couple
               </p>
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Start a prospect gallery</h2>
@@ -628,12 +628,12 @@ export default function VenueOwnerPage() {
                 venue-branded preview and emails their private link after generation.
               </p>
             </div>
-            <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-full border border-[#f0e6d2] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-wide text-[#8a7340] shadow-sm" : "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-700 shadow-sm"}>
+            <Badge className={venueReady ? "inline-flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-emerald-400" : "inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-amber-400"}>
               {venueReady ? "Owner approval enabled" : "Venue setup needed"}
             </Badge>
           </div>
 
-          <form onSubmit={handleStartGallery} className="grid gap-8 lg:grid-cols-[1fr_1fr_auto] lg:items-start bg-secondary/50 p-6 rounded-2xl border border-border/60">
+          <form onSubmit={handleStartGallery} className="grid gap-8 lg:grid-cols-[1fr_1fr_auto] lg:items-start bg-secondary/50 p-6 rounded-xl border border-border/60">
             <div className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="couple-name" className="text-foreground font-medium">Names</Label>
@@ -682,7 +682,7 @@ export default function VenueOwnerPage() {
                       onClick={() => {
                         if (!preview) coupleFileInputRef.current?.click();
                       }}
-                      className="relative aspect-square overflow-hidden rounded-xl border border-border bg-background shadow-sm text-muted-foreground transition-all hover:border-gold hover:text-gold group"
+                      className="relative aspect-square overflow-hidden rounded-xl border border-border bg-background text-muted-foreground transition-all hover:border-rose hover:text-rose group"
                       aria-label={preview ? `Couple photo ${slot + 1}` : "Add couple photo"}
                     >
                       {preview ? (
@@ -733,7 +733,7 @@ export default function VenueOwnerPage() {
             <div className="lg:pt-8">
               <Button
                 type="submit"
-                variant="gold"
+                variant="rose"
                 disabled={
                   !venueReady ||
                   isStartingGallery ||
@@ -741,7 +741,7 @@ export default function VenueOwnerPage() {
                   createSession.isPending ||
                   coupleFiles.length < MIN_COUPLE_PHOTOS
                 }
-                className="w-full lg:w-auto h-14 px-8 text-base shadow-lg shadow-[#C2A36B]/20"
+                className="w-full lg:w-auto h-14 px-8 text-base shadow-lg shadow-black/30"
                 data-testid="owner-start-gallery"
               >
                 {isStartingGallery || isUploadingCouple || createSession.isPending ? (
@@ -760,7 +760,7 @@ export default function VenueOwnerPage() {
               "Tasteful venue branding and inquiry CTA",
               "Preview first, then email or reuse in marketing",
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-medium text-muted-foreground">
+              <div key={item} className="rounded-xl border border-border/70 bg-card px-4 py-3 text-sm font-medium text-muted-foreground">
                 {item}
               </div>
             ))}
@@ -778,7 +778,7 @@ export default function VenueOwnerPage() {
                     : "Recommended: add the missing room views so output can better preserve space, scale, and atmosphere."}
                 </p>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border text-muted-foreground shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border text-muted-foreground">
                 <ImageUp className="h-5 w-5" />
               </div>
             </div>
@@ -791,12 +791,12 @@ export default function VenueOwnerPage() {
                     key={option.value}
                     className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
                       complete
-                        ? "border-[#f0e6d2] bg-[#fdfbf7] text-[#8a7340]"
+                        ? "border-rose/30 bg-rose/10 text-rose"
                         : "border-border bg-background text-muted-foreground"
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${complete ? "bg-gold text-white" : "bg-muted"}`}>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${complete ? "bg-rose text-rose-foreground" : "bg-muted"}`}>
                         {complete ? <Check className="h-3 w-3" /> : null}
                       </span>
                       {option.label}
@@ -836,13 +836,13 @@ export default function VenueOwnerPage() {
                 <h2 className="text-xl font-bold text-foreground">Venue reference library</h2>
                 <p className="mt-1 text-sm font-light text-muted-foreground">Real spaces power accurate scale, lighting, and shadows.</p>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground">
+              <div className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground">
                 {media.length} photos
               </div>
             </div>
 
             {media.length === 0 ? (
-              <div className="flex min-h-64 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/50">
+              <div className="flex min-h-64 items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary/50">
                 <div className="text-center text-muted-foreground">
                   <ImageIcon className="mx-auto mb-3 h-8 w-8 opacity-50" />
                   <p className="text-sm font-medium">No venue photos yet.</p>
@@ -851,7 +851,7 @@ export default function VenueOwnerPage() {
             ) : (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {media.map((item) => (
-                  <div key={item.id} className="group relative aspect-square overflow-hidden rounded-xl bg-secondary border border-border shadow-sm">
+                  <div key={item.id} className="group relative aspect-square overflow-hidden rounded-xl bg-secondary border border-border">
                     <img
                       src={venueReferenceUrl(item.objectKey, selectedSlug)}
                       alt="Venue reference"
@@ -864,7 +864,7 @@ export default function VenueOwnerPage() {
                     <button
                       type="button"
                       onClick={() => handleDeleteMedia(item.id)}
-                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-red-600 shadow-sm backdrop-blur-sm opacity-0 transition group-hover:opacity-100 hover:bg-red-600 hover:text-white"
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-black/60 text-red-400 backdrop-blur-sm opacity-0 transition group-hover:opacity-100 hover:bg-red-500 hover:text-white"
                       aria-label="Delete venue photo"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -889,7 +889,7 @@ export default function VenueOwnerPage() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-border bg-background">
+          <div className="overflow-hidden rounded-xl border border-border bg-background">
             {sessions.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-center text-sm font-medium text-muted-foreground bg-secondary/50">
                 No prospect galleries yet.
@@ -901,7 +901,7 @@ export default function VenueOwnerPage() {
                     key={session.id}
                     className="grid gap-4 p-5 md:grid-cols-[72px_1fr_auto] md:items-center hover:bg-secondary/50 transition-colors"
                   >
-                    <div className="h-18 w-18 overflow-hidden rounded-xl border border-border bg-secondary shadow-sm">
+                    <div className="h-18 w-18 overflow-hidden rounded-xl border border-border bg-secondary">
                       {session.thumbnailObjectKey ? (
                         <img
                           src={ownerAssetUrl(session.thumbnailObjectKey)}
@@ -962,7 +962,7 @@ export default function VenueOwnerPage() {
                         variant="outline"
                         disabled={deleteSession.isPending && deleteSession.variables?.id === session.id}
                         onClick={() => handleDeleteSession(session.id, session.coupleName)}
-                        className="bg-background text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                        className="bg-background text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
                         data-testid={`delete-gallery-${session.id}`}
                       >
                         {deleteSession.isPending && deleteSession.variables?.id === session.id ? (
@@ -986,7 +986,7 @@ export default function VenueOwnerPage() {
 
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-2xl border border-border bg-background p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="rounded-xl border border-border bg-background p-6 transition-shadow hover:shadow-md hover:shadow-black/20">
       <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
       <p className="mt-3 text-3xl font-extrabold tracking-tight text-foreground">{value}</p>
     </div>
@@ -996,14 +996,14 @@ function Metric({ label, value }: { label: string; value: number | string }) {
 function StatusBadge({ status }: { status: string }) {
   const classes =
     status === "ready"
-      ? "inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-700"
+      ? "inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-400"
       : status === "failed"
-        ? "inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold tracking-wide text-red-700"
-        : "inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold tracking-wide text-amber-700";
-  
+        ? "inline-flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-red-400"
+        : "inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-amber-400";
+
   return (
     <span className={classes}>
-      <span className={`h-1.5 w-1.5 rounded-full ${status === "ready" ? "bg-emerald-500" : status === "failed" ? "bg-red-500" : "bg-amber-500"}`}></span>
+      <span className={`h-1.5 w-1.5 rounded-full ${status === "ready" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-amber-400"}`}></span>
       {status}
     </span>
   );
