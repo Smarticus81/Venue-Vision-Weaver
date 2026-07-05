@@ -47,6 +47,7 @@ const COUPLE_REFERENCE_GUIDANCE = [
   "Face-forward close view",
   "Face-forward close view",
 ] as const;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function CouplePage() {
   const { slug } = useParams<{ slug: string }>();
@@ -54,6 +55,8 @@ export default function CouplePage() {
   const { toast } = useToast();
 
   const [step, setStep] = useState(1);
+  // Successful uploads keyed by File so a retry after a failure never re-uploads them.
+  const uploadedKeysRef = useRef(new Map<File, string>());
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
@@ -161,15 +164,29 @@ export default function CouplePage() {
   };
 
   const handleSubmit = async () => {
-    if (selectedFiles.length < MIN_COUPLE_PHOTOS || !selectedStyleId || !coupleEmail.trim()) return;
+    const email = coupleEmail.trim().toLowerCase();
+    if (selectedFiles.length < MIN_COUPLE_PHOTOS || !selectedStyleId || !email) return;
+    if (!EMAIL_PATTERN.test(email)) {
+      toast({
+        title: "Check your email address",
+        description: "We need a valid email so you can find your gallery again.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setStep(4);
     try {
-      const objectKeys: string[] = [];
-      for (const file of selectedFiles) {
-        const result = await uploadFile(file);
-        if (result) objectKeys.push(result.objectPath);
-      }
+      const objectKeys = await Promise.all(
+        selectedFiles.map(async (file) => {
+          const cached = uploadedKeysRef.current.get(file);
+          if (cached) return cached;
+          const result = await uploadFile(file);
+          if (!result) throw new Error("upload-failed");
+          uploadedKeysRef.current.set(file, result.objectPath);
+          return result.objectPath;
+        })
+      );
 
       createSession.mutate(
         {
@@ -178,7 +195,7 @@ export default function CouplePage() {
             couplePhotoKeys: objectKeys,
             styleId: selectedStyleId,
             coupleName: coupleName.trim() || undefined,
-            coupleEmail: coupleEmail.trim().toLowerCase(),
+            coupleEmail: email,
           },
         },
         {
@@ -202,7 +219,12 @@ export default function CouplePage() {
       );
     } catch {
       setStep(3);
-      toast({ title: "Photos didn't upload", variant: "destructive" });
+      toast({
+        title: "Photos didn't upload",
+        description:
+          "Check your connection and tap Compose my gallery again — everything you entered is still here.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -647,6 +669,13 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
         </div>
       )}
 
+      <form
+        className="w-full flex flex-col items-center"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
       <div className="mt-16 w-full max-w-2xl space-y-6">
         <div className="rounded-3xl bg-white border border-gray-100 p-6 md:p-8 shadow-sm">
           <label
@@ -666,6 +695,7 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
             value={coupleEmail}
             onChange={(e) => onChangeCoupleEmail(e.target.value)}
             disabled={isSubmitting}
+            autoComplete="email"
             data-testid="style-couple-email"
             className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 md:py-4 text-base text-[#111111] focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold disabled:opacity-50 transition-all placeholder:text-gray-400"
           />
@@ -685,6 +715,7 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
             value={coupleName}
             onChange={(e) => onChangeCoupleName(e.target.value)}
             disabled={isSubmitting}
+            autoComplete="name"
             maxLength={80}
             data-testid="style-couple-name"
             className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 md:py-4 text-base text-[#111111] focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold disabled:opacity-50 transition-all placeholder:text-gray-400"
@@ -707,6 +738,7 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
 
       <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-lg mx-auto">
         <Button
+          type="button"
           variant="ghost"
           onClick={onBack}
           disabled={isSubmitting}
@@ -716,8 +748,8 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
           Back
         </Button>
         <Button
+          type="submit"
           variant="gold"
-          onClick={onSubmit}
           disabled={!selectedStyleId || !coupleEmail.trim() || isSubmitting}
           className="w-full sm:w-2/3 rounded-full py-6 text-base font-medium shadow-lg shadow-gold/20"
           data-testid="generate-button"
@@ -730,6 +762,7 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
           Compose my gallery
         </Button>
       </div>
+      </form>
     </motion.div>
   );
 }

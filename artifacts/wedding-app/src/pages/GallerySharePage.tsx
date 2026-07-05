@@ -124,7 +124,6 @@ export default function GallerySharePage() {
   if (status === "failed" && stills.length === 0) {
     return (
       <FailureView
-        session={session}
         onRestart={onRestart}
         message={session.errorMessage ?? "We couldn't finish this gallery. Please try once more."}
       />
@@ -214,11 +213,9 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
 }
 
 function FailureView({
-  session,
   message,
   onRestart,
 }: {
-  session: SessionDetailResponse;
   message: string;
   onRestart: () => void;
 }) {
@@ -239,11 +236,11 @@ function FailureView({
         </Button>
         <Button
           variant="outline"
-          onClick={() => setLocation(session.venue?.slug ? `/preview/${session.venue.slug}` : "/couple")}
+          onClick={() => setLocation("/couple")}
           className="flex-1 bg-white hover:bg-gray-50"
           data-testid="failed-home"
         >
-          <Home className="mr-2 h-4 w-4" /> Venue page
+          <Home className="mr-2 h-4 w-4" /> Home
         </Button>
       </div>
     </div>
@@ -465,7 +462,13 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
         </motion.div>
         
         {showEmail && (
-          <div className="space-y-3 pt-2 border-t border-gray-100">
+          <form
+            className="space-y-3 pt-2 border-t border-gray-100"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSendEmail();
+            }}
+          >
             {emailLocked ? (
               <p className="text-sm text-gray-500 text-center font-light">
                 We will send the link to the email you provided when you created your
@@ -474,17 +477,19 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
             ) : (
               <input
                 type="email"
+                required
                 value={emailInput}
                 onChange={(event) => setEmailInput(event.target.value)}
                 placeholder="you@example.com"
+                autoComplete="email"
                 className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-all"
                 data-testid="email-input"
               />
             )}
             <div className="flex justify-center">
               <Button
+                type="submit"
                 size="sm"
-                onClick={handleSendEmail}
                 disabled={sending || (!emailLocked && !emailInput.trim())}
                 variant="gold"
                 className="w-full sm:w-auto shadow-md shadow-[#C2A36B]/20 min-w-[120px]"
@@ -493,7 +498,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Gallery Link"}
               </Button>
             </div>
-          </div>
+          </form>
         )}
       </motion.div>
     </motion.div>
@@ -551,14 +556,16 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
               )}
               {reelSrc && (
                 <Button
+                  asChild
                   variant="ghost"
                   size="icon"
-                  onClick={() => window.open(reelSrc, "_blank")}
                   className="bg-white/80 backdrop-blur text-gray-700 hover:bg-white border border-gray-200/50 shadow-sm"
                   data-testid="gallery-download-reel"
                   title="Download reel"
                 >
-                  <Download className="h-5 w-5" />
+                  <a href={reelSrc} download aria-label="Download reel">
+                    <Download className="h-5 w-5" />
+                  </a>
                 </Button>
               )}
               <Button
@@ -668,46 +675,48 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
               const src = storageAssetUrl(still.objectKey, session.shareToken);
               const selected = activeStill === index;
               return (
-                <button
+                <div
                   key={still.id}
-                  type="button"
-                  onClick={() => setActiveStill(index)}
-                  className={`group relative rounded-2xl overflow-hidden border transition-all text-left ${
+                  className={`group relative rounded-2xl overflow-hidden border transition-all ${
                     selected ? "border-gold ring-2 ring-gold/40 ring-offset-2" : "border-[#f0e6d2] hover:border-gold/50"
                   }`}
-                  data-testid={`gallery-still-${index}`}
                 >
-                  <div className="aspect-[3/4] w-full overflow-hidden bg-gray-50">
-                    <img
-                      src={src}
-                      alt={`Portrait ${index + 1}`}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStill(index)}
+                    aria-label={`View portrait ${index + 1}`}
+                    className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+                    data-testid={`gallery-still-${index}`}
+                  >
+                    <div className="aspect-[3/4] w-full overflow-hidden bg-gray-50">
+                      <img
+                        src={src}
+                        alt={`Portrait ${index + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                    </div>
+                  </button>
+                  <div
+                    className={`absolute inset-x-0 bottom-0 p-4 flex items-center justify-between pointer-events-none bg-gradient-to-t from-black/60 via-black/20 to-transparent transition-opacity duration-300 ${
+                      selected
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                    }`}
+                  >
                     <span className="text-xs font-medium uppercase tracking-wider text-white">
                       Frame {index + 1}
                     </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        window.open(src, "_blank");
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.stopPropagation();
-                          window.open(src, "_blank");
-                        }
-                      }}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-sm text-white"
+                    <a
+                      href={src}
+                      download
+                      aria-label={`Download portrait ${index + 1}`}
+                      data-testid={`gallery-still-download-${index}`}
+                      className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
                     >
                       <Download className="h-4 w-4" />
-                    </span>
+                    </a>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
