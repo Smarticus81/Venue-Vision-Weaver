@@ -188,68 +188,65 @@ export const UpdateVenueResponse = zod.object({
     .describe("Public phone number shown to couples."),
   websiteUrl: zod.string().nullish().describe("Public venue website URL."),
   bookingUrl: zod.string().nullish().describe("Public tour booking URL."),
-  plan: zod.enum(["trial", "starter", "growth", "none"]),
-  creditsBalance: zod.number(),
+  organizationId: zod
+    .number()
+    .nullish()
+    .describe("Billing organization that owns this venue."),
+  plan: zod
+    .enum(["trial", "starter", "growth", "none"])
+    .describe("Organization plan (billing lives on the organization)."),
+  creditsBalance: zod
+    .number()
+    .describe("Organization credit balance (shared across the org's venues)."),
   billingPeriodEnd: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
 });
 
 /**
- * Looks up all venues registered with the given ownerEmail and emails the
-owner direct profile links. Always returns `{accepted: true}` to
-prevent enumeration. Rate-limited per IP and per email.
+ * Requires a signed-in Clerk user with an active organization. The
+organization is the billing tenant: it owns the plan, the credit
+balance, and every venue listed here.
 
- * @summary Email a venue owner the profile links for venues they own (magic link)
+ * @summary Get the caller's organization (Clerk session) with its venues
  */
-export const RecoverOwnerVenuesBody = zod.object({
-  email: zod.string().email(),
-});
-
-export const RecoverOwnerVenuesResponse = zod.object({
-  accepted: zod.boolean(),
-});
-
-/**
- * @summary Email a one-time owner login link
- */
-export const RequestOwnerLoginLinkBody = zod.object({
-  email: zod.string().email(),
-});
-
-export const RequestOwnerLoginLinkResponse = zod.object({
-  accepted: zod.boolean(),
-});
-
-/**
- * @summary Exchange a magic-link token for an owner session cookie
- */
-export const ExchangeOwnerLoginTokenBody = zod.object({
-  token: zod.string(),
-});
-
-export const ExchangeOwnerLoginTokenResponse = zod.object({
-  accepted: zod.boolean(),
-});
-
-/**
- * @summary Get the current owner session
- */
-export const GetOwnerSessionResponse = zod.object({
-  ownerEmail: zod.string().email(),
+export const GetOrganizationResponse = zod.object({
+  organization: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    plan: zod.enum(["trial", "starter", "growth", "none"]),
+    creditsBalance: zod.number(),
+    billingPeriodEnd: zod.coerce.date().nullish(),
+    clerkOrgId: zod.string(),
+    role: zod
+      .string()
+      .nullish()
+      .describe("Caller's Clerk role in this organization (e.g. org:admin)."),
+  }),
   venues: zod.array(
     zod.object({
       id: zod.number(),
       name: zod.string(),
       slug: zod.string(),
+      tagline: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
     }),
   ),
 });
 
 /**
- * @summary Clear the current owner session cookie
+ * @summary Recent credit ledger entries for the caller's organization
  */
-export const LogoutOwnerResponse = zod.object({
-  accepted: zod.boolean(),
+export const GetOrgCreditHistoryResponse = zod.object({
+  transactions: zod.array(
+    zod.object({
+      id: zod.number(),
+      delta: zod.number(),
+      reason: zod.string(),
+      venueId: zod.number().nullish(),
+      sessionId: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
 });
 
 /**
@@ -283,8 +280,18 @@ export const GetVenueDashboardResponse = zod.object({
       .describe("Public phone number shown to couples."),
     websiteUrl: zod.string().nullish().describe("Public venue website URL."),
     bookingUrl: zod.string().nullish().describe("Public tour booking URL."),
-    plan: zod.enum(["trial", "starter", "growth", "none"]),
-    creditsBalance: zod.number(),
+    organizationId: zod
+      .number()
+      .nullish()
+      .describe("Billing organization that owns this venue."),
+    plan: zod
+      .enum(["trial", "starter", "growth", "none"])
+      .describe("Organization plan (billing lives on the organization)."),
+    creditsBalance: zod
+      .number()
+      .describe(
+        "Organization credit balance (shared across the org's venues).",
+      ),
     billingPeriodEnd: zod.coerce.date().nullish(),
     createdAt: zod.coerce.date(),
   }),
@@ -372,32 +379,6 @@ export const AddVenueMediaBody = zod.object({
 export const DeleteVenueMediaParams = zod.object({
   slug: zod.coerce.string(),
   mediaId: zod.coerce.number(),
-});
-
-/**
- * @summary Start Stripe Checkout for subscription or credit pack (owner session)
- */
-export const CreateBillingCheckoutParams = zod.object({
-  slug: zod.coerce.string(),
-});
-
-export const CreateBillingCheckoutBody = zod.object({
-  product: zod.enum(["starter", "growth", "credit_pack"]),
-});
-
-export const CreateBillingCheckoutResponse = zod.object({
-  url: zod.string().url(),
-});
-
-/**
- * @summary Open Stripe Customer Portal (owner session)
- */
-export const CreateBillingPortalParams = zod.object({
-  slug: zod.coerce.string(),
-});
-
-export const CreateBillingPortalResponse = zod.object({
-  url: zod.string().url(),
 });
 
 /**

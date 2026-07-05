@@ -18,32 +18,26 @@ import type {
 
 import type {
   AddVenueMediaBody,
-  BillingCheckoutBody,
-  BillingCheckoutResponse,
-  BillingPortalResponse,
   CreateSessionBody,
   CreateVenueBody,
   DeleteSessionResponse,
   ErrorEnvelope,
-  ExchangeOwnerLoginTokenBody,
   GetStorageObjectParams,
   HealthStatus,
   ListGalleryStylesResponse,
   ListSessionsResponse,
   ListVenueMediaResponse,
+  OrgCreditHistoryResponse,
+  OrganizationResponse,
   OwnerSessionDetailResponse,
-  OwnerSessionResponse,
   ReadinessStatus,
-  RecoverOwnerBody,
   RecoverSessionsBody,
   RecoverSessionsResponse,
-  RequestOwnerLoginLinkBody,
   SendSessionEmailBody,
   SendSessionEmailByTokenBody,
   SendSessionEmailResponse,
   SessionDetailResponse,
   SessionResponse,
-  SimpleAcceptedResponse,
   UpdateVenueBody,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -553,295 +547,35 @@ export const useUpdateVenue = <
 };
 
 /**
- * Looks up all venues registered with the given ownerEmail and emails the
-owner direct profile links. Always returns `{accepted: true}` to
-prevent enumeration. Rate-limited per IP and per email.
+ * Requires a signed-in Clerk user with an active organization. The
+organization is the billing tenant: it owns the plan, the credit
+balance, and every venue listed here.
 
- * @summary Email a venue owner the profile links for venues they own (magic link)
+ * @summary Get the caller's organization (Clerk session) with its venues
  */
-export const getRecoverOwnerVenuesUrl = () => {
-  return `/api/owners/recover`;
+export const getGetOrganizationUrl = () => {
+  return `/api/org`;
 };
 
-export const recoverOwnerVenues = async (
-  recoverOwnerBody: RecoverOwnerBody,
+export const getOrganization = async (
   options?: RequestInit,
-): Promise<SimpleAcceptedResponse> => {
-  return customFetch<SimpleAcceptedResponse>(getRecoverOwnerVenuesUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(recoverOwnerBody),
-  });
-};
-
-export const getRecoverOwnerVenuesMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof recoverOwnerVenues>>,
-    TError,
-    { data: BodyType<RecoverOwnerBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof recoverOwnerVenues>>,
-  TError,
-  { data: BodyType<RecoverOwnerBody> },
-  TContext
-> => {
-  const mutationKey = ["recoverOwnerVenues"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof recoverOwnerVenues>>,
-    { data: BodyType<RecoverOwnerBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return recoverOwnerVenues(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type RecoverOwnerVenuesMutationResult = NonNullable<
-  Awaited<ReturnType<typeof recoverOwnerVenues>>
->;
-export type RecoverOwnerVenuesMutationBody = BodyType<RecoverOwnerBody>;
-export type RecoverOwnerVenuesMutationError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Email a venue owner the profile links for venues they own (magic link)
- */
-export const useRecoverOwnerVenues = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof recoverOwnerVenues>>,
-    TError,
-    { data: BodyType<RecoverOwnerBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof recoverOwnerVenues>>,
-  TError,
-  { data: BodyType<RecoverOwnerBody> },
-  TContext
-> => {
-  return useMutation(getRecoverOwnerVenuesMutationOptions(options));
-};
-
-/**
- * @summary Email a one-time owner login link
- */
-export const getRequestOwnerLoginLinkUrl = () => {
-  return `/api/owners/login-link`;
-};
-
-export const requestOwnerLoginLink = async (
-  requestOwnerLoginLinkBody: RequestOwnerLoginLinkBody,
-  options?: RequestInit,
-): Promise<SimpleAcceptedResponse> => {
-  return customFetch<SimpleAcceptedResponse>(getRequestOwnerLoginLinkUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(requestOwnerLoginLinkBody),
-  });
-};
-
-export const getRequestOwnerLoginLinkMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof requestOwnerLoginLink>>,
-    TError,
-    { data: BodyType<RequestOwnerLoginLinkBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof requestOwnerLoginLink>>,
-  TError,
-  { data: BodyType<RequestOwnerLoginLinkBody> },
-  TContext
-> => {
-  const mutationKey = ["requestOwnerLoginLink"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof requestOwnerLoginLink>>,
-    { data: BodyType<RequestOwnerLoginLinkBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return requestOwnerLoginLink(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type RequestOwnerLoginLinkMutationResult = NonNullable<
-  Awaited<ReturnType<typeof requestOwnerLoginLink>>
->;
-export type RequestOwnerLoginLinkMutationBody =
-  BodyType<RequestOwnerLoginLinkBody>;
-export type RequestOwnerLoginLinkMutationError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Email a one-time owner login link
- */
-export const useRequestOwnerLoginLink = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof requestOwnerLoginLink>>,
-    TError,
-    { data: BodyType<RequestOwnerLoginLinkBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof requestOwnerLoginLink>>,
-  TError,
-  { data: BodyType<RequestOwnerLoginLinkBody> },
-  TContext
-> => {
-  return useMutation(getRequestOwnerLoginLinkMutationOptions(options));
-};
-
-/**
- * @summary Exchange a magic-link token for an owner session cookie
- */
-export const getExchangeOwnerLoginTokenUrl = () => {
-  return `/api/owners/login`;
-};
-
-export const exchangeOwnerLoginToken = async (
-  exchangeOwnerLoginTokenBody: ExchangeOwnerLoginTokenBody,
-  options?: RequestInit,
-): Promise<SimpleAcceptedResponse> => {
-  return customFetch<SimpleAcceptedResponse>(getExchangeOwnerLoginTokenUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(exchangeOwnerLoginTokenBody),
-  });
-};
-
-export const getExchangeOwnerLoginTokenMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof exchangeOwnerLoginToken>>,
-    TError,
-    { data: BodyType<ExchangeOwnerLoginTokenBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof exchangeOwnerLoginToken>>,
-  TError,
-  { data: BodyType<ExchangeOwnerLoginTokenBody> },
-  TContext
-> => {
-  const mutationKey = ["exchangeOwnerLoginToken"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof exchangeOwnerLoginToken>>,
-    { data: BodyType<ExchangeOwnerLoginTokenBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return exchangeOwnerLoginToken(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type ExchangeOwnerLoginTokenMutationResult = NonNullable<
-  Awaited<ReturnType<typeof exchangeOwnerLoginToken>>
->;
-export type ExchangeOwnerLoginTokenMutationBody =
-  BodyType<ExchangeOwnerLoginTokenBody>;
-export type ExchangeOwnerLoginTokenMutationError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Exchange a magic-link token for an owner session cookie
- */
-export const useExchangeOwnerLoginToken = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof exchangeOwnerLoginToken>>,
-    TError,
-    { data: BodyType<ExchangeOwnerLoginTokenBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof exchangeOwnerLoginToken>>,
-  TError,
-  { data: BodyType<ExchangeOwnerLoginTokenBody> },
-  TContext
-> => {
-  return useMutation(getExchangeOwnerLoginTokenMutationOptions(options));
-};
-
-/**
- * @summary Get the current owner session
- */
-export const getGetOwnerSessionUrl = () => {
-  return `/api/owners/session`;
-};
-
-export const getOwnerSession = async (
-  options?: RequestInit,
-): Promise<OwnerSessionResponse> => {
-  return customFetch<OwnerSessionResponse>(getGetOwnerSessionUrl(), {
+): Promise<OrganizationResponse> => {
+  return customFetch<OrganizationResponse>(getGetOrganizationUrl(), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetOwnerSessionQueryKey = () => {
-  return [`/api/owners/session`] as const;
+export const getGetOrganizationQueryKey = () => {
+  return [`/api/org`] as const;
 };
 
-export const getGetOwnerSessionQueryOptions = <
-  TData = Awaited<ReturnType<typeof getOwnerSession>>,
+export const getGetOrganizationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOrganization>>,
   TError = ErrorType<ErrorEnvelope>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getOwnerSession>>,
+    Awaited<ReturnType<typeof getOrganization>>,
     TError,
     TData
   >;
@@ -849,40 +583,40 @@ export const getGetOwnerSessionQueryOptions = <
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetOwnerSessionQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetOrganizationQueryKey();
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getOwnerSession>>> = ({
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrganization>>> = ({
     signal,
-  }) => getOwnerSession({ signal, ...requestOptions });
+  }) => getOrganization({ signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getOwnerSession>>,
+    Awaited<ReturnType<typeof getOrganization>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetOwnerSessionQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getOwnerSession>>
+export type GetOrganizationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOrganization>>
 >;
-export type GetOwnerSessionQueryError = ErrorType<ErrorEnvelope>;
+export type GetOrganizationQueryError = ErrorType<ErrorEnvelope>;
 
 /**
- * @summary Get the current owner session
+ * @summary Get the caller's organization (Clerk session) with its venues
  */
 
-export function useGetOwnerSession<
-  TData = Awaited<ReturnType<typeof getOwnerSession>>,
+export function useGetOrganization<
+  TData = Awaited<ReturnType<typeof getOrganization>>,
   TError = ErrorType<ErrorEnvelope>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getOwnerSession>>,
+    Awaited<ReturnType<typeof getOrganization>>,
     TError,
     TData
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetOwnerSessionQueryOptions(options);
+  const queryOptions = getGetOrganizationQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -892,85 +626,79 @@ export function useGetOwnerSession<
 }
 
 /**
- * @summary Clear the current owner session cookie
+ * @summary Recent credit ledger entries for the caller's organization
  */
-export const getLogoutOwnerUrl = () => {
-  return `/api/owners/logout`;
+export const getGetOrgCreditHistoryUrl = () => {
+  return `/api/org/credit-history`;
 };
 
-export const logoutOwner = async (
+export const getOrgCreditHistory = async (
   options?: RequestInit,
-): Promise<SimpleAcceptedResponse> => {
-  return customFetch<SimpleAcceptedResponse>(getLogoutOwnerUrl(), {
+): Promise<OrgCreditHistoryResponse> => {
+  return customFetch<OrgCreditHistoryResponse>(getGetOrgCreditHistoryUrl(), {
     ...options,
-    method: "POST",
+    method: "GET",
   });
 };
 
-export const getLogoutOwnerMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof logoutOwner>>,
-    TError,
-    void,
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof logoutOwner>>,
-  TError,
-  void,
-  TContext
-> => {
-  const mutationKey = ["logoutOwner"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof logoutOwner>>,
-    void
-  > = () => {
-    return logoutOwner(requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
+export const getGetOrgCreditHistoryQueryKey = () => {
+  return [`/api/org/credit-history`] as const;
 };
 
-export type LogoutOwnerMutationResult = NonNullable<
-  Awaited<ReturnType<typeof logoutOwner>>
->;
+export const getGetOrgCreditHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOrgCreditHistory>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getOrgCreditHistory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
 
-export type LogoutOwnerMutationError = ErrorType<unknown>;
+  const queryKey = queryOptions?.queryKey ?? getGetOrgCreditHistoryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getOrgCreditHistory>>
+  > = ({ signal }) => getOrgCreditHistory({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getOrgCreditHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetOrgCreditHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOrgCreditHistory>>
+>;
+export type GetOrgCreditHistoryQueryError = ErrorType<ErrorEnvelope>;
 
 /**
- * @summary Clear the current owner session cookie
+ * @summary Recent credit ledger entries for the caller's organization
  */
-export const useLogoutOwner = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
+
+export function useGetOrgCreditHistory<
+  TData = Awaited<ReturnType<typeof getOrgCreditHistory>>,
+  TError = ErrorType<ErrorEnvelope>,
 >(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof logoutOwner>>,
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getOrgCreditHistory>>,
     TError,
-    void,
-    TContext
+    TData
   >;
   request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof logoutOwner>>,
-  TError,
-  void,
-  TContext
-> => {
-  return useMutation(getLogoutOwnerMutationOptions(options));
-};
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOrgCreditHistoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get venue dashboard (owner session)
@@ -1403,180 +1131,6 @@ export const useDeleteVenueMedia = <
   TContext
 > => {
   return useMutation(getDeleteVenueMediaMutationOptions(options));
-};
-
-/**
- * @summary Start Stripe Checkout for subscription or credit pack (owner session)
- */
-export const getCreateBillingCheckoutUrl = (slug: string) => {
-  return `/api/venues/${slug}/billing/checkout`;
-};
-
-export const createBillingCheckout = async (
-  slug: string,
-  billingCheckoutBody: BillingCheckoutBody,
-  options?: RequestInit,
-): Promise<BillingCheckoutResponse> => {
-  return customFetch<BillingCheckoutResponse>(
-    getCreateBillingCheckoutUrl(slug),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...options?.headers },
-      body: JSON.stringify(billingCheckoutBody),
-    },
-  );
-};
-
-export const getCreateBillingCheckoutMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBillingCheckout>>,
-    TError,
-    { slug: string; data: BodyType<BillingCheckoutBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof createBillingCheckout>>,
-  TError,
-  { slug: string; data: BodyType<BillingCheckoutBody> },
-  TContext
-> => {
-  const mutationKey = ["createBillingCheckout"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createBillingCheckout>>,
-    { slug: string; data: BodyType<BillingCheckoutBody> }
-  > = (props) => {
-    const { slug, data } = props ?? {};
-
-    return createBillingCheckout(slug, data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type CreateBillingCheckoutMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createBillingCheckout>>
->;
-export type CreateBillingCheckoutMutationBody = BodyType<BillingCheckoutBody>;
-export type CreateBillingCheckoutMutationError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Start Stripe Checkout for subscription or credit pack (owner session)
- */
-export const useCreateBillingCheckout = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBillingCheckout>>,
-    TError,
-    { slug: string; data: BodyType<BillingCheckoutBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof createBillingCheckout>>,
-  TError,
-  { slug: string; data: BodyType<BillingCheckoutBody> },
-  TContext
-> => {
-  return useMutation(getCreateBillingCheckoutMutationOptions(options));
-};
-
-/**
- * @summary Open Stripe Customer Portal (owner session)
- */
-export const getCreateBillingPortalUrl = (slug: string) => {
-  return `/api/venues/${slug}/billing/portal`;
-};
-
-export const createBillingPortal = async (
-  slug: string,
-  options?: RequestInit,
-): Promise<BillingPortalResponse> => {
-  return customFetch<BillingPortalResponse>(getCreateBillingPortalUrl(slug), {
-    ...options,
-    method: "POST",
-  });
-};
-
-export const getCreateBillingPortalMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBillingPortal>>,
-    TError,
-    { slug: string },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof createBillingPortal>>,
-  TError,
-  { slug: string },
-  TContext
-> => {
-  const mutationKey = ["createBillingPortal"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createBillingPortal>>,
-    { slug: string }
-  > = (props) => {
-    const { slug } = props ?? {};
-
-    return createBillingPortal(slug, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type CreateBillingPortalMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createBillingPortal>>
->;
-
-export type CreateBillingPortalMutationError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Open Stripe Customer Portal (owner session)
- */
-export const useCreateBillingPortal = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBillingPortal>>,
-    TError,
-    { slug: string },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof createBillingPortal>>,
-  TError,
-  { slug: string },
-  TContext
-> => {
-  return useMutation(getCreateBillingPortalMutationOptions(options));
 };
 
 /**

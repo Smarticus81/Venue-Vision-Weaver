@@ -1,4 +1,10 @@
-import { db, venuesTable, creditTransactionsTable, coupleSessionsTable } from "@workspace/db";
+import {
+  db,
+  venuesTable,
+  organizationsTable,
+  creditTransactionsTable,
+  coupleSessionsTable,
+} from "@workspace/db";
 import { eq, and, sql, gte } from "drizzle-orm";
 import { logger } from "./logger.js";
 
@@ -43,7 +49,31 @@ export function toPublicVenue(
   };
 }
 
+/**
+ * Billing lives on the organization. A venue with an organizationId draws
+ * from the org balance; a legacy venue (no org yet) still draws from its own
+ * venue-level balance until an owner sign-in adopts it.
+ */
+async function resolveVenueOrgId(venueId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ organizationId: venuesTable.organizationId })
+    .from(venuesTable)
+    .where(eq(venuesTable.id, venueId));
+  return row?.organizationId ?? null;
+}
+
+export async function getOrgCreditsBalance(orgId: number): Promise<number> {
+  const [row] = await db
+    .select({ creditsBalance: organizationsTable.creditsBalance })
+    .from(organizationsTable)
+    .where(eq(organizationsTable.id, orgId));
+  return row?.creditsBalance ?? 0;
+}
+
+/** Effective spendable balance for a venue (org balance when adopted). */
 export async function getVenueCreditsBalance(venueId: number): Promise<number> {
+  const orgId = await resolveVenueOrgId(venueId);
+  if (orgId != null) return getOrgCreditsBalance(orgId);
   const [row] = await db
     .select({ creditsBalance: venuesTable.creditsBalance })
     .from(venuesTable)
@@ -51,97 +81,77 @@ export async function getVenueCreditsBalance(venueId: number): Promise<number> {
   return row?.creditsBalance ?? 0;
 }
 
-export async function grantCredits(
-  venueId: number,
+export async function grantCreditsToOrg(
+  orgId: number,
   amount: number,
   reason: string,
-  stripeEventId?: string | null,
+  billingEventId?: string | null,
 ): Promise<number> {
-  if (amount <= 0) return getVenueCreditsBalance(venueId);
+  if (amount <= 0) return getOrgCreditsBalance(orgId);
 
   try {
     return await db.transaction(async (tx) => {
-      if (stripeEventId) {
-        await tx.insert(creditTransactionsTable).values({
-          venueId,
-          delta: amount,
-          reason,
-          stripeEventId,
-        });
-      }
+      await tx.insert(creditTransactionsTable).values({
+        organizationId: orgId,
+        delta: amount,
+        reason,
+        stripeEventId: billingEventId ?? null,
+      });
 
       const [updated] = await tx
-        .update(venuesTable)
-        .set({ creditsBalance: sql`${venuesTable.creditsBalance} + ${amount}` })
-        .where(eq(venuesTable.id, venueId))
-        .returning({ creditsBalance: venuesTable.creditsBalance });
-
-      if (!stripeEventId) {
-        await tx.insert(creditTransactionsTable).values({
-          venueId,
-          delta: amount,
-          reason,
-          stripeEventId: null,
-        });
-      }
+        .update(organizationsTable)
+        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} + ${amount}` })
+        .where(eq(organizationsTable.id, orgId))
+        .returning({ creditsBalance: organizationsTable.creditsBalance });
 
       return updated?.creditsBalance ?? 0;
     });
   } catch (error) {
-    if (isStripeEventReplay(error)) {
-      logger.info({ venueId, stripeEventId }, "Ignored duplicate Stripe credit grant");
-      return getVenueCreditsBalance(venueId);
+    if (isBillingEventReplay(error)) {
+      logger.info({ orgId, billingEventId }, "Ignored duplicate billing credit grant");
+      return getOrgCreditsBalance(orgId);
     }
     throw error;
   }
 }
 
-export async function setCreditsBalance(
-  venueId: number,
+export async function setOrgCreditsBalance(
+  orgId: number,
   newBalance: number,
   reason: string,
-  stripeEventId?: string | null,
+  billingEventId?: string | null,
 ): Promise<number> {
   try {
     return await db.transaction(async (tx) => {
       const [current] = await tx
-        .select({ creditsBalance: venuesTable.creditsBalance })
-        .from(venuesTable)
-        .where(eq(venuesTable.id, venueId));
+        .select({ creditsBalance: organizationsTable.creditsBalance })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, orgId));
 
       const prev = current?.creditsBalance ?? 0;
       const delta = newBalance - prev;
 
-      if (stripeEventId) {
+      if (billingEventId || delta !== 0) {
         await tx.insert(creditTransactionsTable).values({
-          venueId,
+          organizationId: orgId,
           delta,
           reason,
-          stripeEventId,
+          stripeEventId: billingEventId ?? null,
         });
       }
 
       const [updated] = await tx
-        .update(venuesTable)
+        .update(organizationsTable)
         .set({ creditsBalance: newBalance })
-        .where(eq(venuesTable.id, venueId))
-        .returning({ creditsBalance: venuesTable.creditsBalance });
-
-      if (!stripeEventId && delta !== 0) {
-        await tx.insert(creditTransactionsTable).values({
-          venueId,
-          delta,
-          reason,
-          stripeEventId: null,
-        });
-      }
+        .where(eq(organizationsTable.id, orgId))
+        .returning({ creditsBalance: organizationsTable.creditsBalance });
 
       return updated?.creditsBalance ?? 0;
     });
   } catch (error) {
-    if (isStripeEventReplay(error)) {
-      logger.info({ venueId, stripeEventId }, "Ignored duplicate Stripe balance grant");
-      return getVenueCreditsBalance(venueId);
+    if (isBillingEventReplay(error)) {
+      logger.info({ orgId, billingEventId }, "Ignored duplicate billing balance grant");
+      return getOrgCreditsBalance(orgId);
     }
     throw error;
   }
@@ -152,18 +162,29 @@ export async function debitCredits(
   sessionId: number,
   amount: number,
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(venuesTable)
-      .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${amount}` })
-      .where(
-        and(eq(venuesTable.id, venueId), gte(venuesTable.creditsBalance, amount)),
-      )
-      .returning({ creditsBalance: venuesTable.creditsBalance });
+  const orgId = await resolveVenueOrgId(venueId);
 
-    if (!updated) return false;
+  return db.transaction(async (tx) => {
+    if (orgId != null) {
+      const [updated] = await tx
+        .update(organizationsTable)
+        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${amount}` })
+        .where(
+          and(eq(organizationsTable.id, orgId), gte(organizationsTable.creditsBalance, amount)),
+        )
+        .returning({ creditsBalance: organizationsTable.creditsBalance });
+      if (!updated) return false;
+    } else {
+      const [updated] = await tx
+        .update(venuesTable)
+        .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${amount}` })
+        .where(and(eq(venuesTable.id, venueId), gte(venuesTable.creditsBalance, amount)))
+        .returning({ creditsBalance: venuesTable.creditsBalance });
+      if (!updated) return false;
+    }
 
     await tx.insert(creditTransactionsTable).values({
+      organizationId: orgId,
       venueId,
       delta: -amount,
       reason: "session_debit",
@@ -204,12 +225,26 @@ export async function refundCreditsForSession(sessionId: number): Promise<boolea
 
     if (!cleared) return null;
 
-    await tx
-      .update(venuesTable)
-      .set({ creditsBalance: sql`${venuesTable.creditsBalance} + ${session.creditsCharged}` })
+    const [venueRow] = await tx
+      .select({ organizationId: venuesTable.organizationId })
+      .from(venuesTable)
       .where(eq(venuesTable.id, session.venueId));
+    const orgId = venueRow?.organizationId ?? null;
+
+    if (orgId != null) {
+      await tx
+        .update(organizationsTable)
+        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} + ${session.creditsCharged}` })
+        .where(eq(organizationsTable.id, orgId));
+    } else {
+      await tx
+        .update(venuesTable)
+        .set({ creditsBalance: sql`${venuesTable.creditsBalance} + ${session.creditsCharged}` })
+        .where(eq(venuesTable.id, session.venueId));
+    }
 
     await tx.insert(creditTransactionsTable).values({
+      organizationId: orgId,
       venueId: session.venueId,
       delta: session.creditsCharged,
       reason: "session_refund",
@@ -227,7 +262,7 @@ export async function refundCreditsForSession(sessionId: number): Promise<boolea
   return true;
 }
 
-function isStripeEventReplay(error: unknown): boolean {
+function isBillingEventReplay(error: unknown): boolean {
   const candidate = error as {
     code?: string;
     constraint?: string;

@@ -1,6 +1,18 @@
 -- Run in Supabase SQL Editor if `pnpm run setup:db` cannot connect.
 -- Safe on a new empty project.
 
+-- The billing tenant: one Clerk-backed organization owns the subscription,
+-- the credit balance, and any number of venues.
+CREATE TABLE IF NOT EXISTS organizations (
+  id SERIAL PRIMARY KEY,
+  clerk_org_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  plan TEXT NOT NULL DEFAULT 'trial',
+  credits_balance INTEGER NOT NULL DEFAULT 5,
+  billing_period_end TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS venues (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -24,7 +36,8 @@ ALTER TABLE venues
   ADD COLUMN IF NOT EXISTS contact_email TEXT,
   ADD COLUMN IF NOT EXISTS contact_phone TEXT,
   ADD COLUMN IF NOT EXISTS website_url TEXT,
-  ADD COLUMN IF NOT EXISTS booking_url TEXT;
+  ADD COLUMN IF NOT EXISTS booking_url TEXT,
+  ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);
 
 ALTER TABLE venues
   ALTER COLUMN owner_email SET NOT NULL;
@@ -138,13 +151,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS generated_assets_session_slot_unique
 
 CREATE TABLE IF NOT EXISTS credit_transactions (
   id SERIAL PRIMARY KEY,
-  venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+  organization_id INTEGER REFERENCES organizations(id),
+  venue_id INTEGER REFERENCES venues(id) ON DELETE CASCADE,
   delta INTEGER NOT NULL,
   reason TEXT NOT NULL,
   session_id INTEGER REFERENCES couple_sessions(id) ON DELETE SET NULL,
   stripe_event_id TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Ledger rows moved to the organization level; venue_id is provenance only.
+ALTER TABLE credit_transactions
+  ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id),
+  ALTER COLUMN venue_id DROP NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS credit_transactions_stripe_event_id_unique
   ON credit_transactions (stripe_event_id)

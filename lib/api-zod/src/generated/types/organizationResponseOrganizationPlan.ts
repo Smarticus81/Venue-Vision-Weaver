@@ -6,13 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Organization plan (billing lives on the organization).
- */
-export type VenueResponsePlan =
-  (typeof VenueResponsePlan)[keyof typeof VenueResponsePlan];
+export type OrganizationResponseOrganizationPlan =
+  (typeof OrganizationResponseOrganizationPlan)[keyof typeof OrganizationResponseOrganizationPlan];
 
-export const VenueResponsePlan = {
+export const OrganizationResponseOrganizationPlan = {
   trial: "trial",
   starter: "starter",
   growth: "growth",

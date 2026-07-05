@@ -23,7 +23,11 @@ export interface VenueResponse {
   websiteUrl?: string | null;
   /** Public tour booking URL. */
   bookingUrl?: string | null;
+  /** Billing organization that owns this venue. */
+  organizationId?: number | null;
+  /** Organization plan (billing lives on the organization). */
   plan: VenueResponsePlan;
+  /** Organization credit balance (shared across the org's venues). */
   creditsBalance: number;
   billingPeriodEnd?: Date | null;
   createdAt: Date;

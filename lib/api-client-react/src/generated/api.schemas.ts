@@ -68,6 +68,9 @@ export interface CreateVenueBody {
   bookingUrl?: string;
 }
 
+/**
+ * Organization plan (billing lives on the organization).
+ */
 export type VenueResponsePlan =
   (typeof VenueResponsePlan)[keyof typeof VenueResponsePlan];
 
@@ -94,31 +97,14 @@ export interface VenueResponse {
   websiteUrl?: string | null;
   /** Public tour booking URL. */
   bookingUrl?: string | null;
+  /** Billing organization that owns this venue. */
+  organizationId?: number | null;
+  /** Organization plan (billing lives on the organization). */
   plan: VenueResponsePlan;
+  /** Organization credit balance (shared across the org's venues). */
   creditsBalance: number;
   billingPeriodEnd?: string | null;
   createdAt: string;
-}
-
-export type BillingCheckoutBodyProduct =
-  (typeof BillingCheckoutBodyProduct)[keyof typeof BillingCheckoutBodyProduct];
-
-export const BillingCheckoutBodyProduct = {
-  starter: "starter",
-  growth: "growth",
-  credit_pack: "credit_pack",
-} as const;
-
-export interface BillingCheckoutBody {
-  product: BillingCheckoutBodyProduct;
-}
-
-export interface BillingCheckoutResponse {
-  url: string;
-}
-
-export interface BillingPortalResponse {
-  url: string;
 }
 
 /**
@@ -147,15 +133,51 @@ export interface SimpleAcceptedResponse {
   accepted: boolean;
 }
 
-export type OwnerSessionResponseVenuesItem = {
+export type OrganizationResponseOrganizationPlan =
+  (typeof OrganizationResponseOrganizationPlan)[keyof typeof OrganizationResponseOrganizationPlan];
+
+export const OrganizationResponseOrganizationPlan = {
+  trial: "trial",
+  starter: "starter",
+  growth: "growth",
+  none: "none",
+} as const;
+
+export type OrganizationResponseOrganization = {
+  id: number;
+  name: string;
+  plan: OrganizationResponseOrganizationPlan;
+  creditsBalance: number;
+  billingPeriodEnd?: string | null;
+  clerkOrgId: string;
+  /** Caller's Clerk role in this organization (e.g. org:admin). */
+  role?: string | null;
+};
+
+export type OrganizationResponseVenuesItem = {
   id: number;
   name: string;
   slug: string;
+  tagline?: string | null;
+  createdAt: string;
 };
 
-export interface OwnerSessionResponse {
-  ownerEmail: string;
-  venues: OwnerSessionResponseVenuesItem[];
+export interface OrganizationResponse {
+  organization: OrganizationResponseOrganization;
+  venues: OrganizationResponseVenuesItem[];
+}
+
+export type OrgCreditHistoryResponseTransactionsItem = {
+  id: number;
+  delta: number;
+  reason: string;
+  venueId?: number | null;
+  sessionId?: number | null;
+  createdAt: string;
+};
+
+export interface OrgCreditHistoryResponse {
+  transactions: OrgCreditHistoryResponseTransactionsItem[];
 }
 
 /**
@@ -457,14 +479,6 @@ export interface UploadUrlResponse {
   objectPath: string;
   metadata?: UploadUrlRequest;
 }
-
-export type RequestOwnerLoginLinkBody = {
-  email: string;
-};
-
-export type ExchangeOwnerLoginTokenBody = {
-  token: string;
-};
 
 export type GetStorageObjectParams = {
   /**

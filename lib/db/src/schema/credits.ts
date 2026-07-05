@@ -18,14 +18,19 @@ export const creditTransactionsTable = pgTable(
   "credit_transactions",
   {
     id: serial("id").primaryKey(),
-    venueId: integer("venue_id")
-      .notNull()
-      .references(() => venuesTable.id, { onDelete: "cascade" }),
+    // Ledger rows belong to the billing organization; venueId records which
+    // venue triggered the movement when one did (debits/refunds).
+    organizationId: integer("organization_id"),
+    venueId: integer("venue_id").references(() => venuesTable.id, {
+      onDelete: "cascade",
+    }),
     delta: integer("delta").notNull(),
     reason: text("reason").notNull(),
     sessionId: integer("session_id").references(() => coupleSessionsTable.id, {
       onDelete: "set null",
     }),
+    // Unique id of the upstream billing event (Clerk webhook message id, or a
+    // legacy Stripe event id) — the idempotency key for grants.
     stripeEventId: text("stripe_event_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

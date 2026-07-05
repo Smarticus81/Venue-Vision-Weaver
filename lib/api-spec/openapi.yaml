@@ -16,8 +16,11 @@ tags:
     description: Couple photo sessions
   - name: storage
     description: Object storage upload and serving endpoints
-  - name: billing
-    description: Stripe billing and credits
+  - name: organization
+    description: |
+      Organization-level account and billing. Auth is a Clerk session; billing
+      is Clerk Billing (organization plans), with credits granted by the Clerk
+      webhook. One organization owns many venues.
 paths:
   /healthz:
     get:
@@ -166,137 +169,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
-  /owners/recover:
-    post:
-      operationId: recoverOwnerVenues
-      tags: [venues]
-      summary: Email a venue owner the profile links for venues they own (magic link)
-      description: |
-        Looks up all venues registered with the given ownerEmail and emails the
-        owner direct profile links. Always returns `{accepted: true}` to
-        prevent enumeration. Rate-limited per IP and per email.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RecoverOwnerBody"
-      responses:
-        "200":
-          description: Accepted (regardless of whether a venue was found)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimpleAcceptedResponse"
-        "400":
-          description: Invalid email
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "429":
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
-  /owners/login-link:
-    post:
-      operationId: requestOwnerLoginLink
-      tags: [venues]
-      summary: Email a one-time owner login link
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email]
-              properties:
-                email:
-                  type: string
-                  format: email
-      responses:
-        "200":
-          description: Accepted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimpleAcceptedResponse"
-        "400":
-          description: Invalid email
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "429":
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
-  /owners/login:
-    post:
-      operationId: exchangeOwnerLoginToken
-      tags: [venues]
-      summary: Exchange a magic-link token for an owner session cookie
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [token]
-              properties:
-                token:
-                  type: string
-      responses:
-        "200":
-          description: Owner session created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimpleAcceptedResponse"
-        "401":
-          description: Invalid or expired token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
-  /owners/session:
+  /org:
     get:
-      operationId: getOwnerSession
-      tags: [venues]
-      summary: Get the current owner session
+      operationId: getOrganization
+      tags: [organization]
+      summary: Get the caller's organization (Clerk session) with its venues
+      description: |
+        Requires a signed-in Clerk user with an active organization. The
+        organization is the billing tenant: it owns the plan, the credit
+        balance, and every venue listed here.
       responses:
         "200":
-          description: Owner session
+          description: Organization summary
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OwnerSessionResponse"
+                $ref: "#/components/schemas/OrganizationResponse"
         "401":
           description: Not signed in
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-
-  /owners/logout:
-    post:
-      operationId: logoutOwner
-      tags: [venues]
-      summary: Clear the current owner session cookie
-      responses:
-        "200":
-          description: Signed out
+        "403":
+          description: No active organization
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimpleAcceptedResponse"
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /org/credit-history:
+    get:
+      operationId: getOrgCreditHistory
+      tags: [organization]
+      summary: Recent credit ledger entries for the caller's organization
+      responses:
+        "200":
+          description: Ledger entries, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgCreditHistoryResponse"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: No active organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /venues/{slug}/dashboard:
     get:
@@ -441,68 +366,6 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           description: Media not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
-  /venues/{slug}/billing/checkout:
-    post:
-      operationId: createBillingCheckout
-      tags: [billing]
-      summary: Start Stripe Checkout for subscription or credit pack (owner session)
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BillingCheckoutBody"
-      responses:
-        "200":
-          description: Checkout URL
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BillingCheckoutResponse"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "503":
-          description: Billing not configured
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
-  /venues/{slug}/billing/portal:
-    post:
-      operationId: createBillingPortal
-      tags: [billing]
-      summary: Open Stripe Customer Portal (owner session)
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Portal URL
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BillingPortalResponse"
-        "401":
-          description: Unauthorized
           content:
             application/json:
               schema:
@@ -1027,11 +890,17 @@ components:
           type: string
           nullable: true
           description: Public tour booking URL.
+        organizationId:
+          type: integer
+          nullable: true
+          description: Billing organization that owns this venue.
         plan:
           type: string
           enum: [trial, starter, growth, none]
+          description: Organization plan (billing lives on the organization).
         creditsBalance:
           type: integer
+          description: Organization credit balance (shared across the org's venues).
         billingPeriodEnd:
           type: string
           format: date-time
@@ -1039,30 +908,6 @@ components:
         createdAt:
           type: string
           format: date-time
-
-    BillingCheckoutBody:
-      type: object
-      required: [product]
-      properties:
-        product:
-          type: string
-          enum: [starter, growth, credit_pack]
-
-    BillingCheckoutResponse:
-      type: object
-      required: [url]
-      properties:
-        url:
-          type: string
-          format: uri
-
-    BillingPortalResponse:
-      type: object
-      required: [url]
-      properties:
-        url:
-          type: string
-          format: uri
 
     UpdateVenueBody:
       type: object
@@ -1111,18 +956,38 @@ components:
         accepted:
           type: boolean
 
-    OwnerSessionResponse:
+    OrganizationResponse:
       type: object
-      required: [ownerEmail, venues]
+      required: [organization, venues]
       properties:
-        ownerEmail:
-          type: string
-          format: email
+        organization:
+          type: object
+          required: [id, name, plan, creditsBalance, clerkOrgId]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            plan:
+              type: string
+              enum: [trial, starter, growth, none]
+            creditsBalance:
+              type: integer
+            billingPeriodEnd:
+              type: string
+              format: date-time
+              nullable: true
+            clerkOrgId:
+              type: string
+            role:
+              type: string
+              nullable: true
+              description: Caller's Clerk role in this organization (e.g. org:admin).
         venues:
           type: array
           items:
             type: object
-            required: [id, name, slug]
+            required: [id, name, slug, createdAt]
             properties:
               id:
                 type: integer
@@ -1130,6 +995,38 @@ components:
                 type: string
               slug:
                 type: string
+              tagline:
+                type: string
+                nullable: true
+              createdAt:
+                type: string
+                format: date-time
+
+    OrgCreditHistoryResponse:
+      type: object
+      required: [transactions]
+      properties:
+        transactions:
+          type: array
+          items:
+            type: object
+            required: [id, delta, reason, createdAt]
+            properties:
+              id:
+                type: integer
+              delta:
+                type: integer
+              reason:
+                type: string
+              venueId:
+                type: integer
+                nullable: true
+              sessionId:
+                type: integer
+                nullable: true
+              createdAt:
+                type: string
+                format: date-time
 
     VenuePublicResponse:
       type: object

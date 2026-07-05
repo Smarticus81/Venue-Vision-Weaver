@@ -1,14 +1,16 @@
 export function canReadVenueMediaReference(params: {
   publicVenueSlug?: string | null;
   venueSlug: string;
-  ownerEmail?: string | null;
-  venueOwnerEmail?: string | null;
+  callerOrgId?: number | null;
+  venueOrganizationId?: number | null;
 }): boolean {
   if (params.publicVenueSlug && params.publicVenueSlug === params.venueSlug) {
     return true;
   }
 
-  const ownerEmail = params.ownerEmail?.toLowerCase();
-  const venueOwnerEmail = params.venueOwnerEmail?.toLowerCase();
-  return Boolean(ownerEmail && venueOwnerEmail && ownerEmail === venueOwnerEmail);
+  return Boolean(
+    params.callerOrgId != null &&
+      params.venueOrganizationId != null &&
+      params.callerOrgId === params.venueOrganizationId,
+  );
 }

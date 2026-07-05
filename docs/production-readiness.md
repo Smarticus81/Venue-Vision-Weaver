@@ -30,14 +30,14 @@ The command checks:
 - production environment policy with `NODE_ENV=production`
 - generated API and web app build artifacts
 - source-contract smoke tests for gallery-only flow, owner auth, protected
-  storage, Stripe idempotency, quality thresholds, and generated asset visibility
+  storage, billing-event idempotency, quality thresholds, and generated asset visibility
 - ffmpeg availability for the branded motion reel, either locally or through the
   Railway Dockerfile deployment image
 - saved live gallery QA evidence from real consented references, including an
   automated passing `quality-report.json` with input SHA-256 fingerprints and
   manual acceptance marker
 - migrated database tables, columns, non-null constraints, and critical unique
-  indexes for uploads, owner sessions, generated gallery metadata, and Stripe
+  indexes for uploads, owner sessions, generated gallery metadata, and billing
   webhook idempotency
 
 After deployment, verify the live app:
@@ -60,11 +60,11 @@ test. It degrades if launch-critical schema items are missing or nullable,
 including owner magic-link/session columns, generated-asset quality metadata
 columns, venue media coverage metadata, venue slug and share-token uniqueness,
 upload intent uniqueness, owner auth token/session uniqueness, and the partial
-unique `stripe_event_id` index that prevents Stripe webhook replay from
+unique `stripe_event_id` index that prevents billing webhook replay (Clerk svix message ids) from
 duplicating credits.
 
 Railway is configured to use `/api/readyz` as the deploy health check, so a
-deployment with missing DB/storage/Gemini/Stripe/email/ffmpeg readiness should
+deployment with missing DB/storage/Gemini/Clerk/email/ffmpeg readiness should
 not be treated as healthy.
 
 ## Gallery Quality Gate
