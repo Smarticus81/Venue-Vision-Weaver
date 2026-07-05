@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -27,11 +27,11 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-gold: hsl(var(--gold));
-  --color-gold-foreground: hsl(var(--gold-foreground));
-  --color-gold-hover: hsl(var(--gold-hover));
+  --color-rose: hsl(var(--rose));
+  --color-rose-foreground: hsl(var(--rose-foreground));
+  --color-rose-hover: hsl(var(--rose-hover));
   --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
+  --font-serif: var(--font-display);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -39,35 +39,40 @@
 }
 
 :root {
-  /* Glimpse — premium white + antique gold */
-  --background: 0 0% 100%;
-  --foreground: 0 0% 7%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 7%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 7%;
-  --primary: 0 0% 7%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 40 33% 97%;
-  --secondary-foreground: 0 0% 7%;
-  --muted: 40 14% 96%;
-  --muted-foreground: 220 6% 42%;
-  --accent: 40 38% 95%;
-  --accent-foreground: 0 0% 7%;
-  --destructive: 350 74% 48%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 40 16% 90%;
-  --input: 40 16% 90%;
-  --ring: 39 42% 59%;
-  --radius: 0.75rem;
+  /* glimpse — editorial darkroom: warm near-black, porcelain type,
+     film grain, one candlelight-rose accent. */
+  --background: 20 9% 6%;
+  --foreground: 40 23% 92%;
+  --card: 24 8% 9%;
+  --card-foreground: 40 23% 92%;
+  --card-border: 26 8% 16%;
+  --popover: 24 8% 10%;
+  --popover-foreground: 40 23% 92%;
+  --popover-border: 26 8% 18%;
+  --primary: 40 23% 92%;
+  --primary-foreground: 20 9% 8%;
+  --secondary: 24 7% 13%;
+  --secondary-foreground: 40 23% 92%;
+  --muted: 24 7% 12%;
+  --muted-foreground: 33 9% 64%;
+  --accent: 24 7% 15%;
+  --accent-foreground: 40 23% 92%;
+  --destructive: 0 62% 54%;
+  --destructive-foreground: 40 23% 95%;
+  --border: 26 8% 16%;
+  --input: 26 8% 18%;
+  --ring: 355 58% 71%;
+  --radius: 0.5rem;
 
-  /* Antique gold accent */
-  --gold: 39 42% 59%;
-  --gold-hover: 39 36% 52%;
-  --gold-foreground: 0 0% 100%;
+  /* Candlelight rose accent */
+  --rose: 355 58% 71%;
+  --rose-hover: 355 50% 64%;
+  --rose-foreground: 20 10% 8%;
 
-  --font-serif: 'Playfair Display', Georgia, serif;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  color-scheme: dark;
 }
 
 @layer base {
@@ -81,31 +86,49 @@
   }
 
   h1, h2, h3 {
-    font-family: var(--font-sans);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.01em;
   }
 
-  .font-playfair, .serif {
-    font-family: var(--font-serif);
+  ::selection {
+    background: hsl(var(--rose));
+    color: hsl(var(--rose-foreground));
+  }
+
+  .font-display, .serif, .font-playfair {
+    font-family: var(--font-display);
   }
 }
 
 @layer utilities {
-  .text-gold {
-    color: hsl(var(--gold));
+  .text-rose {
+    color: hsl(var(--rose));
   }
 
-  .bg-gold {
-    background-color: hsl(var(--gold));
+  .bg-rose {
+    background-color: hsl(var(--rose));
   }
 
-  .bg-gold:hover {
-    background-color: hsl(var(--gold-hover));
+  .border-rose {
+    border-color: hsl(var(--rose));
   }
 
-  .border-gold {
-    border-color: hsl(var(--gold));
+  /* Silver-halide grain: a static SVG turbulence tile, screen-blended. */
+  .grain {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.05;
+    mix-blend-mode: screen;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
   .glimpse-divider {
@@ -119,21 +142,28 @@
   }
 
   .glimpse-card {
-    @apply bg-card border border-border rounded-2xl shadow-sm;
+    @apply bg-card border border-card-border rounded-xl;
   }
 
-  .glimpse-gold-ring {
-    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25);
+  .glimpse-rose-ring {
+    box-shadow: 0 0 0 1px hsl(var(--rose) / 0.3);
   }
 
   .animate-fade-in-up {
-    animation: glimpseFadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: glimpseFadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(16px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in-up {
+      animation-duration: 0.01ms;
+      transform: none;
+    }
   }
 
   @keyframes glimpseFadeInUp {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
   }
 }

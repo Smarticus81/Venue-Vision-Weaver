@@ -10,6 +10,7 @@ import {
 import { ArrowRight, Check } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
 const HERO_IMAGE = "/brand/venue-landing-hero.webp";
 
@@ -65,27 +66,22 @@ export default function VenueLandingPage() {
   // overflow-x must be clip, not hidden: hidden creates a scroll container
   // and silently breaks every position:sticky descendant (header + scrub).
   return (
-    <div className="min-h-screen overflow-x-clip bg-white text-[#141311] font-sans selection:bg-gold selection:text-white">
-      <header className="sticky top-0 z-50 w-full bg-white/85 backdrop-blur-md border-b border-[#f0e9db]">
+    <div className="min-h-screen overflow-x-clip bg-background text-foreground font-sans">
+      <header className="sticky top-0 z-50 w-full bg-background/85 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-6 h-18 md:h-20 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" aria-label="Glimpse home">
-            <span className="text-2xl font-bold tracking-tight text-[#141311]">
-              Glimpse<span className="text-gold">.</span>
-            </span>
-          </a>
+          <GlimpseLogo href="/" />
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               onClick={() => setLocation("/login")}
-              className="rounded-full px-4 md:px-5 text-sm font-medium text-gray-600 hover:text-[#141311]"
+              className="px-4 md:px-5 text-sm font-medium text-muted-foreground hover:text-foreground"
               data-testid="venue-header-sign-in"
             >
               Sign in
             </Button>
             <Button
-              variant="gold"
+              variant="rose"
               onClick={() => setLocation("/create-venue")}
-              className="shadow-lg shadow-[#C2A36B]/20"
               data-testid="venue-header-register"
             >
               Start free
@@ -96,22 +92,22 @@ export default function VenueLandingPage() {
 
       <main>
         {/* Hero — paints statically; nothing above the fold waits on JS. */}
-        <section className="relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden">
+        <section className="grain relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-[radial-gradient(ellipse_at_top,rgba(194,163,107,0.10),transparent_65%)]"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[36rem] bg-[radial-gradient(ellipse_at_top,hsl(var(--rose)/0.09),transparent_65%)]"
           />
-          <div className="container mx-auto px-6">
+          <div className="container relative z-10 mx-auto px-6">
             <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-10 items-center">
               <div className="max-w-xl">
-                <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#eee3cd] bg-[#fdfbf7] px-4 py-1.5 text-xs font-semibold tracking-[0.14em] uppercase text-[#8a7340]">
+                <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-semibold tracking-[0.14em] uppercase text-rose">
                   For wedding venues
                 </p>
-                <h1 className="font-playfair text-[2.9rem] md:text-[4.1rem] leading-[1.04] tracking-tight font-medium text-[#141311] mb-6">
+                <h1 className="font-display text-[2.9rem] md:text-[4.1rem] leading-[1.02] tracking-tight font-medium text-foreground mb-6">
                   Turn venue tours into{" "}
-                  <em className="text-[#ab8951]">bookings.</em>
+                  <em className="text-rose">bookings.</em>
                 </h1>
-                <p className="text-lg md:text-xl text-gray-500 mb-9 max-w-lg leading-relaxed font-light">
+                <p className="text-lg md:text-xl text-muted-foreground mb-9 max-w-lg leading-relaxed font-light">
                   After the tour, glimpse sends each couple a private gallery of
                   themselves in your actual rooms — four photoreal portraits and a
                   branded motion reel — while they're still deciding.
@@ -119,21 +115,21 @@ export default function VenueLandingPage() {
                 <div className="flex flex-col items-start gap-4">
                   <Button
                     size="lg"
-                    variant="gold"
+                    variant="rose"
                     onClick={() => setLocation("/create-venue")}
-                    className="group w-full sm:w-auto px-8 py-6 text-base shadow-lg shadow-[#C2A36B]/25"
+                    className="group w-full sm:w-auto px-8 py-6 text-base shadow-[0_8px_40px_-8px_hsl(var(--rose)/0.5)]"
                     data-testid="venue-hero-register"
                   >
                     Start with 5 free galleries
                     <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 ease-out group-hover:translate-x-1" />
                   </Button>
-                  <p className="text-sm text-gray-500 font-light">
+                  <p className="text-sm text-muted-foreground font-light">
                     No card. No contract. One credit is one couple's complete gallery.
                   </p>
                   <button
                     type="button"
                     onClick={() => setLocation("/login")}
-                    className="text-sm font-medium text-gray-500 underline-offset-4 hover:text-[#141311] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                    className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                     data-testid="owner-cta"
                   >
                     Already set up? Sign in
@@ -142,7 +138,7 @@ export default function VenueLandingPage() {
               </div>
 
               <div className="relative">
-                <div className="relative rounded-[2rem] overflow-hidden border border-[#f0e9db] shadow-2xl shadow-black/10">
+                <div className="relative rounded-xl overflow-hidden border border-card-border shadow-[0_24px_80px_-24px_rgba(0,0,0,0.8)]">
                   <img
                     src={HERO_IMAGE}
                     alt="A venue dashboard on a tablet inside a bright ceremony room, showing a couple's four-image gallery and QR code"
@@ -153,7 +149,7 @@ export default function VenueLandingPage() {
                     className="h-auto w-full object-cover"
                   />
                 </div>
-                <p className="mt-4 text-center text-xs font-medium tracking-[0.16em] uppercase text-gray-500">
+                <p className="mt-4 text-center text-xs font-medium tracking-[0.16em] uppercase text-muted-foreground">
                   Four portraits + a motion reel, delivered with your booking link
                 </p>
               </div>
@@ -162,19 +158,19 @@ export default function VenueLandingPage() {
         </section>
 
         {/* Problem — the felt cost of the cold follow-up. */}
-        <section className="py-20 md:py-28 bg-[#fdfbf7] border-y border-[#f0e9db]">
+        <section className="py-20 md:py-28 bg-card border-y border-card-border">
           <div className="container mx-auto px-6">
             <div className="max-w-3xl mx-auto md:ml-[14%]">
               <Reveal>
-                <p className="text-xs font-semibold tracking-[0.18em] uppercase text-[#8a7340] mb-5">
+                <p className="text-xs font-semibold tracking-[0.18em] uppercase text-rose mb-5">
                   The follow-up problem
                 </p>
-                <h2 className="font-playfair text-3xl md:text-[2.75rem] leading-[1.12] text-[#141311] mb-7">
+                <h2 className="font-display text-3xl md:text-[2.75rem] leading-[1.1] text-foreground mb-7">
                   Every tour ends with "we'll think about it."
                 </h2>
               </Reveal>
               <Reveal delay={0.08}>
-                <div className="space-y-5 text-lg text-gray-500 font-light leading-relaxed max-w-2xl">
+                <div className="space-y-5 text-lg text-muted-foreground font-light leading-relaxed max-w-2xl">
                   <p>
                     Then they tour three more venues, and your thank-you email lands in
                     the same inbox as everyone else's. The couple who fell quiet in your
@@ -182,8 +178,8 @@ export default function VenueLandingPage() {
                   </p>
                   <p>
                     The venue that stays vivid wins the booking — and photos of empty
-                    rooms don't stay vivid. Photos of <em className="text-[#141311] font-normal">them</em> in
-                    your rooms do.
+                    rooms don't stay vivid. Photos of{" "}
+                    <em className="text-foreground font-normal">them</em> in your rooms do.
                   </p>
                 </div>
               </Reveal>
@@ -195,26 +191,26 @@ export default function VenueLandingPage() {
         <MechanismSection />
 
         {/* Proof — what keeps the gallery credible enough to send. */}
-        <section className="py-20 md:py-28 bg-[#fdfbf7] border-y border-[#f0e9db]">
+        <section className="py-20 md:py-28 bg-card border-y border-card-border">
           <div className="container mx-auto px-6 max-w-5xl">
             <Reveal className="max-w-2xl mb-14">
-              <p className="text-xs font-semibold tracking-[0.18em] uppercase text-[#8a7340] mb-5">
+              <p className="text-xs font-semibold tracking-[0.18em] uppercase text-rose mb-5">
                 Why venues trust the send
               </p>
-              <h2 className="font-playfair text-3xl md:text-[2.75rem] leading-[1.12] text-[#141311]">
+              <h2 className="font-display text-3xl md:text-[2.75rem] leading-[1.1] text-foreground">
                 Their faces. Your rooms. Nothing generic.
               </h2>
             </Reveal>
-            <div className="grid gap-px overflow-hidden rounded-3xl border border-[#eee3cd] bg-[#eee3cd] md:grid-cols-3">
+            <div className="grid gap-px overflow-hidden rounded-xl border border-card-border bg-card-border md:grid-cols-3">
               {PROOF_POINTS.map((point, i) => (
-                <Reveal key={point.title} delay={i * 0.07} className="bg-white p-8 md:p-9 h-full">
-                  <span className="mb-6 flex h-9 w-9 items-center justify-center rounded-full border border-[#eee3cd] bg-[#fdfbf7] text-gold">
+                <Reveal key={point.title} delay={i * 0.07} className="bg-background p-8 md:p-9 h-full">
+                  <span className="mb-6 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-rose">
                     <Check className="h-4 w-4" />
                   </span>
-                  <h3 className="text-lg font-bold tracking-tight text-[#141311] mb-3">
+                  <h3 className="font-sans text-lg font-bold tracking-tight text-foreground mb-3">
                     {point.title}
                   </h3>
-                  <p className="text-gray-500 font-light leading-relaxed text-[0.95rem]">
+                  <p className="text-muted-foreground font-light leading-relaxed text-[0.95rem]">
                     {point.text}
                   </p>
                 </Reveal>
@@ -224,14 +220,18 @@ export default function VenueLandingPage() {
         </section>
 
         {/* Risk reversal — the trial, stated plainly. */}
-        <section className="py-20 md:py-28 bg-white">
-          <div className="container mx-auto px-6">
+        <section className="grain relative py-20 md:py-28 bg-background">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[24rem] bg-[radial-gradient(ellipse_at_bottom,hsl(var(--rose)/0.08),transparent_70%)]"
+          />
+          <div className="container relative z-10 mx-auto px-6">
             <div className="max-w-3xl mx-auto text-center">
               <Reveal>
-                <h2 className="font-playfair text-3xl md:text-[2.75rem] leading-[1.12] text-[#141311] mb-6">
+                <h2 className="font-display text-3xl md:text-[2.75rem] leading-[1.1] text-foreground mb-6">
                   Your first five galleries are on us.
                 </h2>
-                <p className="text-lg text-gray-500 font-light leading-relaxed mb-10 max-w-2xl mx-auto">
+                <p className="text-lg text-muted-foreground font-light leading-relaxed mb-10 max-w-2xl mx-auto">
                   Create a workspace, add your venue photos, and hand the link to the
                   next couple who tours. No card and no subscription to start. When the
                   galleries start reopening conversations, add credits — one credit is
@@ -239,9 +239,9 @@ export default function VenueLandingPage() {
                 </p>
                 <Button
                   size="lg"
-                  variant="gold"
+                  variant="rose"
                   onClick={() => setLocation("/create-venue")}
-                  className="group px-8 py-6 text-base shadow-lg shadow-[#C2A36B]/25"
+                  className="group px-8 py-6 text-base shadow-[0_8px_40px_-8px_hsl(var(--rose)/0.5)]"
                   data-testid="venue-trial-register"
                 >
                   Create your venue workspace
@@ -253,21 +253,19 @@ export default function VenueLandingPage() {
         </section>
       </main>
 
-      <footer className="bg-[#fdfbf7] py-12 border-t border-[#f0e9db]">
+      <footer className="bg-card py-12 border-t border-card-border">
         <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <span className="text-xl font-bold tracking-tight text-[#141311]">
-            Glimpse<span className="text-gold">.</span>
-          </span>
-          <nav className="flex items-center gap-6 text-sm text-gray-500">
-            <a href="/couple" className="hover:text-[#141311] underline-offset-4 hover:underline">
+          <GlimpseLogo href="/" />
+          <nav className="flex items-center gap-6 text-sm text-muted-foreground">
+            <a href="/couple" className="hover:text-foreground underline-offset-4 hover:underline">
               For couples
             </a>
-            <a href="/login" className="hover:text-[#141311] underline-offset-4 hover:underline">
+            <a href="/login" className="hover:text-foreground underline-offset-4 hover:underline">
               Sign in
             </a>
           </nav>
-          <p className="text-sm text-gray-500">
-            &copy; {new Date().getFullYear()} Glimpse
+          <p className="text-sm text-muted-foreground">
+            &copy; {new Date().getFullYear()} glimpse
           </p>
         </div>
       </footer>
@@ -302,11 +300,6 @@ function Reveal({
   );
 }
 
-/**
- * Signature moment: a sticky viewport where the four post-tour beats scrub in
- * with scroll position, paced by a gold progress rail. Falls back to a static
- * list on small screens and for reduced-motion visitors.
- */
 function useIsWide() {
   const [wide, setWide] = useState(false);
   useEffect(() => {
@@ -319,26 +312,31 @@ function useIsWide() {
   return wide;
 }
 
+/**
+ * Signature moment: a sticky viewport where the four post-tour beats scrub in
+ * with scroll position, paced by a rose progress rail. Falls back to a static
+ * list for reduced-motion visitors and viewports under 1024px.
+ */
 function MechanismSection() {
   const reduceMotion = useReducedMotion();
   const wide = useIsWide();
 
   if (reduceMotion || !wide) {
     return (
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-background">
         <div className="container mx-auto px-6 max-w-3xl">
           <MechanismHeading />
           <ol className="mt-12 space-y-10">
             {MECHANISM_STEPS.map((step) => (
               <li key={step.index} className="flex gap-5">
-                <span className="font-playfair text-2xl text-gold shrink-0 leading-none pt-1">
+                <span className="font-display text-2xl text-rose shrink-0 leading-none pt-1">
                   {step.index}
                 </span>
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-[#141311] mb-2">
+                  <h3 className="font-sans text-xl font-bold tracking-tight text-foreground mb-2">
                     {step.title}
                   </h3>
-                  <p className="text-gray-500 font-light leading-relaxed">{step.text}</p>
+                  <p className="text-muted-foreground font-light leading-relaxed">{step.text}</p>
                 </div>
               </li>
             ))}
@@ -354,10 +352,10 @@ function MechanismSection() {
 function MechanismHeading() {
   return (
     <div>
-      <p className="text-xs font-semibold tracking-[0.18em] uppercase text-[#8a7340] mb-5">
+      <p className="text-xs font-semibold tracking-[0.18em] uppercase text-rose mb-5">
         How it works
       </p>
-      <h2 className="font-playfair text-3xl md:text-[2.75rem] leading-[1.12] text-[#141311]">
+      <h2 className="font-display text-3xl md:text-[2.75rem] leading-[1.1] text-foreground">
         The 48 hours after the tour.
       </h2>
     </div>
@@ -373,15 +371,15 @@ function ScrubbedMechanism() {
   const railScale = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.4 });
 
   return (
-    <section ref={trackRef} className="relative bg-white" style={{ height: "320vh" }}>
+    <section ref={trackRef} className="relative bg-background" style={{ height: "320vh" }}>
       <div className="sticky top-0 flex h-screen items-center overflow-hidden">
         <div className="container mx-auto px-6">
           <div className="grid grid-cols-[1fr_auto_1.15fr] gap-12 lg:gap-16 items-center">
             <MechanismHeading />
 
-            <div className="relative h-72 w-px bg-[#eee3cd]" aria-hidden>
+            <div className="relative h-72 w-px bg-border" aria-hidden>
               <motion.div
-                className="absolute inset-x-0 top-0 w-px bg-gold origin-top"
+                className="absolute inset-x-0 top-0 w-px bg-rose origin-top"
                 style={{ scaleY: railScale, height: "100%" }}
               />
             </div>
@@ -433,9 +431,9 @@ function StepPanel({
 
   return (
     <motion.div style={{ opacity, y }} className="absolute inset-0 flex flex-col justify-center">
-      <span className="font-playfair text-5xl text-gold/40 leading-none mb-5">{step.index}</span>
-      <h3 className="text-2xl font-bold tracking-tight text-[#141311] mb-3">{step.title}</h3>
-      <p className="max-w-md text-lg text-gray-500 font-light leading-relaxed">{step.text}</p>
+      <span className="font-display text-5xl text-rose/50 leading-none mb-5">{step.index}</span>
+      <h3 className="font-sans text-2xl font-bold tracking-tight text-foreground mb-3">{step.title}</h3>
+      <p className="max-w-md text-lg text-muted-foreground font-light leading-relaxed">{step.text}</p>
     </motion.div>
   );
 }

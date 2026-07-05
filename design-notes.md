@@ -3,7 +3,37 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
-## 2026-07-05 — Venue landing page rebuild (`/`)
+## 2026-07-05 (later) — Full rebrand: "editorial darkroom"
+
+Owner asked for a nuclear transformation — no remnants of the old white +
+antique-gold + Playfair stationery look, logo included.
+
+**Direction (one line):** editorial darkroom — warm near-black surfaces
+(`hsl(20 9% 6%)`), porcelain type, silver-halide film grain, Fraunces display +
+Instrument Sans body, one candlelight-rose accent (`hsl(355 58% 71%)`, ≤10% of
+any screen). Derived from the product's world: film photography, evening
+venues, the darkroom where the gallery "develops."
+
+**Token-level changes (`index.css`):**
+- Entire `:root` flipped to dark; `color-scheme: dark`. All shadcn components
+  inherit the theme through tokens.
+- `--gold` family deleted; `--rose` family added. Button `gold` variant →
+  `rose` (dark ink text on rose — never white on rose).
+- Fonts: Playfair Display + Plus Jakarta Sans → Fraunces + Instrument Sans.
+  Legacy `.font-playfair`/`.serif` classes intentionally map to Fraunces so no
+  stale class can resurrect the old face.
+- Shape language: pills → rounded-md buttons; big 2xl/3xl card radii → xl.
+- `.grain` utility: static SVG turbulence tile, screen-blended at 5% — the
+  signature texture, applied to hero/final sections only (not body copy).
+
+**Logo:** old bold-sans "Glimpse." wordmark with gold period is gone. New mark:
+a camera-viewfinder (four corner brackets) with a rose aperture dot, wordmark
+lowercase Fraunces. Same system in `favicon.svg`. Old logo PNGs deleted.
+
+**Kills:** gold everywhere, cream bands, glass chips, pill buttons, uppercase
+gold kickers (now rose), white dashboard panels.
+
+## 2026-07-05 — Venue landing page rebuild (`/`) [pre-rebrand: colors below no longer apply]
 
 **Conversion spine:** this page exists to get wedding-venue owners and sales
 managers to create a venue workspace, because a personalized post-tour gallery
