@@ -3,7 +3,42 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
-## 2026-07-05 (later) — Full rebrand: "editorial darkroom"
+## 2026-07-05 (third pass) — The motion rebuild
+
+Owner verdict on the first rebrand pass: "all you did was turn it dark" —
+correct. Same compositions, new tokens. This pass rebuilt every marketing
+composition from zero; only the user workflow survived.
+
+**New motion vocabulary** (`components/motion/index.tsx` + CSS utilities):
+custom viewfinder cursor (fine-pointer only), marquee ribbons, magnetic CTA,
+masked CSS line-rise reveals (nothing waits on JS), corner-tick frames,
+ghost/outline numerals (`.text-stroke`), mono labels (Space Mono), safelight
+`--wine` scene band.
+
+**Venue landing (`/`) — six numbered scenes:**
+001 manifesto hero ("EMPTY ROOMS / DON'T BOOK.", ~11vw uppercase Fraunces) with
+right-rail CTA and an italic marquee at the fold · 002 problem band on wine
+with a 30vw ghost numeral · 003 signature: pinned "developing print" — the
+venue photo scales from a small exposure to full width while four contact-sheet
+frames (FRAME 01–04) develop over it · 004 pinned horizontal mechanism, four
+100vw panels with outline numerals and a rose progress rail · 005 guardrails as
+editorial index rows (hover: wine fill + title shift) · 006 offer with 8vw
+italic display and a magnetic XXL tick-button · footer with a 17vw lowercase
+wordmark that is itself the final CTA.
+
+**Couple landing (`/couple`):** same language — manifesto hero, venue-code
+"ticket" card with corner ticks, marquee, steps as index rows.
+
+**Discipline kept:** every pinned/scrubbed scene has a static fallback for
+`prefers-reduced-motion` and <1024px; hero copy reveals are pure CSS; scrubbed
+motion is transform/opacity only; one rose CTA per viewport; all
+data-testids and routes unchanged.
+
+**Kills:** the hero split-with-product-screenshot layout, all card grids, the
+vertical fade timeline from the first pass, pill badges. The product photo now
+appears exactly once (scene 003).
+
+## 2026-07-05 (second pass) — Full rebrand: "editorial darkroom"
 
 Owner asked for a nuclear transformation — no remnants of the old white +
 antique-gold + Playfair stationery look, logo included.

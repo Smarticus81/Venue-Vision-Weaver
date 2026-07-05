@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -30,8 +30,10 @@
   --color-rose: hsl(var(--rose));
   --color-rose-foreground: hsl(var(--rose-foreground));
   --color-rose-hover: hsl(var(--rose-hover));
+  --color-wine: hsl(var(--wine));
   --font-sans: var(--font-sans);
   --font-serif: var(--font-display);
+  --font-mono: var(--font-mono);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -69,8 +71,12 @@
   --rose-hover: 355 50% 64%;
   --rose-foreground: 20 10% 8%;
 
+  /* Safelight — the dim red-brown of a darkroom lamp, for alternating scenes */
+  --wine: 357 24% 10%;
+
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
   --font-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SF Mono', monospace;
 
   color-scheme: dark;
 }
@@ -165,5 +171,74 @@
   @keyframes glimpseFadeInUp {
     from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ————— Editorial darkroom motion vocabulary ————— */
+
+  html.cursor-none,
+  html.cursor-none * {
+    cursor: none !important;
+  }
+
+  .mono-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  /* Hollow display numerals / ghost type */
+  .text-stroke {
+    -webkit-text-stroke: 1px hsl(var(--foreground) / 0.22);
+    color: transparent;
+  }
+
+  .text-stroke-rose {
+    -webkit-text-stroke: 1px hsl(var(--rose) / 0.45);
+    color: transparent;
+  }
+
+  /* Masked line reveal — pure CSS so nothing waits on JS. */
+  .mask-line {
+    display: block;
+    overflow: hidden;
+  }
+
+  .mask-line > span {
+    display: block;
+    transform: translateY(112%);
+    animation: lineRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--rise-delay, 0ms);
+  }
+
+  @keyframes lineRise {
+    to { transform: translateY(0); }
+  }
+
+  /* Marquee ribbon — duplicated track, translate half. */
+  .marquee {
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .marquee-track {
+    display: inline-flex;
+    align-items: baseline;
+    will-change: transform;
+    animation: marqueeX var(--marquee-speed, 26s) linear infinite;
+  }
+
+  @keyframes marqueeX {
+    to { transform: translateX(-50%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mask-line > span {
+      transform: none;
+      animation: none;
+    }
+    .marquee-track {
+      animation: none;
+    }
   }
 }
