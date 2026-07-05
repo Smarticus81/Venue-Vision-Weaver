@@ -25,11 +25,11 @@ import {
   Check,
   Home,
   Mail,
-  Sparkles,
   ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GlimpseShell } from "@/components/layout/GlimpseShell";
+import { FrameTicks } from "@/components/motion";
 
 function venueMediaUrl(objectKey: string | undefined, venueSlug: string): string {
   if (!objectKey) return "";
@@ -234,7 +234,8 @@ export default function CouplePage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
         <Heart className="h-12 w-12 text-muted-foreground/40 mb-6" />
-        <h1 className="font-display text-4xl mb-4 text-foreground">We couldn't find that venue</h1>
+        <p className="mono-label text-rose mb-4">Venue code</p>
+        <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">We couldn't find that venue</h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-md font-light">
           No venue answers to the code "{slug}". Double-check the code from
           your venue and try again.
@@ -242,7 +243,7 @@ export default function CouplePage() {
         <Button
           onClick={() => setLocation("/couple")}
           variant="rose"
-          className="px-8 py-6 text-base font-medium shadow-lg"
+          className="px-8 py-6 text-base font-medium"
           data-testid="venue-notfound-home"
         >
           Enter another code
@@ -258,7 +259,8 @@ export default function CouplePage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
         <Heart className="h-12 w-12 text-rose/40 mb-6" />
-        <h1 className="font-display text-4xl md:text-5xl mb-4 text-foreground">
+        <p className="mono-label text-rose mb-4">Not ready yet</p>
+        <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">
           {venue.name} is still being prepared
         </h1>
         <p className="text-lg text-muted-foreground mb-3 max-w-md font-light">
@@ -272,7 +274,7 @@ export default function CouplePage() {
         <Button
           onClick={() => setLocation("/couple")}
           variant="rose"
-          className="px-8 py-6 text-base font-medium shadow-lg"
+          className="px-8 py-6 text-base font-medium"
           data-testid="venue-not-ready-browse"
         >
           Try another venue code
@@ -386,12 +388,9 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
           transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
           className="max-w-4xl"
         >
-          <div className="mb-6 mx-auto inline-flex items-center gap-2 rounded-md border border-border bg-background/60 backdrop-blur-md px-4 py-1.5 text-xs font-semibold tracking-wide text-foreground">
-            <Sparkles className="w-3.5 h-3.5 text-rose" />
-            <span>Interactive Preview</span>
-          </div>
+          <p className="mono-label mb-6 text-rose drop-shadow-md">Interactive preview</p>
 
-          <h1 className="font-display text-5xl md:text-7xl font-bold mb-6 text-foreground tracking-tight drop-shadow-2xl">
+          <h1 className="font-display text-5xl md:text-7xl font-medium mb-6 text-foreground tracking-[-0.02em] drop-shadow-2xl">
             {venue.name}
           </h1>
           
@@ -411,7 +410,7 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
             size="lg"
             variant="rose"
             onClick={onNext}
-            className="px-10 py-7 text-lg shadow-2xl font-medium group"
+            className="px-10 py-7 text-lg font-medium group"
             data-testid="visualize-cta"
           >
             Step inside your wedding day
@@ -462,10 +461,8 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
       </div>
 
       <div className="text-center mb-12">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-1.5 text-xs font-semibold tracking-wide text-rose">
-          Step 01
-        </div>
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">
+        <p className="mono-label text-rose mb-4">Step 01 / 03</p>
+        <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">
           You and your partner
         </h2>
         <p className="text-muted-foreground font-light text-lg max-w-lg mx-auto">
@@ -479,14 +476,14 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           return (
             <div
               key={role}
-              className={`rounded-xl border p-6 transition-all duration-300 ${
+              className={`rounded-lg border p-6 transition-colors duration-300 ${
                 isFilled
-                  ? "border-rose/30 bg-card"
-                  : "border-card-border bg-card/50 shadow-sm"
+                  ? "border-rose bg-card"
+                  : "border-border bg-card/50"
               }`}
             >
-              <p className={`font-bold mb-1 ${isFilled ? "text-foreground" : "text-muted-foreground"}`}>
-                {index + 1}. {role}
+              <p className={`mono-label mb-2 ${isFilled ? "text-rose" : "text-muted-foreground"}`}>
+                0{index + 1} — {role}
               </p>
               <p className={`font-light text-sm ${isFilled ? "text-muted-foreground" : "text-muted-foreground/60"}`}>
                 {COUPLE_REFERENCE_GUIDANCE[index]}
@@ -498,7 +495,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
 
       <button
         type="button"
-        className="w-full rounded-xl border-dashed border-2 border-border bg-card/50 shadow-sm hover:border-rose/50 hover:bg-card active:border-rose transition-colors cursor-pointer flex flex-col items-center justify-center py-12 md:py-16 px-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-card/50"
+        className="w-full rounded-lg border border-dashed border-border bg-card/50 hover:border-rose/50 hover:bg-card active:border-rose transition-colors cursor-pointer flex flex-col items-center justify-center py-12 md:py-16 px-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-card/50"
         onClick={() => fileInputRef.current?.click()}
         disabled={!canAddMoreReferences || isUploading}
         aria-label="Add photos"
@@ -513,14 +510,15 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           accept="image/jpeg,image/png,image/webp"
           data-testid="couple-photo-input"
         />
-        <div className="w-16 h-16 rounded-xl bg-card flex items-center justify-center mb-6 shadow-sm border border-card-border text-rose">
+        <div className="relative w-16 h-16 bg-card flex items-center justify-center mb-6 border border-border text-rose">
+          <FrameTicks size={8} className="text-foreground/40" />
           <Camera className="h-7 w-7" />
         </div>
-        <p className="text-xl text-foreground font-bold mb-3">Tap to add photographs</p>
+        <p className="font-display text-xl font-medium text-foreground mb-3">Tap to add photographs</p>
         <p className="text-base text-muted-foreground font-light max-w-md mx-auto">
           One to three JPG, PNG, or WebP photos under 50MB — distinct angles or expressions, at least 256px wide.
         </p>
-        <p className="mt-6 text-sm font-semibold tracking-wide text-rose uppercase" data-testid="couple-photo-status">
+        <p className="mono-label mt-6 text-rose" data-testid="couple-photo-status">
           {uploadStatus}
         </p>
       </button>
@@ -532,13 +530,14 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
               key={i}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="relative group aspect-square rounded-xl overflow-hidden border border-card-border shadow-sm"
+              className="relative group aspect-square overflow-hidden border border-border"
             >
               <img src={src} className="w-full h-full object-cover" alt={`${COUPLE_REFERENCE_ROLES[i] ?? "Reference"} preview`} />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute left-4 bottom-4 rounded-md bg-background/80 backdrop-blur px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm">
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <FrameTicks size={14} className="text-foreground/40" />
+              <p className="absolute left-4 bottom-4 mono-label text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                 {COUPLE_REFERENCE_ROLES[i] ?? `Reference ${i + 1}`}
-              </div>
+              </p>
               <button
                 type="button"
                 onClick={(e) => {
@@ -548,7 +547,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
                 disabled={isUploading}
                 aria-label={`Remove photo ${i + 1}`}
                 data-testid={`remove-couple-photo-${i}`}
-                className="absolute top-4 right-4 h-8 w-8 rounded-md bg-black/50 text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive hover:scale-110 shadow-sm backdrop-blur-sm"
+                className="absolute top-4 right-4 h-8 w-8 bg-black/60 text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive backdrop-blur-sm"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -565,7 +564,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           variant="rose"
           onClick={onContinue}
           disabled={!hasEnoughReferences || isUploading}
-          className="w-full sm:w-2/3 py-6 text-base font-medium shadow-lg"
+          className="w-full sm:w-2/3 py-6 text-base font-medium"
           data-testid="choose-style-button"
         >
           Continue to styles
@@ -613,10 +612,8 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
       </div>
 
       <div className="text-center mb-12">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-1.5 text-xs font-semibold tracking-wide text-rose">
-          Step 02
-        </div>
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">Set the scene</h2>
+        <p className="mono-label text-rose mb-4">Step 02 / 03</p>
+        <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">Set the scene</h2>
         <p className="text-muted-foreground font-light text-lg max-w-xl mx-auto">
           Choose the editorial direction for your venue-branded glimpse gallery.
         </p>
@@ -625,12 +622,12 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-xl" />
+            <Skeleton key={i} className="h-32 w-full rounded-lg" />
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
-          {styles.map((style) => {
+          {styles.map((style, index) => {
             const isSelected = selectedStyleId === style.id;
             return (
               <button
@@ -639,22 +636,25 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
                 onClick={() => onSelect(style.id)}
                 disabled={isSubmitting}
                 data-testid={`style-option-${style.id}`}
-                className={`relative text-left rounded-xl p-6 md:p-8 border transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`relative text-left rounded-lg p-6 md:p-8 border transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed ${
                   isSelected
-                    ? "border-rose bg-card shadow-lg"
-                    : "border-card-border bg-card hover:border-rose/30 hover:bg-accent/40 shadow-sm"
+                    ? "border-rose bg-card"
+                    : "border-border bg-card hover:border-rose/40 hover:bg-accent/40"
                 }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-xl md:text-2xl mb-2 tracking-tight text-foreground">{style.name}</h3>
+                    <p className={`mono-label mb-2 ${isSelected ? "text-rose" : "text-muted-foreground"}`}>
+                      Style {String(index + 1).padStart(2, "0")}
+                    </p>
+                    <h3 className="font-display font-medium text-xl md:text-2xl mb-2 tracking-tight text-foreground">{style.name}</h3>
                     <p className="text-sm md:text-base text-muted-foreground font-light leading-relaxed">
                       {style.description}
                     </p>
                   </div>
                   <div
                     aria-hidden
-                    className={`shrink-0 h-6 w-6 rounded-full border flex items-center justify-center transition-colors mt-1 ${
+                    className={`shrink-0 h-6 w-6 border flex items-center justify-center transition-colors mt-1 ${
                       isSelected
                         ? "bg-rose border-rose text-rose-foreground"
                         : "border-border text-transparent"
@@ -677,10 +677,10 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
         }}
       >
       <div className="mt-16 w-full max-w-2xl space-y-6">
-        <div className="rounded-xl bg-card border border-card-border p-6 md:p-8 shadow-sm">
+        <div className="rounded-lg bg-card border border-border p-6 md:p-8">
           <label
             htmlFor="couple-email"
-            className="text-xs font-semibold tracking-widest uppercase text-rose flex items-center gap-2 mb-2"
+            className="mono-label text-rose flex items-center gap-2 mb-2"
           >
             <Mail className="h-4 w-4" /> Your email
           </label>
@@ -697,14 +697,14 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
             disabled={isSubmitting}
             autoComplete="email"
             data-testid="style-couple-email"
-            className="w-full bg-background border border-input rounded-xl px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose disabled:opacity-50 transition-all placeholder:text-muted-foreground"
+            className="w-full bg-background border border-input rounded-none px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
           />
         </div>
 
-        <div className="rounded-xl bg-card border border-card-border p-6 md:p-8 shadow-sm">
+        <div className="rounded-lg bg-card border border-border p-6 md:p-8">
           <label
             htmlFor="couple-name-optional"
-            className="text-xs font-semibold tracking-widest uppercase text-rose mb-4 block"
+            className="mono-label text-rose mb-4 block"
           >
             Your names (optional)
           </label>
@@ -718,18 +718,18 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
             autoComplete="name"
             maxLength={80}
             data-testid="style-couple-name"
-            className="w-full bg-background border border-input rounded-xl px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose disabled:opacity-50 transition-all placeholder:text-muted-foreground"
+            className="w-full bg-background border border-input rounded-none px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
           />
         </div>
 
-        <div className="rounded-xl bg-card border border-card-border p-6 md:p-8 shadow-sm">
+        <div className="relative rounded-lg bg-card border border-border p-6 md:p-8">
           <div className="flex items-center gap-2 mb-4">
             <Clock className="h-5 w-5 text-rose" />
-            <p className="text-xs font-semibold tracking-widest uppercase text-rose">
+            <p className="mono-label text-rose">
               Gallery Delivery
             </p>
           </div>
-          <div className="font-display text-xl md:text-2xl font-bold text-foreground mb-2">4 portraits + motion reel</div>
+          <div className="font-display text-xl md:text-2xl font-medium text-foreground mb-2">4 portraits + motion reel</div>
           <div className="text-base text-muted-foreground font-light leading-relaxed">
             Editorial portraits anchored to this venue, compiled into a gentle branded reel. Usually ready in a few minutes.
           </div>
@@ -751,7 +751,7 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
           type="submit"
           variant="rose"
           disabled={!selectedStyleId || !coupleEmail.trim() || isSubmitting}
-          className="w-full sm:w-2/3 py-6 text-base font-medium shadow-lg"
+          className="w-full sm:w-2/3 py-6 text-base font-medium"
           data-testid="generate-button"
         >
           {isSubmitting ? (
@@ -775,10 +775,12 @@ function SubmittingStep() {
       exit={{ opacity: 0 }}
       className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto"
     >
-      <div className="w-20 h-20 rounded-full bg-card border border-card-border flex items-center justify-center mb-8 shadow-sm">
+      <div className="relative w-20 h-20 bg-card border border-border flex items-center justify-center mb-8">
+        <FrameTicks size={10} className="text-foreground/40" />
         <Loader2 className="h-8 w-8 animate-spin text-rose" />
       </div>
-      <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6">
+      <p className="mono-label text-rose mb-4">Developing…</p>
+      <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-6">
         Sending your photographs...
       </h2>
       <p className="text-lg text-muted-foreground font-light leading-relaxed">
@@ -791,11 +793,11 @@ function SubmittingStep() {
 function CoupleSkeleton() {
   return (
     <div className="min-h-screen bg-background p-6 flex flex-col">
-      <Skeleton className="h-24 w-full mb-12 rounded-xl" />
+      <Skeleton className="h-24 w-full mb-12 rounded-lg" />
       <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full">
         <Skeleton className="h-12 w-64 mb-6 rounded-md" />
         <Skeleton className="h-6 w-96 mb-16 rounded-md" />
-        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-80 w-full rounded-lg" />
       </div>
     </div>
   );

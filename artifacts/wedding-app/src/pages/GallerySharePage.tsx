@@ -16,7 +16,6 @@ import {
   ExternalLink,
   Globe,
   Home,
-  ImageIcon,
   Images,
   Link,
   Loader2,
@@ -29,6 +28,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { FrameTicks } from "@/components/motion";
 
 function storageAssetUrl(objectKey: string, shareToken?: string | null): string {
   const token = shareToken ? `?shareToken=${encodeURIComponent(shareToken)}` : "";
@@ -102,8 +102,9 @@ export default function GallerySharePage() {
 
   if (tokenQuery.isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
         <Loader2 className="h-12 w-12 animate-spin text-rose" />
+        <p className="mono-label text-muted-foreground">Opening your gallery…</p>
       </div>
     );
   }
@@ -149,7 +150,8 @@ function NotAvailable() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
       <AlertCircle className="h-12 w-12 text-muted-foreground mb-6" />
-      <h1 className="font-display text-3xl md:text-4xl mb-3 text-foreground">This gallery isn't here</h1>
+      <p className="mono-label text-rose mb-4">Gallery link</p>
+      <h1 className="font-display text-2xl md:text-3xl font-medium mb-3 text-foreground">This gallery isn't here</h1>
       <p className="text-muted-foreground max-w-md mb-8 font-light">
         The link may be incorrect or expired. Use the email we sent you, or find your
         gallery with the address you used at the venue.
@@ -165,8 +167,8 @@ function NotAvailable() {
         </Button>
         <Button
           onClick={() => setLocation("/couple")}
-          variant="outline"
-          className="min-h-[48px]"
+          variant="ghost"
+          className="min-h-[48px] text-muted-foreground hover:text-foreground"
           data-testid="button-return-home"
         >
           <Home className="mr-2 h-4 w-4" /> Home
@@ -183,7 +185,8 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
       <AlertCircle className="h-12 w-12 text-rose mb-6" />
-      <h1 className="font-display text-3xl md:text-4xl mb-3 text-foreground">This gallery needs a fresh start</h1>
+      <p className="mono-label text-rose mb-4">Start again</p>
+      <h1 className="font-display text-2xl md:text-3xl font-medium mb-3 text-foreground">This gallery needs a fresh start</h1>
       <p className="text-muted-foreground max-w-md mb-8 font-light">
         glimpse now creates venue-branded galleries only. Start again from the venue
         page so we can use the current likeness and venue-preservation flow.
@@ -201,8 +204,8 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
         )}
         <Button
           onClick={() => setLocation("/find-my-gallery")}
-          variant="outline"
-          className="min-h-[48px]"
+          variant="ghost"
+          className="min-h-[48px] text-muted-foreground hover:text-foreground"
           data-testid="legacy-find-gallery"
         >
           <Mail className="mr-2 h-4 w-4" /> Find my gallery
@@ -224,7 +227,8 @@ function FailureView({
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
       <AlertCircle className="h-12 w-12 text-destructive mb-6" />
-      <h2 className="font-display text-3xl mb-4 text-foreground">glimpse paused</h2>
+      <p className="mono-label text-rose mb-4">Interrupted</p>
+      <h2 className="font-display text-2xl md:text-3xl font-medium mb-4 text-foreground">glimpse paused</h2>
       <p className="text-muted-foreground mb-8 max-w-md font-light">{message}</p>
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
         <Button
@@ -236,9 +240,9 @@ function FailureView({
           <RotateCcw className="mr-2 h-4 w-4" /> Once more
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           onClick={() => setLocation("/couple")}
-          className="flex-1"
+          className="flex-1 text-muted-foreground hover:text-foreground"
           data-testid="failed-home"
         >
           <Home className="mr-2 h-4 w-4" /> Home
@@ -304,12 +308,13 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
           transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
           className="absolute inset-4 rounded-full border-b-2 border-muted-foreground/20 border-l-2 border-transparent"
         />
-        <div className="z-10 bg-card/80 backdrop-blur-xl p-6 md:p-8 rounded-full border border-card-border shadow-sm">
+        <div className="z-10 bg-card/80 backdrop-blur-xl p-6 md:p-8 rounded-full border border-card-border">
           <Images className="h-10 w-10 md:h-12 md:w-12 text-rose animate-pulse" />
         </div>
       </div>
 
-      <h2 className="font-display text-2xl md:text-3xl mb-3 italic text-foreground" data-testid="text-phase">
+      <p className="mono-label text-rose mb-4">Developing…</p>
+      <h2 className="font-display text-2xl md:text-3xl font-medium mb-3 italic text-foreground" data-testid="text-phase">
         {phase}
       </h2>
       <p className="text-muted-foreground font-light max-w-md mb-8" data-testid="text-phase-detail">
@@ -318,11 +323,11 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
       </p>
 
       <div className="w-full max-w-md mb-3">
-        <div className="flex justify-between text-xs text-muted-foreground mb-2">
-          <span className="uppercase tracking-[0.2em] text-rose font-semibold">glimpse</span>
-          <span data-testid="text-progress-percent" className="font-medium text-foreground">{percent}%</span>
+        <div className="flex justify-between items-baseline mb-2">
+          <span className="mono-label normal-case text-rose">glimpse</span>
+          <span data-testid="text-progress-percent" className="mono-label text-foreground">{percent}%</span>
         </div>
-        <div className="h-2 w-full bg-muted rounded-md overflow-hidden">
+        <div className="h-1 w-full bg-muted overflow-hidden">
           <motion.div
             className="h-full bg-rose"
             initial={{ width: 0 }}
@@ -428,10 +433,10 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
       animate={{ opacity: 1, y: 0 }}
       className="fixed bottom-6 left-6 right-6 z-30 pointer-events-none"
     >
-      <motion.div className="max-w-xl mx-auto pointer-events-auto bg-card/95 backdrop-blur-md rounded-xl p-4 shadow-xl shadow-black/40 border border-card-border space-y-4">
+      <motion.div className="max-w-xl mx-auto pointer-events-auto bg-card/95 backdrop-blur-md rounded-lg p-4 border border-card-border space-y-4">
         <motion.div className="flex flex-wrap gap-3 justify-center">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleCopy}
             data-testid="copy-link-button"
@@ -440,7 +445,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
             Copy Link
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleShare}
             data-testid="share-button"
@@ -449,7 +454,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
             Share
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => setShowEmail((value) => !value)}
             data-testid="email-toggle-button"
@@ -480,7 +485,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                 onChange={(event) => setEmailInput(event.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
-                className="w-full rounded-xl bg-secondary border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose transition-all"
+                className="w-full rounded-none bg-secondary border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-rose transition-colors"
                 data-testid="email-input"
               />
             )}
@@ -545,7 +550,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                   variant="ghost"
                   size="icon"
                   onClick={() => setMuted((value) => !value)}
-                  className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border shadow-sm"
+                  className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                   data-testid="gallery-mute"
                   title={muted ? "Unmute" : "Mute"}
                 >
@@ -557,7 +562,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                   asChild
                   variant="ghost"
                   size="icon"
-                  className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border shadow-sm"
+                  className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                   data-testid="gallery-download-reel"
                   title="Download reel"
                 >
@@ -570,7 +575,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                 variant="ghost"
                 size="icon"
                 onClick={onRestart}
-                className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border shadow-sm"
+                className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                 data-testid="gallery-restart"
                 title="Create another"
               >
@@ -580,7 +585,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                 variant="ghost"
                 size="icon"
                 onClick={() => setLocation("/couple")}
-                className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border shadow-sm"
+                className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                 title="Home"
               >
                 <Home className="h-5 w-5" />
@@ -604,12 +609,14 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
             data-testid="gallery-reel"
           />
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black via-transparent to-black/30" />
-          
+          <div aria-hidden className="pointer-events-none absolute inset-3 md:inset-5 z-10">
+            <FrameTicks size={14} className="text-foreground/40" />
+          </div>
+
           <div className="absolute bottom-16 left-6 right-6 md:bottom-24 max-w-7xl mx-auto flex flex-col items-center text-center pointer-events-none">
-             <div className="inline-flex items-center gap-2 rounded-md border border-white/20 bg-black/20 backdrop-blur-md px-4 py-1.5 text-xs font-semibold tracking-widest text-white/90 uppercase mb-6">
-                Created for {venueName}
-             </div>
-             <h2 className="font-display text-4xl md:text-6xl lg:text-7xl font-semibold text-white drop-shadow-lg leading-tight max-w-4xl">
+             <p className="mono-label text-white/90 drop-shadow mb-3">The motion reel</p>
+             <p className="mono-label text-white/70 drop-shadow mb-6">Created for {venueName}</p>
+             <h2 className="font-display text-4xl md:text-6xl lg:text-7xl font-medium text-white drop-shadow-lg leading-tight max-w-4xl">
                {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
              </h2>
           </div>
@@ -617,10 +624,8 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
       ) : (
         <div className="relative w-full pt-32 pb-16 bg-card border-b border-border">
           <div className="max-w-5xl mx-auto px-6 text-center">
-            <div className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-1.5 text-xs font-semibold tracking-widest text-rose uppercase mb-6">
-              Created for {venueName}
-            </div>
-            <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-semibold text-foreground leading-tight mb-8">
+            <p className="mono-label text-rose mb-6">Created for {venueName}</p>
+            <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-medium text-foreground leading-tight mb-8">
               {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
             </h2>
           </div>
@@ -631,12 +636,13 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
         <div className="max-w-5xl mx-auto">
           
           {contactAction && (
-            <div className="mb-16 -mt-32 md:-mt-40 relative z-10 rounded-xl border border-card-border bg-card p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl shadow-black/40">
+            <div className="mb-16 -mt-32 md:-mt-40 relative z-10 border border-card-border bg-card p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
+              <FrameTicks size={16} className="text-foreground/40" />
               <div className="text-center md:text-left max-w-xl">
-                <p className="text-xs uppercase tracking-widest text-rose mb-3 font-semibold">
+                <p className="mono-label text-rose mb-3">
                   Take the next step
                 </p>
-                <h3 className="font-display text-3xl md:text-4xl leading-tight text-foreground">
+                <h3 className="font-display text-2xl md:text-3xl font-medium leading-tight text-foreground">
                   Picture your day here? Let's make it a reality.
                 </h3>
               </div>
@@ -656,14 +662,14 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
             </div>
           )}
 
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10 mt-12">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10 mt-12 border-t border-border pt-6">
              <div className="max-w-xl">
-                <div className="flex items-center gap-2 mb-4">
-                  <ImageIcon className="h-5 w-5 text-rose" />
-                  <h3 className="text-sm font-semibold tracking-widest uppercase text-rose">Editorial Stills</h3>
-                </div>
+                <p className="mono-label text-rose mb-3">Editorial stills</p>
+                <h3 className="font-display text-2xl md:text-3xl font-medium leading-tight text-foreground mb-3">
+                  Four venue-anchored portraits
+                </h3>
                 <p className="text-lg text-muted-foreground font-light leading-relaxed">
-                  Four venue-anchored portraits. Tap any frame to enlarge, or download to keep.
+                  Tap any frame to enlarge, or download to keep.
                 </p>
              </div>
           </div>
@@ -675,8 +681,8 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
               return (
                 <div
                   key={still.id}
-                  className={`group relative rounded-xl overflow-hidden border transition-all ${
-                    selected ? "border-rose ring-2 ring-rose/40 ring-offset-2 ring-offset-background" : "border-card-border hover:border-rose/50"
+                  className={`group relative overflow-hidden border transition-colors ${
+                    selected ? "border-rose glimpse-rose-ring" : "border-border hover:border-rose/50"
                   }`}
                 >
                   <button
@@ -694,6 +700,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                       />
                     </div>
                   </button>
+                  <FrameTicks size={14} className="text-foreground/40" />
                   <div
                     className={`absolute inset-x-0 bottom-0 p-4 flex items-center justify-between pointer-events-none bg-gradient-to-t from-black/60 via-black/20 to-transparent transition-opacity duration-300 ${
                       selected
@@ -701,15 +708,15 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                         : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
                     }`}
                   >
-                    <span className="text-xs font-medium uppercase tracking-wider text-white">
-                      Frame {index + 1}
+                    <span className={`mono-label ${selected ? "text-rose" : "text-white"}`}>
+                      Frame {String(index + 1).padStart(2, "0")}
                     </span>
                     <a
                       href={src}
                       download
                       aria-label={`Download portrait ${index + 1}`}
                       data-testid={`gallery-still-download-${index}`}
-                      className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Download className="h-4 w-4" />
                     </a>
@@ -719,16 +726,27 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
             })}
           </div>
 
-          <div className="rounded-xl overflow-hidden border border-card-border bg-card shadow-2xl shadow-black/40 p-4 md:p-8">
+          <div className="relative border border-card-border bg-card p-4 md:p-8">
+            <FrameTicks size={14} className="text-foreground/40" />
+            <p className="mono-label text-muted-foreground mb-4">
+              Frame {String(activeStill + 1).padStart(2, "0")} / {String(stills.length).padStart(2, "0")}
+            </p>
             <img
               src={storageAssetUrl(activeAsset.objectKey, session.shareToken)}
               alt="Selected portrait"
-              className="w-full max-h-[75vh] object-contain mx-auto rounded-xl shadow-md"
+              className="w-full max-h-[75vh] object-contain mx-auto"
               data-testid="gallery-still-hero"
             />
           </div>
         </div>
       </div>
+
+      <footer className="border-t border-border bg-wine px-5 pt-10 pb-36 md:px-10">
+        <div className="max-w-5xl mx-auto flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+          <p className="mono-label text-muted-foreground">A glimpse of your day</p>
+          <p className="mono-label text-muted-foreground/70">© {new Date().getFullYear()} glimpse</p>
+        </div>
+      </footer>
 
       <ShareActionsToolbar session={session} />
     </motion.div>
