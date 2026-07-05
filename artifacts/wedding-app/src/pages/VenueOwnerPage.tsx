@@ -4,14 +4,19 @@ import {
   useCreateSession,
   useDeleteSession,
   useDeleteVenueMedia,
+  useGetOrganization,
   useGetVenueDashboard,
   useListVenueMedia,
   useUpdateVenue,
+  getGetOrganizationQueryKey,
   getGetVenueDashboardQueryKey,
   getListVenueMediaQueryKey,
   type ErrorEnvelope,
   type ErrorType,
 } from "@workspace/api-client-react";
+import { PricingTable, useClerk, useUser } from "@clerk/clerk-react";
+import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
+import { clerkConfigured, darkroomAppearance } from "@/lib/clerk";
 import { useUpload } from "@workspace/object-storage-web";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -50,10 +55,6 @@ const COVERAGE_OPTIONS = [
 
 type Coverage = (typeof COVERAGE_OPTIONS)[number]["value"];
 
-interface OwnerSession {
-  ownerEmail: string;
-  venues: Array<{ id: number; name: string; slug: string }>;
-}
 
 function normalizeStorageObjectPath(objectKey: string): string {
   const raw = objectKey.trim();
@@ -90,13 +91,22 @@ function ownerAssetUrl(objectKey: string): string {
 }
 
 export default function VenueOwnerPage() {
+  if (!clerkConfigured) return <ClerkSetupNotice />;
+  return (
+    <OrgGate>
+      <DashboardInner />
+    </OrgGate>
+  );
+}
+
+function DashboardInner() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useUser();
+  const { signOut } = useClerk();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coupleFileInputRef = useRef<HTMLInputElement>(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(null);
   const [selectedSlug, setSelectedSlug] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
@@ -112,24 +122,27 @@ export default function VenueOwnerPage() {
   const [isStartingGallery, setIsStartingGallery] = useState(false);
   const couplePreviewsRef = useRef<string[]>([]);
 
+  // The organization is the tenant: it carries billing (plan + shared
+  // credits) and the list of venues the member can manage.
+  const orgQuery = useGetOrganization({
+    query: { queryKey: getGetOrganizationQueryKey() },
+  });
+  const organization = orgQuery.data?.organization;
+  const orgVenues = orgQuery.data?.venues ?? [];
+
   useEffect(() => {
-    fetch("/api/owners/session")
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Not signed in");
-        return (await res.json()) as OwnerSession;
-      })
-      .then((session) => {
-        setOwnerSession(session);
-        const firstVenue = session.venues[0];
-        if (!firstVenue) {
-          setLocation("/create-venue");
-          return;
-        }
-        setSelectedSlug(firstVenue.slug);
-      })
-      .catch(() => setLocation("/login"))
-      .finally(() => setAuthChecked(true));
-  }, [setLocation]);
+    if (!orgQuery.isSuccess) return;
+    const firstVenue = orgQuery.data.venues[0];
+    if (!firstVenue) {
+      setLocation("/create-venue");
+      return;
+    }
+    setSelectedSlug((current) =>
+      current && orgQuery.data.venues.some((v) => v.slug === current)
+        ? current
+        : firstVenue.slug,
+    );
+  }, [orgQuery.isSuccess, orgQuery.data, setLocation]);
 
   const dashboard = useGetVenueDashboard(selectedSlug, {
     query: {
@@ -478,11 +491,11 @@ export default function VenueOwnerPage() {
   };
 
   const handleLogout = async () => {
-    await fetch("/api/owners/logout", { method: "POST" });
+    await signOut();
     setLocation("/login");
   };
 
-  if (!authChecked || dashboard.isLoading) {
+  if (orgQuery.isLoading || dashboard.isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-rose" />
@@ -498,24 +511,33 @@ export default function VenueOwnerPage() {
             <GlimpseLogo className="h-12" />
             <div className="hidden h-4 w-px bg-border sm:block"></div>
             <p className="mono-label hidden normal-case tracking-normal text-muted-foreground sm:block">
-              {ownerSession?.ownerEmail}
+              {organization?.name ?? ""}
+              {user?.primaryEmailAddress ? ` · ${user.primaryEmailAddress.emailAddress}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {ownerSession && ownerSession.venues.length > 1 ? (
+            {orgVenues.length > 1 ? (
               <select
                 value={selectedSlug}
                 onChange={(e) => setSelectedSlug(e.target.value)}
                 className="h-9 rounded-md border border-border bg-background px-4 text-sm font-medium outline-none focus:border-rose focus:ring-1 focus:ring-ring"
                 aria-label="Switch venue"
               >
-                {ownerSession.venues.map((ownedVenue) => (
+                {orgVenues.map((ownedVenue) => (
                   <option key={ownedVenue.id} value={ownedVenue.slug}>
                     {ownedVenue.name}
                   </option>
                 ))}
               </select>
             ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation("/create-venue")}
+              className="hidden text-muted-foreground hover:text-foreground sm:inline-flex"
+            >
+              Add venue
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -555,7 +577,7 @@ export default function VenueOwnerPage() {
             </div>
 
             <div className="mt-10 grid gap-6 sm:grid-cols-4">
-              <Metric label="Credits" value={venue?.creditsBalance ?? 0} hero />
+              <Metric label="Org credits" value={organization?.creditsBalance ?? 0} hero />
               <Metric label="Approved" value={readySessions} />
               <Metric label="In production" value={processingSessions} />
               <Metric label="Venue refs" value={media.length} />
@@ -972,6 +994,58 @@ export default function VenueOwnerPage() {
                 ))}
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Billing lives on the organization: one plan and one credit pool
+            shared by every venue. Checkout + payment methods are Clerk
+            Billing; credits are granted server-side by the Clerk webhook. */}
+        <section className="border-t border-border pt-6">
+          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="mono-label mb-4 text-rose">006 — Organization billing</p>
+              <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">
+                {organization?.name ?? "Your organization"}
+              </h2>
+              <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-muted-foreground">
+                One subscription covers every venue in your organization. Each
+                couple gallery uses one credit from the shared balance.
+              </p>
+            </div>
+            <div className="flex items-end gap-10">
+              <div>
+                <p className="mono-label text-muted-foreground">Plan</p>
+                <p className="mt-2 font-mono text-2xl uppercase tracking-tight text-foreground">
+                  {organization?.plan ?? "trial"}
+                </p>
+              </div>
+              <div>
+                <p className="mono-label text-muted-foreground">Credits</p>
+                <p className="mt-2 font-display text-4xl font-medium tracking-tight text-rose">
+                  {organization?.creditsBalance ?? 0}
+                </p>
+              </div>
+              {organization?.billingPeriodEnd ? (
+                <div>
+                  <p className="mono-label text-muted-foreground">Renews</p>
+                  <p className="mt-2 font-mono text-sm text-foreground">
+                    {new Date(organization.billingPeriodEnd).toLocaleDateString()}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-10">
+            <PricingTable
+              for="organization"
+              appearance={darkroomAppearance}
+              newSubscriptionRedirectUrl="/dashboard"
+            />
+            <p className="mono-label mt-6 normal-case tracking-[0.08em] text-muted-foreground/70">
+              Managed by Clerk Billing · plan changes and renewals grant credits
+              automatically · 1 credit = 1 couple's complete gallery
+            </p>
           </div>
         </section>
       </main>

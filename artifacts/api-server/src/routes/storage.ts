@@ -21,7 +21,7 @@ import {
   uploadIntentsTable,
 } from "@workspace/db";
 import { rateLimit, clientKey } from "../lib/rateLimit";
-import { getOwnerEmailFromRequest, requireOwnerVenue } from "../lib/ownerAuth";
+import { getCallerOrgDbId, requireOrgVenue } from "../lib/orgAuth.js";
 import { verifyCoupleUploadToken } from "../lib/uploadToken";
 import { canReadVenueMediaReference } from "../lib/objectAccess";
 import { canReadGeneratedAssetWithShareToken } from "../lib/sessionVisibility";
@@ -73,7 +73,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     }
     let venueId: number;
     if (purpose === "venue") {
-      const venue = await requireOwnerVenue(req, res, venueSlug);
+      const venue = await requireOrgVenue(req, res, venueSlug);
       if (!venue) return;
       venueId = venue.id;
     } else if (uploadToken) {
@@ -93,7 +93,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     } else {
       // Owner-driven couple upload from the dashboard. requireOwnerVenue
       // writes its own error response, so never write a second one here.
-      const ownerVenue = await requireOwnerVenue(req, res, venueSlug);
+      const ownerVenue = await requireOrgVenue(req, res, venueSlug);
       if (!ownerVenue) return;
       venueId = ownerVenue.id;
     }
@@ -223,21 +223,21 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
     id: number;
     objectKey: string;
     venueSlug: string;
-    ownerEmail: string;
+    organizationId: number | null;
   } | undefined;
   [venueMedia] = await db
     .select({
       id: venueMediaTable.id,
       objectKey: venueMediaTable.objectKey,
       venueSlug: venuesTable.slug,
-      ownerEmail: venuesTable.ownerEmail,
+      organizationId: venuesTable.organizationId,
     })
     .from(venueMediaTable)
     .innerJoin(venuesTable, eq(venueMediaTable.venueId, venuesTable.id))
     .where(eq(venueMediaTable.objectKey, objectPath))
     .limit(1);
 
-  const ownerEmail = await getOwnerEmailFromRequest(req);
+  const callerOrgId = await getCallerOrgDbId(req);
   const publicVenueSlug = typeof req.query.venueSlug === "string" ? req.query.venueSlug : "";
 
   if (!venueMedia && publicVenueSlug) {
@@ -246,7 +246,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
         id: venueMediaTable.id,
         objectKey: venueMediaTable.objectKey,
         venueSlug: venuesTable.slug,
-        ownerEmail: venuesTable.ownerEmail,
+        organizationId: venuesTable.organizationId,
       })
       .from(venueMediaTable)
       .innerJoin(venuesTable, eq(venueMediaTable.venueId, venuesTable.id))
@@ -258,8 +258,8 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
     return canReadVenueMediaReference({
       publicVenueSlug,
       venueSlug: venueMedia.venueSlug,
-      ownerEmail,
-      venueOwnerEmail: venueMedia.ownerEmail,
+      callerOrgId,
+      venueOrganizationId: venueMedia.organizationId,
     });
   }
 
@@ -288,7 +288,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
     }
   }
 
-  if (!ownerEmail) return false;
+  if (callerOrgId == null) return false;
   const ownedGeneratedCandidates = await db
     .select({ id: generatedAssetsTable.id, objectKey: generatedAssetsTable.objectKey })
     .from(generatedAssetsTable)
@@ -297,7 +297,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
     .where(
       and(
         eq(generatedAssetsTable.objectKey, objectPath),
-        eq(venuesTable.ownerEmail, ownerEmail),
+        eq(venuesTable.organizationId, callerOrgId),
       ),
     )
     .limit(1);
@@ -308,7 +308,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
       .from(generatedAssetsTable)
       .innerJoin(coupleSessionsTable, eq(generatedAssetsTable.sessionId, coupleSessionsTable.id))
       .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
-      .where(eq(venuesTable.ownerEmail, ownerEmail));
+      .where(eq(venuesTable.organizationId, callerOrgId));
     ownedGenerated = generatedCandidates.find((asset) => storedObjectMatchesPath(asset.objectKey, objectPath));
   }
   if (ownedGenerated) return true;
@@ -318,7 +318,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
     .from(coupleMediaTable)
     .innerJoin(coupleSessionsTable, eq(coupleMediaTable.sessionId, coupleSessionsTable.id))
     .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
-    .where(and(eq(coupleMediaTable.objectKey, objectPath), eq(venuesTable.ownerEmail, ownerEmail)))
+    .where(and(eq(coupleMediaTable.objectKey, objectPath), eq(venuesTable.organizationId, callerOrgId)))
     .limit(1);
   let ownedCouple: { id: number; objectKey: string } | undefined = ownedCoupleCandidates[0];
   if (!ownedCouple) {
@@ -327,7 +327,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
       .from(coupleMediaTable)
       .innerJoin(coupleSessionsTable, eq(coupleMediaTable.sessionId, coupleSessionsTable.id))
       .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
-      .where(eq(venuesTable.ownerEmail, ownerEmail));
+      .where(eq(venuesTable.organizationId, callerOrgId));
     ownedCouple = coupleCandidates.find((asset) => storedObjectMatchesPath(asset.objectKey, objectPath));
   }
   return !!ownedCouple;

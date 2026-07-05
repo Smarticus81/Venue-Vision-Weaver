@@ -36,7 +36,8 @@ function Router() {
         <Route path="/profiles">{() => <Redirect to="/" />}</Route>
         <Route path="/owner">{() => <Redirect to="/login" />}</Route>
         <Route path="/login">{() => <OwnerLoginPage />}</Route>
-        <Route path="/owner/login">{() => <OwnerLoginPage />}</Route>
+        {/* Legacy magic-link path; Clerk owns sign-in now */}
+        <Route path="/owner/login">{() => <Redirect to="/login" />}</Route>
         <Route path="/find-my-gallery">{() => <FindMyGalleryPage />}</Route>
         <Route path="/find-my-videos">{() => <Redirect to="/find-my-gallery" />}</Route>
 

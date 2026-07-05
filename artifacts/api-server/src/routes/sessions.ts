@@ -8,6 +8,7 @@ import {
   generatedAssetsTable,
   venuesTable,
   venueMediaTable,
+  organizationsTable,
   creditTransactionsTable,
   uploadIntentsTable,
 } from "@workspace/db";
@@ -33,7 +34,7 @@ import {
 } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
-import { requireOwnerVenue } from "../lib/ownerAuth.js";
+import { requireOrgVenue } from "../lib/orgAuth.js";
 import {
   mimeTypeFromObjectPath,
   ObjectNotFoundError,
@@ -219,6 +220,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
       name: venuesTable.name,
       ownerEmail: venuesTable.ownerEmail,
       creditsBalance: venuesTable.creditsBalance,
+      organizationId: venuesTable.organizationId,
     })
     .from(venuesTable)
     .where(eq(venuesTable.slug, params.data.slug));
@@ -303,14 +305,31 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
   let session: typeof coupleSessionsTable.$inferSelect | null = null;
   try {
     session = await db.transaction(async (tx) => {
-      const [updatedCredits] = await tx
-        .update(venuesTable)
-        .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${neededCredits}` })
-        .where(and(eq(venuesTable.id, venue.id), gte(venuesTable.creditsBalance, neededCredits)))
-        .returning({ creditsBalance: venuesTable.creditsBalance });
-
-      if (!updatedCredits) {
-        return null;
+      // Credits are debited from the billing organization when the venue has
+      // one; legacy venues (not yet adopted) draw from their own balance.
+      if (venue.organizationId != null) {
+        const [updatedCredits] = await tx
+          .update(organizationsTable)
+          .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${neededCredits}` })
+          .where(
+            and(
+              eq(organizationsTable.id, venue.organizationId),
+              gte(organizationsTable.creditsBalance, neededCredits),
+            ),
+          )
+          .returning({ creditsBalance: organizationsTable.creditsBalance });
+        if (!updatedCredits) {
+          return null;
+        }
+      } else {
+        const [updatedCredits] = await tx
+          .update(venuesTable)
+          .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${neededCredits}` })
+          .where(and(eq(venuesTable.id, venue.id), gte(venuesTable.creditsBalance, neededCredits)))
+          .returning({ creditsBalance: venuesTable.creditsBalance });
+        if (!updatedCredits) {
+          return null;
+        }
       }
 
       for (const objectKey of body.data.couplePhotoKeys) {
@@ -357,6 +376,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
       );
 
       await tx.insert(creditTransactionsTable).values({
+        organizationId: venue.organizationId,
         venueId: venue.id,
         delta: -neededCredits,
         reason: "session_debit",
@@ -419,7 +439,7 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const ownerVenue = await requireOwnerVenue(req, res, venue.slug);
+  const ownerVenue = await requireOrgVenue(req, res, venue.slug);
   if (!ownerVenue) return;
 
   const venueMedia = venue
@@ -466,7 +486,7 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const ownerVenue = await requireOwnerVenue(req, res, venue.slug);
+  const ownerVenue = await requireOrgVenue(req, res, venue.slug);
   if (!ownerVenue) return;
 
   const generated = await db
@@ -550,7 +570,7 @@ router.get("/venues/:slug/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  const venue = await requireOwnerVenue(req, res, params.data.slug);
+  const venue = await requireOrgVenue(req, res, params.data.slug);
   if (!venue) return;
 
   const sessions = await db
@@ -670,7 +690,7 @@ router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
     return;
   }
 
-  const ownerVenue = await requireOwnerVenue(req, res, venue.slug);
+  const ownerVenue = await requireOrgVenue(req, res, venue.slug);
   if (!ownerVenue) return;
 
   if (session.status !== "ready" || !(await hasReadyEmailGalleryBundle(session.id))) {

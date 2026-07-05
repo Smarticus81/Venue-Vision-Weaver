@@ -7,10 +7,11 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { db, coupleSessionsTable, venuesTable, generatedAssetsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
-import { handleStripeWebhook } from "./routes/billing.js";
+import { handleClerkWebhook } from "./routes/billing.js";
 import { logger } from "./lib/logger";
-import { logStripeMissing } from "./lib/stripe.js";
+import { clerkEnabled } from "./lib/orgAuth.js";
 import { corsOptions, securityHeaders } from "./lib/httpSecurity.js";
 import { trustProxySetting } from "./lib/trustProxy.js";
 import { hasCompletePublicGalleryAssets } from "./lib/sessionVisibility.js";
@@ -51,13 +52,24 @@ app.use(
 app.use(securityHeaders);
 app.use(cors(corsOptions()));
 app.use(cookieParser());
-logStripeMissing();
 
+if (clerkEnabled()) {
+  // Verifies the Clerk session (cookie or Authorization header) and exposes
+  // getAuth(req) to every route. Does not itself reject unauthenticated
+  // requests — org-scoped routes enforce that via requireOrg.
+  app.use(clerkMiddleware());
+} else {
+  logger.warn(
+    "CLERK_SECRET_KEY is not set — owner/organization routes will refuse requests until Clerk is configured",
+  );
+}
+
+// Clerk webhooks (billing + organization sync). Raw body for svix signature.
 app.post(
-  "/api/billing/webhook",
+  "/api/webhooks/clerk",
   express.raw({ type: "application/json" }),
   (req, res) => {
-    void handleStripeWebhook(req, res);
+    void handleClerkWebhook(req, res);
   },
 );
 

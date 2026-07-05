@@ -17,8 +17,8 @@ const objectAccessModule = (await import(
   canReadVenueMediaReference: (params: {
     publicVenueSlug?: string | null;
     venueSlug: string;
-    ownerEmail?: string | null;
-    venueOwnerEmail?: string | null;
+    callerOrgId?: number | null;
+    venueOrganizationId?: number | null;
   }) => boolean;
 };
 
@@ -202,6 +202,7 @@ const venueResponseModule = (await import(
     tagline: string | null;
     description: string | null;
     ownerEmail: string | null;
+    organizationId: number | null;
     contactEmail: string | null;
     contactPhone: string | null;
     websiteUrl: string | null;
@@ -377,20 +378,29 @@ try {
   assert.equal(
     canReadVenueMediaReference({
       venueSlug: slug,
-      ownerEmail: "Owner@Venue.com",
-      venueOwnerEmail: "owner@venue.com",
+      callerOrgId: 7,
+      venueOrganizationId: 7,
     }),
     true,
-    "owner sessions can read their own venue media",
+    "organization members can read their own org's venue media",
   );
   assert.equal(
     canReadVenueMediaReference({
       venueSlug: slug,
-      ownerEmail: "intruder@example.com",
-      venueOwnerEmail: "owner@venue.com",
+      callerOrgId: 8,
+      venueOrganizationId: 7,
     }),
     false,
-    "other owners cannot read venue media by object path",
+    "members of other organizations cannot read venue media by object path",
+  );
+  assert.equal(
+    canReadVenueMediaReference({
+      venueSlug: slug,
+      callerOrgId: 7,
+      venueOrganizationId: null,
+    }),
+    false,
+    "org members cannot read media of venues that have no organization",
   );
   assert.deepEqual(
     VENUE_MEDIA_COVERAGES,
@@ -467,11 +477,9 @@ try {
     SESSION_SECRET: "long-session-secret",
     SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "sb_service_role_live_key_123",
-    STRIPE_SECRET_KEY: "sk_live_1234567890abcdef",
-    STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdef",
-    STRIPE_PRICE_STARTER_MONTHLY: "price_123starter",
-    STRIPE_PRICE_GROWTH_MONTHLY: "price_123growth",
-    STRIPE_PRICE_CREDIT_PACK_10: "price_123pack10",
+    CLERK_SECRET_KEY: "sk_live_1234567890abcdef",
+    CLERK_PUBLISHABLE_KEY: "pk_live_1234567890abcdef",
+    CLERK_WEBHOOK_SIGNING_SECRET: "whsec_1234567890abcdef",
     RESEND_API_KEY: "re_live_real",
     EMAIL_FROM: "glimpse <noreply@examplevenue.com>",
     GOOGLE_AI_API_KEY: "AIzaProductionLikeKey123",
@@ -514,8 +522,8 @@ try {
     GEMINI_IMAGE_SIZE: "2k",
     GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1",
     EMAIL_FROM: "glimpse <onboarding@resend.dev>",
-    STRIPE_SECRET_KEY: "sk_test_placeholder",
-    STRIPE_PRICE_STARTER_MONTHLY: "price_starter",
+    CLERK_SECRET_KEY: "sk_test_placeholder",
+    CLERK_PUBLISHABLE_KEY: "pk_test_placeholder",
   };
   const envErrors = validateProductionEnvironment(brokenProductionEnv);
   assert.ok(
@@ -535,12 +543,12 @@ try {
     "production env rejects placeholder Supabase project URLs",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("live Stripe secret key")),
-    "production env requires live Stripe secret keys",
+    envErrors.some((error) => error.includes("live Clerk secret key")),
+    "production env requires live Clerk secret keys",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("STRIPE_PRICE_STARTER_MONTHLY")),
-    "production env rejects fake Stripe price labels",
+    envErrors.some((error) => error.includes("CLERK_PUBLISHABLE_KEY")),
+    "production env rejects non-live Clerk publishable keys",
   );
   assert.ok(
     envErrors.some((error) => error.includes("GALLERY_QUALITY_GATE")),
@@ -835,7 +843,12 @@ try {
   assert.match(
     bootstrapSql,
     /credit_transactions_stripe_event_id_unique[\s\S]*WHERE stripe_event_id IS NOT NULL/i,
-    "Supabase bootstrap keeps Stripe event idempotency unique only for non-null event IDs",
+    "Supabase bootstrap keeps billing event idempotency unique only for non-null event IDs",
+  );
+  assert.match(
+    bootstrapSql,
+    /CREATE TABLE IF NOT EXISTS organizations[\s\S]*clerk_org_id TEXT NOT NULL UNIQUE[\s\S]*credits_balance INTEGER NOT NULL DEFAULT 5[\s\S]*ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations\(id\)/i,
+    "Supabase bootstrap provisions the Clerk-backed billing organization and links venues to it",
   );
   assert.match(
     bootstrapSql,
@@ -887,7 +900,7 @@ try {
   );
   assert.match(
     storageRoute,
-    /requireOwnerVenue\(req, res, venueSlug\)[\s\S]*verifyCoupleUploadToken\(uploadToken, venueSlug\)[\s\S]*db\.insert\(uploadIntentsTable\)\.values\({[\s\S]*objectKey: objectPath[\s\S]*venueId[\s\S]*purpose[\s\S]*contentType[\s\S]*sizeBytes: size[\s\S]*expiresAt/s,
+    /requireOrgVenue\(req, res, venueSlug\)[\s\S]*verifyCoupleUploadToken\(uploadToken, venueSlug\)[\s\S]*db\.insert\(uploadIntentsTable\)\.values\({[\s\S]*objectKey: objectPath[\s\S]*venueId[\s\S]*purpose[\s\S]*contentType[\s\S]*sizeBytes: size[\s\S]*expiresAt/s,
     "upload URL requests authenticate owner/couple context and persist venue-scoped upload intents",
   );
   assert.match(
@@ -1064,7 +1077,7 @@ try {
   );
   assert.match(
     productionReadinessDocs,
-    /source-contract smoke tests[\s\S]*gallery-only flow[\s\S]*protected\s+storage[\s\S]*Stripe idempotency[\s\S]*quality thresholds/s,
+    /source-contract smoke tests[\s\S]*gallery-only flow[\s\S]*protected\s+storage[\s\S]*billing-event idempotency[\s\S]*quality thresholds/s,
     "production readiness docs include the smoke suite in the runtime launch gate",
   );
   assert.match(
@@ -1150,8 +1163,8 @@ try {
     new URL("../../artifacts/api-server/src/index.ts", import.meta.url),
     "utf8",
   );
-  const ownerAuthSource = fs.readFileSync(
-    new URL("../../artifacts/api-server/src/lib/ownerAuth.ts", import.meta.url),
+  const orgAuthSource = fs.readFileSync(
+    new URL("../../artifacts/api-server/src/lib/orgAuth.ts", import.meta.url),
     "utf8",
   );
   const venueRoutesSource = fs.readFileSync(
@@ -1159,24 +1172,23 @@ try {
     "utf8",
   );
   assert.match(
-    ownerAuthSource,
+    orgAuthSource,
     /isOwnerMutationOriginAllowed\(req[\s\S]*process\.env\.NODE_ENV !== "production"[\s\S]*isCorsOriginAllowed\(origin\)[\s\S]*refererOrigin[\s\S]*return false/s,
-    "owner cookie mutation guard rejects missing or untrusted production origins",
+    "owner mutation guard rejects missing or untrusted production origins",
   );
   assert.match(
-    ownerAuthSource,
-    /requireOwnerVenue\(req: Request, res: Response, slug: string\)[\s\S]*requireOwnerMutationOrigin\(req, res\)[\s\S]*getOwnerEmailFromRequest/s,
-    "owner venue authorization checks request origin before using cookie-backed owner sessions",
-  );
-  assert.match(
-    venueRoutesSource,
-    /router\.post\("\/owners\/login"[\s\S]*requireOwnerMutationOrigin\(req, res\)[\s\S]*exchangeOwnerLoginToken\(token\)[\s\S]*res\.cookie\(OWNER_SESSION_COOKIE/s,
-    "owner magic-link exchange checks request origin before consuming a token or setting the owner session cookie",
+    orgAuthSource,
+    /requireOrgVenue\(req: Request, res: Response, slug: string\)[\s\S]*requireOwnerMutationOrigin\(req, res\)[\s\S]*requireOrg\(req, res\)[\s\S]*eq\(venuesTable\.organizationId, ctx\.org\.id\)/s,
+    "venue authorization checks request origin, then requires a Clerk session with an active organization that owns the venue",
   );
   assert.match(
     venueRoutesSource,
-    /router\.post\("\/owners\/logout"[\s\S]*requireOwnerMutationOrigin\(req, res\)[\s\S]*revokeOwnerSession\(req\)/s,
-    "owner logout is protected by the same production origin guard as venue mutations",
+    /router\.post\("\/venues"[\s\S]*requireOwnerMutationOrigin\(req, res\)[\s\S]*requireOrg\(req, res\)[\s\S]*organizationId: ctx\.org\.id/s,
+    "venue creation requires an authenticated organization and attaches the venue to it",
+  );
+  assert.ok(
+    !/owners\/(login|logout|password-login|login-link|recover)|OWNER_SESSION_COOKIE/.test(venueRoutesSource),
+    "legacy owner cookie/password/magic-link endpoints are fully removed (Clerk owns auth)",
   );
   assert.match(
     serverIndex,
@@ -1204,7 +1216,7 @@ try {
   );
   assert.match(
     sessionsRoute,
-    /session = await db\.transaction[\s\S]*update\(venuesTable\)[\s\S]*gte\(venuesTable\.creditsBalance, neededCredits\)[\s\S]*update\(uploadIntentsTable\)[\s\S]*insert\(coupleSessionsTable\)[\s\S]*creditsCharged: neededCredits[\s\S]*insert\(coupleMediaTable\)[\s\S]*creditTransactionsTable/s,
+    /session = await db\.transaction[\s\S]*update\(organizationsTable\)[\s\S]*gte\(organizationsTable\.creditsBalance, neededCredits\)[\s\S]*update\(venuesTable\)[\s\S]*gte\(venuesTable\.creditsBalance, neededCredits\)[\s\S]*update\(uploadIntentsTable\)[\s\S]*insert\(coupleSessionsTable\)[\s\S]*creditsCharged: neededCredits[\s\S]*insert\(coupleMediaTable\)[\s\S]*creditTransactionsTable/s,
     "session creation atomically checks/debits credits, consumes upload intents, creates the gallery, records couple media, and stores the debit",
   );
   assert.match(
@@ -1253,7 +1265,7 @@ try {
   );
   assert.match(
     venuesRoute,
-    /GET \/venues\/:slug\/media \(owner session\)[\s\S]*router\.get\("\/venues\/:slug\/media"[\s\S]*const venue = await requireOwnerVenue\(req, res, params\.data\.slug\);[\s\S]*where\(eq\(venueMediaTable\.venueId, venue\.id\)\)/s,
+    /GET \/venues\/:slug\/media \(owner session\)[\s\S]*router\.get\("\/venues\/:slug\/media"[\s\S]*const venue = await requireOrgVenue\(req, res, params\.data\.slug\);[\s\S]*where\(eq\(venueMediaTable\.venueId, venue\.id\)\)/s,
     "venue media management list is owner-session protected",
   );
   assert.match(
@@ -1266,10 +1278,9 @@ try {
     /readyGalleryThumbnailObjectKey\(sessionId: number, status: string\)[\s\S]*hasCompletePublicGalleryAssets\(assets\)[\s\S]*displayOrder === 1[\s\S]*readyGalleryThumbnailObjectKey\(session\.id, session\.status\)/s,
     "venue dashboard summaries only show thumbnails for ready sessions with a complete V1 gallery bundle",
   );
-  assert.match(
-    venuesRoute,
-    /createOwnerLoginLink\(email, `\/profile\/\$\{venue\.slug\}`\)/s,
-    "owner recovery emails route external venue links through owner profile URLs",
+  assert.ok(
+    !/createOwnerLoginLink|sendOwnerRecoveryEmail|sendOwnerLoginEmail/.test(venuesRoute),
+    "venue routes contain no legacy magic-link or owner recovery email flows (Clerk owns auth)",
   );
   assert.match(
     openApiSpec,
@@ -1300,8 +1311,13 @@ try {
   );
   assert.match(
     billingRoute,
-    /success_url: `\$\{base\}\/profile\/\$\{slug\}\?billing=success`[\s\S]*cancel_url: `\$\{base\}\/profile\/\$\{slug\}\?billing=cancel`[\s\S]*return_url: `\$\{getAppBaseUrl\(\)\}\/profile\/\$\{slug\}`/s,
-    "Stripe checkout and portal return owners through the venue profile route",
+    /setOrgCreditsBalance\(org\.id, monthly, "subscription_grant", eventKey\)[\s\S]*payer\?\.organization_id[\s\S]*handleClerkWebhook[\s\S]*new Webhook\(secret\)[\s\S]*webhook\.verify\(payload/s,
+    "Clerk billing webhook verifies svix signatures, resolves the payer organization, and grants credits idempotently",
+  );
+  assert.match(
+    billingRoute,
+    /router\.get\("\/org"[\s\S]*requireOrg\(req, res\)[\s\S]*eq\(venuesTable\.organizationId, ctx\.org\.id\)/s,
+    "organization summary endpoint is Clerk-org protected and lists only the caller's venues",
   );
   const galleryGenerationSource = fs.readFileSync(
     new URL("../../artifacts/api-server/src/lib/galleryGeneration.ts", import.meta.url),
@@ -1343,26 +1359,18 @@ try {
     "main site is venue-facing and legacy owner entry opens profile access separately from couple preview URLs",
   );
   assert.ok(
-    venueLandingSource.includes("Start venue profile") &&
-      venueLandingSource.includes("Access profile") &&
-      venueLandingSource.includes("`/profile/${sampleSlug}`") &&
-      venueLandingSource.includes("`/preview/${sampleSlug}`"),
-    "venue landing page lets venues sign up, access profiles, and build couple links",
-  );
-  assert.match(
-    venueLandingSource,
-    /URLSearchParams\(window\.location\.search\)[\s\S]*params\.get\("owner"\) !== "sign-in"[\s\S]*setOwnerOpen\(true\)[\s\S]*window\.history\.replaceState/s,
-    "venue landing page deep-links directly into the owner profile access dialog",
-  );
-  assert.match(
-    venueSiteHeaderSource,
-    /onClick=\{onSignIn \?\? \(\(\) => setLocation\("\/\?owner=sign-in"\)\)\}/s,
-    "shared venue header sign-in opens the main site's owner profile access flow",
+    venueLandingSource.includes("/create-venue") && venueLandingSource.includes("/login"),
+    "venue landing page routes venues to workspace creation and Clerk sign-in",
   );
   assert.match(
     venueOwnerPageSource,
-    /VENUE_MEDIA_COVERAGE_OPTIONS[\s\S]*exterior[\s\S]*ceremony[\s\S]*reception[\s\S]*detail[\s\S]*natural_light[\s\S]*selectedCoverage[\s\S]*data: \{ objectKey: result\.objectPath, coverage: selectedCoverage/s,
-    "owner dashboard requires explicit venue photo coverage selection before media registration",
+    /COVERAGE_OPTIONS[\s\S]*exterior[\s\S]*ceremony[\s\S]*reception[\s\S]*detail[\s\S]*natural_light[\s\S]*coverage: nextCoverage/s,
+    "owner dashboard registers venue photos with explicit coverage metadata",
+  );
+  assert.match(
+    venueOwnerPageSource,
+    /OrgGate[\s\S]*useGetOrganization[\s\S]*PricingTable[\s\S]*for="organization"/s,
+    "owner dashboard is organization-gated and exposes Clerk Billing organization plans",
   );
   const couplePageSource = fs.readFileSync(
     new URL("../../artifacts/wedding-app/src/pages/CouplePage.tsx", import.meta.url),
@@ -1402,6 +1410,7 @@ try {
       contactPhone: "555-0100",
       websiteUrl: "https://example.com/",
       bookingUrl: "https://example.com/tours",
+      organizationId: 7,
       plan: "growth",
       creditsBalance: 17,
       stripeCustomerId: "cus_123",
@@ -1420,6 +1429,7 @@ try {
       contactPhone: "555-0100",
       websiteUrl: "https://example.com/",
       bookingUrl: "https://example.com/tours",
+      organizationId: 7,
       plan: "growth",
       creditsBalance: 17,
       billingPeriodEnd,

@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type OwnerSessionResponseVenuesItem = {
+export type OrganizationResponseVenuesItem = {
   id: number;
   name: string;
   slug: string;
+  tagline?: string | null;
+  createdAt: Date;
 };

@@ -38,7 +38,7 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 
 ### Artifacts (deployable apps)
 
-- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing, gallery styles). Credit-gated Gemini image generation with Stripe billing.
+- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing/org, gallery styles). Credit-gated Gemini image generation with Clerk Billing (organization plans).
 - **`artifacts/wedding-app`** - React 19 SPA (Vite). Venue main site at `/`, signup at `/create-venue`, owner dashboard at `/dashboard/:slug`, couple flow at `/preview/:slug`, share links at `/v/:shareToken`.
 
 ### Shared libraries (`lib/`)
@@ -53,14 +53,15 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 
 - **OpenAPI-first**: Edit `lib/api-spec/openapi.yaml`, then run codegen.
 - **Credits**: Gallery session = 1 credit. Trial venues get 5 credits on create.
-- **Owner auth**: Venue owners sign in with email magic links and an httpOnly cookie session. Do not add PIN-based flows.
-- **Billing**: Stripe Checkout + webhooks in `artifacts/api-server/src/routes/billing.ts`.
+- **Owner auth**: Clerk end-to-end — members sign in to their own Clerk profile; org-scoped API routes use `requireOrg`/`requireOrgVenue` (`src/lib/orgAuth.ts`). Do not add PIN- or password-based flows.
+- **Multi-tenancy**: One Clerk Organization per account is the billing tenant (`organizations` table). It owns the plan, the shared credit balance, and many venues. Members sign in with individual Clerk profiles.
+- **Billing**: Clerk Billing organization plans (`<PricingTable for="organization" />` in the dashboard) + the Clerk webhook (`/api/webhooks/clerk` in `artifacts/api-server/src/routes/billing.ts`), which grants monthly credits by plan slug.
 
 ### Required environment variables
 
 - `DATABASE_URL` - Supabase PostgreSQL URI (`pnpm run setup:db`)
-- `APP_BASE_URL` - Public URL for emails and Stripe redirects
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` - Billing
+- `APP_BASE_URL` - Public URL for emails and share links
+- `CLERK_SECRET_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` - Clerk auth + billing
 - `GOOGLE_AI_API_KEY` - Gemini gallery generation and quality review
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` - file uploads (`pnpm run setup:storage`)
 

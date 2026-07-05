@@ -21,6 +21,9 @@ export type VenueMediaCoverage = (typeof VENUE_MEDIA_COVERAGES)[number];
 
 export const venuesTable = pgTable("venues", {
   id: serial("id").primaryKey(),
+  // Billing tenant. Nullable only for pre-Clerk legacy rows; owner flows
+  // adopt those into the caller's organization on first authenticated touch.
+  organizationId: integer("organization_id"),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   tagline: text("tagline"),

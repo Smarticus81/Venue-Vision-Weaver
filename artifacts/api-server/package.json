@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.35",
     "@google-cloud/storage": "^7.19.0",
     "@supabase/supabase-js": "^2.49.1",
     "@workspace/api-zod": "workspace:*",
@@ -24,7 +25,8 @@
     "pino-http": "^10",
     "resend": "^4.0.0",
     "sharp": "^0.35.2",
-    "stripe": "^17.7.0"
+    "stripe": "^17.7.0",
+    "svix": "^1.96.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
