@@ -34,9 +34,11 @@ export default function OwnerLoginPage() {
         if (!res.ok) throw new Error(data.error ?? "Login link is invalid or expired.");
         setLocation("/dashboard");
       })
-      .catch((err) =>
-        setTokenError(err instanceof Error ? err.message : "Could not sign in."),
-      )
+      .catch((err) => {
+        setTokenError(err instanceof Error ? err.message : "Could not sign in.");
+        // Drop the consumed token so a refresh shows the login form instead of re-failing.
+        window.history.replaceState(null, "", window.location.pathname);
+      })
       .finally(() => setIsTokenExchange(false));
   }, [setLocation]);
 
