@@ -93,7 +93,7 @@ async function fetchClerkOrgName(clerkOrgId: string): Promise<string> {
   }
 }
 
-async function fetchClerkUserEmail(clerkUserId: string): Promise<string | null> {
+export async function fetchClerkUserEmail(clerkUserId: string): Promise<string | null> {
   try {
     const user = await clerkClient.users.getUser(clerkUserId);
     const email =

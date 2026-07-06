@@ -127,6 +127,33 @@ function clerkPublishableKeyError(env: EnvLike): string | null {
   return null;
 }
 
+function stripeSecretError(env: EnvLike): string | null {
+  const secret = env.STRIPE_SECRET_KEY?.trim() ?? "";
+  if (!secret) return null;
+  if (!/^sk_live_[A-Za-z0-9]+/.test(secret)) {
+    return "STRIPE_SECRET_KEY must be a live Stripe secret key in production";
+  }
+  return null;
+}
+
+function stripeWebhookSecretError(env: EnvLike): string | null {
+  const secret = env.STRIPE_WEBHOOK_SECRET?.trim() ?? "";
+  if (!secret) return null;
+  if (!/^whsec_[A-Za-z0-9]+/.test(secret)) {
+    return "STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret";
+  }
+  return null;
+}
+
+function stripePriceIdError(env: EnvLike, key: string): string | null {
+  const priceId = env[key]?.trim() ?? "";
+  if (!priceId) return null;
+  if (!/^price_[A-Za-z0-9]{8,}$/.test(priceId)) {
+    return `${key} must be a Stripe price id`;
+  }
+  return null;
+}
+
 function configuredImageModels(env: EnvLike): string[] {
   const explicit = env.GEMINI_IMAGE_MODELS;
   if (explicit) {
@@ -173,6 +200,11 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
     "SESSION_SECRET",
     "CLERK_SECRET_KEY",
     "CLERK_WEBHOOK_SIGNING_SECRET",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_PRICE_STARTER_MONTHLY",
+    "STRIPE_PRICE_GROWTH_MONTHLY",
+    "STRIPE_PRICE_CREDIT_PACK_10",
     "RESEND_API_KEY",
     "EMAIL_FROM",
   ];
@@ -201,12 +233,17 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
   const supabaseError = supabaseUrlError(env);
   if (supabaseError) errors.push(supabaseError);
 
-  const clerkErrors = [
+  const providerErrors = [
     clerkSecretError(env),
     clerkWebhookSecretError(env),
     clerkPublishableKeyError(env),
+    stripeSecretError(env),
+    stripeWebhookSecretError(env),
+    stripePriceIdError(env, "STRIPE_PRICE_STARTER_MONTHLY"),
+    stripePriceIdError(env, "STRIPE_PRICE_GROWTH_MONTHLY"),
+    stripePriceIdError(env, "STRIPE_PRICE_CREDIT_PACK_10"),
   ].filter((error): error is string => Boolean(error));
-  errors.push(...clerkErrors);
+  errors.push(...providerErrors);
 
   if ((env.EMAIL_FROM ?? "").includes("onboarding@resend.dev")) {
     errors.push("EMAIL_FROM must use a verified production sender, not onboarding@resend.dev");

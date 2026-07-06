@@ -221,6 +221,10 @@ export const GetOrganizationResponse = zod.object({
       .string()
       .nullish()
       .describe("Caller's Clerk role in this organization (e.g. org:admin)."),
+    billingConfigured: zod
+      .boolean()
+      .optional()
+      .describe("Whether Stripe billing is configured on this server."),
   }),
   venues: zod.array(
     zod.object({
@@ -231,6 +235,28 @@ export const GetOrganizationResponse = zod.object({
       createdAt: zod.coerce.date(),
     }),
   ),
+});
+
+/**
+ * Subscriptions (starter/growth) and one-off credit packs are purchased
+by the organization; credits land in the shared org balance via the
+Stripe webhook.
+
+ * @summary Start Stripe Checkout for the caller's organization
+ */
+export const CreateOrgBillingCheckoutBody = zod.object({
+  product: zod.enum(["starter", "growth", "credit_pack"]),
+});
+
+export const CreateOrgBillingCheckoutResponse = zod.object({
+  url: zod.string().url(),
+});
+
+/**
+ * @summary Open the Stripe customer portal for the caller's organization
+ */
+export const CreateOrgBillingPortalResponse = zod.object({
+  url: zod.string().url(),
 });
 
 /**

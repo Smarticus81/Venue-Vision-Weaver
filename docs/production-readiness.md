@@ -64,7 +64,7 @@ unique `stripe_event_id` index that prevents billing webhook replay (Clerk svix 
 duplicating credits.
 
 Railway is configured to use `/api/readyz` as the deploy health check, so a
-deployment with missing DB/storage/Gemini/Clerk/email/ffmpeg readiness should
+deployment with missing DB/storage/Gemini/Stripe/Clerk/email/ffmpeg readiness should
 not be treated as healthy.
 
 ## Gallery Quality Gate

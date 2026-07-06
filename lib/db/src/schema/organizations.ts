@@ -15,6 +15,9 @@ export const organizationsTable = pgTable("organizations", {
   name: text("name").notNull(),
   plan: text("plan").notNull().default("trial"),
   creditsBalance: integer("credits_balance").notNull().default(TRIAL_CREDITS),
+  // Stripe billing lives on the organization, never on a venue.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   billingPeriodEnd: timestamp("billing_period_end"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

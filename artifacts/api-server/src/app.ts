@@ -9,8 +9,9 @@ import { db, coupleSessionsTable, venuesTable, generatedAssetsTable } from "@wor
 import { eq } from "drizzle-orm";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
-import { handleClerkWebhook } from "./routes/billing.js";
+import { handleClerkWebhook, handleStripeWebhook } from "./routes/billing.js";
 import { logger } from "./lib/logger";
+import { logStripeMissing } from "./lib/stripe.js";
 import { clerkEnabled } from "./lib/orgAuth.js";
 import { corsOptions, securityHeaders } from "./lib/httpSecurity.js";
 import { trustProxySetting } from "./lib/trustProxy.js";
@@ -52,6 +53,7 @@ app.use(
 app.use(securityHeaders);
 app.use(cors(corsOptions()));
 app.use(cookieParser());
+logStripeMissing();
 
 if (clerkEnabled()) {
   // Verifies the Clerk session (cookie or Authorization header) and exposes
@@ -64,7 +66,17 @@ if (clerkEnabled()) {
   );
 }
 
-// Clerk webhooks (billing + organization sync). Raw body for svix signature.
+// Stripe billing webhooks (org subscriptions + credit packs). Raw body for
+// signature verification.
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    void handleStripeWebhook(req, res);
+  },
+);
+
+// Clerk webhooks (organization name sync). Raw body for svix signature.
 app.post(
   "/api/webhooks/clerk",
   express.raw({ type: "application/json" }),

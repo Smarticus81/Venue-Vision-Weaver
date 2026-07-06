@@ -16,4 +16,6 @@ export type OrganizationResponseOrganization = {
   clerkOrgId: string;
   /** Caller's Clerk role in this organization (e.g. org:admin). */
   role?: string | null;
+  /** Whether Stripe billing is configured on this server. */
+  billingConfigured?: boolean;
 };

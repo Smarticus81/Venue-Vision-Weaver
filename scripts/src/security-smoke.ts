@@ -480,6 +480,11 @@ try {
     CLERK_SECRET_KEY: "sk_live_1234567890abcdef",
     CLERK_PUBLISHABLE_KEY: "pk_live_1234567890abcdef",
     CLERK_WEBHOOK_SIGNING_SECRET: "whsec_1234567890abcdef",
+    STRIPE_SECRET_KEY: "sk_live_1234567890abcdef",
+    STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdef",
+    STRIPE_PRICE_STARTER_MONTHLY: "price_123starter",
+    STRIPE_PRICE_GROWTH_MONTHLY: "price_123growth",
+    STRIPE_PRICE_CREDIT_PACK_10: "price_123pack10",
     RESEND_API_KEY: "re_live_real",
     EMAIL_FROM: "glimpse <noreply@examplevenue.com>",
     GOOGLE_AI_API_KEY: "AIzaProductionLikeKey123",
@@ -524,6 +529,8 @@ try {
     EMAIL_FROM: "glimpse <onboarding@resend.dev>",
     CLERK_SECRET_KEY: "sk_test_placeholder",
     CLERK_PUBLISHABLE_KEY: "pk_test_placeholder",
+    STRIPE_SECRET_KEY: "sk_test_placeholder",
+    STRIPE_PRICE_STARTER_MONTHLY: "price_starter",
   };
   const envErrors = validateProductionEnvironment(brokenProductionEnv);
   assert.ok(
@@ -549,6 +556,14 @@ try {
   assert.ok(
     envErrors.some((error) => error.includes("CLERK_PUBLISHABLE_KEY")),
     "production env rejects non-live Clerk publishable keys",
+  );
+  assert.ok(
+    envErrors.some((error) => error.includes("live Stripe secret key")),
+    "production env requires live Stripe secret keys",
+  );
+  assert.ok(
+    envErrors.some((error) => error.includes("STRIPE_PRICE_STARTER_MONTHLY")),
+    "production env rejects fake Stripe price labels",
   );
   assert.ok(
     envErrors.some((error) => error.includes("GALLERY_QUALITY_GATE")),
@@ -1311,8 +1326,23 @@ try {
   );
   assert.match(
     billingRoute,
-    /setOrgCreditsBalance\(org\.id, monthly, "subscription_grant", eventKey\)[\s\S]*payer\?\.organization_id[\s\S]*handleClerkWebhook[\s\S]*new Webhook\(secret\)[\s\S]*webhook\.verify\(payload/s,
-    "Clerk billing webhook verifies svix signatures, resolves the payer organization, and grants credits idempotently",
+    /router\.post\("\/org\/billing\/checkout"[\s\S]*requireOwnerMutationOrigin\(req, res\)[\s\S]*requireOrg\(req, res\)[\s\S]*organizationId: String\(ctx\.org\.id\)[\s\S]*router\.post\("\/org\/billing\/portal"[\s\S]*requireOrg\(req, res\)/s,
+    "Stripe checkout and portal are organization-scoped and origin-guarded",
+  );
+  assert.match(
+    billingRoute,
+    /handleStripeWebhook[\s\S]*constructEvent\(req\.body as Buffer, sig, webhookSecret\)[\s\S]*eq\(creditTransactionsTable\.stripeEventId, event\.id\)[\s\S]*grantCreditsToOrg\(organizationId, CREDIT_PACK_AMOUNT, "pack_purchase", event\.id\)[\s\S]*setOrgCreditsBalance\(org\.id, credits, "subscription_grant", event\.id\)/s,
+    "Stripe webhook verifies signatures and grants organization credits idempotently by event id",
+  );
+  assert.match(
+    billingRoute,
+    /success_url: `\$\{base\}\/dashboard\?billing=success`[\s\S]*cancel_url: `\$\{base\}\/dashboard\?billing=cancel`[\s\S]*return_url: `\$\{getAppBaseUrl\(\)\}\/dashboard`/s,
+    "Stripe checkout and portal return members to the organization dashboard",
+  );
+  assert.match(
+    billingRoute,
+    /handleClerkWebhook[\s\S]*new Webhook\(secret\)[\s\S]*webhook\.verify\(payload[\s\S]*organization\.created/s,
+    "Clerk webhook verifies svix signatures and stays scoped to organization sync",
   );
   assert.match(
     billingRoute,
@@ -1369,8 +1399,8 @@ try {
   );
   assert.match(
     venueOwnerPageSource,
-    /OrgGate[\s\S]*useGetOrganization[\s\S]*PricingTable[\s\S]*for="organization"/s,
-    "owner dashboard is organization-gated and exposes Clerk Billing organization plans",
+    /OrgGate[\s\S]*useGetOrganization[\s\S]*useCreateOrgBillingCheckout[\s\S]*useCreateOrgBillingPortal[\s\S]*BILLING_PRODUCTS/s,
+    "owner dashboard is organization-gated and drives Stripe checkout, credit packs, and the billing portal",
   );
   const couplePageSource = fs.readFileSync(
     new URL("../../artifacts/wedding-app/src/pages/CouplePage.tsx", import.meta.url),

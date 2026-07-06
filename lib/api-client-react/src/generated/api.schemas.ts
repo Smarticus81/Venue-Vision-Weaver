@@ -107,6 +107,27 @@ export interface VenueResponse {
   createdAt: string;
 }
 
+export type BillingCheckoutBodyProduct =
+  (typeof BillingCheckoutBodyProduct)[keyof typeof BillingCheckoutBodyProduct];
+
+export const BillingCheckoutBodyProduct = {
+  starter: "starter",
+  growth: "growth",
+  credit_pack: "credit_pack",
+} as const;
+
+export interface BillingCheckoutBody {
+  product: BillingCheckoutBodyProduct;
+}
+
+export interface BillingCheckoutResponse {
+  url: string;
+}
+
+export interface BillingPortalResponse {
+  url: string;
+}
+
 /**
  * All fields optional. Only the provided fields are updated.
 Slug is intentionally not editable to keep public URLs stable.
@@ -152,6 +173,8 @@ export type OrganizationResponseOrganization = {
   clerkOrgId: string;
   /** Caller's Clerk role in this organization (e.g. org:admin). */
   role?: string | null;
+  /** Whether Stripe billing is configured on this server. */
+  billingConfigured?: boolean;
 };
 
 export type OrganizationResponseVenuesItem = {

@@ -8,32 +8,31 @@ import {
   creditTransactionsTable,
   STARTER_MONTHLY_CREDITS,
   GROWTH_MONTHLY_CREDITS,
-  type OrgPlan,
+  CREDIT_PACK_AMOUNT,
+  type Organization,
 } from "@workspace/db";
 import {
   grantCreditsToOrg,
   setOrgCreditsBalance,
 } from "../lib/credits.js";
-import { requireOrg, ensureOrganizationByClerkId } from "../lib/orgAuth.js";
+import {
+  requireStripe,
+  isStripeConfigured,
+  STRIPE_PRICES,
+  getAppBaseUrl,
+  type BillingProduct,
+} from "../lib/stripe.js";
+import {
+  requireOrg,
+  requireOwnerMutationOrigin,
+  ensureOrganizationByClerkId,
+  fetchClerkUserEmail,
+} from "../lib/orgAuth.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
-const PLAN_CREDITS: Record<string, number> = {
-  starter: STARTER_MONTHLY_CREDITS,
-  growth: GROWTH_MONTHLY_CREDITS,
-};
-
-/** Map a Clerk Billing plan slug onto our plan enum, ignoring free tiers. */
-function paidPlanFromSlug(slug: string | undefined | null): OrgPlan | null {
-  if (!slug) return null;
-  const normalized = slug.toLowerCase();
-  if (normalized.includes("growth")) return "growth";
-  if (normalized.includes("starter")) return "starter";
-  return null;
-}
-
-/* ————— Org billing summary (dashboard) ————— */
+/* ————— Org summary (dashboard) ————— */
 
 // GET /org — the caller's organization: plan, credits, and its venues.
 router.get("/org", async (req, res): Promise<void> => {
@@ -61,6 +60,7 @@ router.get("/org", async (req, res): Promise<void> => {
       billingPeriodEnd: ctx.org.billingPeriodEnd,
       clerkOrgId: ctx.org.clerkOrgId,
       role: ctx.orgRole,
+      billingConfigured: isStripeConfigured(),
     },
     venues,
   });
@@ -88,100 +88,224 @@ router.get("/org/credit-history", async (req, res): Promise<void> => {
   res.json({ transactions: rows });
 });
 
-/* ————— Clerk webhook (auth + billing events) ————— */
+/* ————— Stripe billing (organization-scoped) ————— */
 
-type ClerkSubscriptionItem = {
-  status?: string;
-  plan?: { slug?: string; name?: string };
-  period_end?: number | null;
-  periodEnd?: number | null;
-};
+async function ensureStripeCustomer(org: Organization, clerkUserId: string): Promise<string> {
+  const stripe = requireStripe();
+  if (org.stripeCustomerId) return org.stripeCustomerId;
 
-type ClerkWebhookEvent = {
-  type: string;
-  data: {
-    id?: string;
-    name?: string;
-    slug?: string;
-    status?: string;
-    payer?: { organization_id?: string | null; user_id?: string | null };
-    items?: ClerkSubscriptionItem[];
-    plan?: { slug?: string; name?: string };
-    period_end?: number | null;
-    organization?: { id?: string };
-  };
-};
-
-function timestampToDate(value: number | null | undefined): Date | null {
-  if (!value || !Number.isFinite(value)) return null;
-  // Clerk sends epoch milliseconds; tolerate seconds just in case.
-  const ms = value > 10_000_000_000 ? value : value * 1000;
-  return new Date(ms);
-}
-
-async function applyPlanChange(
-  clerkOrgId: string,
-  plan: OrgPlan,
-  eventKey: string,
-  periodEnd: Date | null,
-): Promise<void> {
-  const org = await ensureOrganizationByClerkId(clerkOrgId);
+  // Only hit Clerk for the billing email on first-time customer creation.
+  const billingEmail = await fetchClerkUserEmail(clerkUserId);
+  const customer = await stripe.customers.create({
+    email: billingEmail ?? undefined,
+    name: org.name,
+    metadata: { organizationId: String(org.id), clerkOrgId: org.clerkOrgId },
+  });
 
   await db
     .update(organizationsTable)
-    .set({ plan, billingPeriodEnd: periodEnd })
+    .set({ stripeCustomerId: customer.id })
     .where(eq(organizationsTable.id, org.id));
 
-  const monthly = PLAN_CREDITS[plan];
-  if (monthly) {
-    await setOrgCreditsBalance(org.id, monthly, "subscription_grant", eventKey);
-    logger.info({ clerkOrgId, plan, monthly }, "Applied subscription credit grant");
-  }
+  return customer.id;
 }
 
-async function handleSubscriptionEvent(event: ClerkWebhookEvent, eventKey: string): Promise<void> {
-  const clerkOrgId = event.data.payer?.organization_id ?? null;
-  if (!clerkOrgId) {
-    // User-level (B2C) subscriptions are not part of this product.
-    logger.info({ type: event.type }, "Ignoring non-organization billing event");
+// POST /org/billing/checkout — start Stripe Checkout for the caller's org.
+router.post("/org/billing/checkout", async (req, res): Promise<void> => {
+  if (!requireOwnerMutationOrigin(req, res)) return;
+  if (!isStripeConfigured()) {
+    res.status(503).json({ error: "Billing is not configured on this server." });
     return;
   }
 
-  const items: ClerkSubscriptionItem[] = Array.isArray(event.data.items)
-    ? event.data.items
-    : event.data.plan
-      ? [{ plan: event.data.plan, status: event.data.status, period_end: event.data.period_end }]
-      : [];
+  const ctx = await requireOrg(req, res);
+  if (!ctx) return;
 
-  // Prefer an active paid item; otherwise detect that paid coverage ended.
-  const activePaid = items.find(
-    (item) => paidPlanFromSlug(item.plan?.slug) && (item.status ?? "active") === "active",
-  );
-
-  if (activePaid) {
-    const plan = paidPlanFromSlug(activePaid.plan?.slug)!;
-    const periodEnd = timestampToDate(activePaid.period_end ?? activePaid.periodEnd);
-    await applyPlanChange(clerkOrgId, plan, eventKey, periodEnd);
+  const product = req.body?.product as BillingProduct;
+  if (!product || !(product in STRIPE_PRICES)) {
+    res.status(400).json({ error: "product must be starter, growth, or credit_pack" });
     return;
   }
 
-  const hadPaidItem = items.some((item) => paidPlanFromSlug(item.plan?.slug));
-  const subscriptionEnded =
-    event.type === "subscription.canceled" ||
-    event.type === "subscriptionItem.canceled" ||
-    event.type === "subscriptionItem.ended" ||
-    event.data.status === "canceled" ||
-    event.data.status === "ended";
-
-  if (hadPaidItem && subscriptionEnded) {
-    const org = await ensureOrganizationByClerkId(clerkOrgId);
-    await db
-      .update(organizationsTable)
-      .set({ plan: "none", billingPeriodEnd: null })
-      .where(eq(organizationsTable.id, org.id));
-    logger.info({ clerkOrgId }, "Subscription ended; organization set to plan none");
+  const priceId = STRIPE_PRICES[product];
+  if (!priceId) {
+    res.status(503).json({ error: "Price not configured for this product" });
+    return;
   }
+
+  try {
+    const stripe = requireStripe();
+    const customerId = await ensureStripeCustomer(ctx.org, ctx.clerkUserId);
+    const base = getAppBaseUrl();
+
+    const isSubscription = product === "starter" || product === "growth";
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: isSubscription ? "subscription" : "payment",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${base}/dashboard?billing=success`,
+      cancel_url: `${base}/dashboard?billing=cancel`,
+      metadata: {
+        organizationId: String(ctx.org.id),
+        product,
+      },
+      subscription_data: isSubscription
+        ? { metadata: { organizationId: String(ctx.org.id), product } }
+        : undefined,
+    });
+
+    if (!session.url) {
+      res.status(500).json({ error: "Failed to create checkout session" });
+      return;
+    }
+
+    res.json({ url: session.url });
+  } catch (err) {
+    logger.error({ err, orgId: ctx.org.id, product }, "Stripe checkout failed");
+    res.status(500).json({ error: "Could not start checkout" });
+  }
+});
+
+// POST /org/billing/portal — open the Stripe customer portal for the org.
+router.post("/org/billing/portal", async (req, res): Promise<void> => {
+  if (!requireOwnerMutationOrigin(req, res)) return;
+  if (!isStripeConfigured()) {
+    res.status(503).json({ error: "Billing is not configured on this server." });
+    return;
+  }
+
+  const ctx = await requireOrg(req, res);
+  if (!ctx) return;
+
+  try {
+    const stripe = requireStripe();
+    const customerId = await ensureStripeCustomer(ctx.org, ctx.clerkUserId);
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${getAppBaseUrl()}/dashboard`,
+    });
+    res.json({ url: portal.url });
+  } catch (err) {
+    logger.error({ err, orgId: ctx.org.id }, "Stripe portal failed");
+    res.status(500).json({ error: "Could not open billing portal" });
+  }
+});
+
+export async function handleStripeWebhook(req: Request, res: Response): Promise<void> {
+  const stripe = requireStripe();
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    res.status(503).send("Webhook secret not configured");
+    return;
+  }
+
+  const sig = req.headers["stripe-signature"];
+  if (!sig || typeof sig !== "string") {
+    res.status(400).send("Missing stripe-signature");
+    return;
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body as Buffer, sig, webhookSecret);
+  } catch (err) {
+    logger.warn({ err }, "Stripe webhook signature verification failed");
+    res.status(400).send("Invalid signature");
+    return;
+  }
+
+  try {
+    const [existingEvent] = await db
+      .select({ id: creditTransactionsTable.id })
+      .from(creditTransactionsTable)
+      .where(eq(creditTransactionsTable.stripeEventId, event.id))
+      .limit(1);
+    if (existingEvent) {
+      res.json({ received: true });
+      return;
+    }
+
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object;
+        const organizationId = Number(session.metadata?.organizationId);
+        const product = session.metadata?.product as BillingProduct | undefined;
+        if (!organizationId || !product) break;
+
+        if (product === "credit_pack") {
+          await grantCreditsToOrg(organizationId, CREDIT_PACK_AMOUNT, "pack_purchase", event.id);
+        } else if (product === "starter" || product === "growth") {
+          const subId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : session.subscription?.id;
+          await db
+            .update(organizationsTable)
+            .set({
+              plan: product,
+              stripeSubscriptionId: subId ?? null,
+            })
+            .where(eq(organizationsTable.id, organizationId));
+        }
+        break;
+      }
+      case "invoice.paid": {
+        const invoice = event.data.object;
+        const subId =
+          typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : invoice.subscription?.id;
+        if (!subId) break;
+
+        const [org] = await db
+          .select()
+          .from(organizationsTable)
+          .where(eq(organizationsTable.stripeSubscriptionId, subId));
+        if (!org) break;
+
+        const credits =
+          org.plan === "growth" ? GROWTH_MONTHLY_CREDITS : STARTER_MONTHLY_CREDITS;
+        await setOrgCreditsBalance(org.id, credits, "subscription_grant", event.id);
+
+        const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+        if (periodEnd) {
+          await db
+            .update(organizationsTable)
+            .set({ billingPeriodEnd: new Date(periodEnd * 1000) })
+            .where(eq(organizationsTable.id, org.id));
+        }
+        break;
+      }
+      case "customer.subscription.deleted": {
+        const sub = event.data.object;
+        await db
+          .update(organizationsTable)
+          .set({
+            plan: "none",
+            stripeSubscriptionId: null,
+            billingPeriodEnd: null,
+          })
+          .where(eq(organizationsTable.stripeSubscriptionId, sub.id));
+        break;
+      }
+      default:
+        break;
+    }
+  } catch (err) {
+    logger.error({ err, type: event.type }, "Stripe webhook handler error");
+    res.status(500).send("Webhook handler failed");
+    return;
+  }
+
+  res.json({ received: true });
 }
+
+/* ————— Clerk webhook (organization sync only — billing is Stripe) ————— */
+
+type ClerkWebhookEvent = {
+  type: string;
+  data: { id?: string; name?: string };
+};
 
 export async function handleClerkWebhook(req: Request, res: Response): Promise<void> {
   const secret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
@@ -218,11 +342,7 @@ export async function handleClerkWebhook(req: Request, res: Response): Promise<v
   }
 
   try {
-    if (event.type.startsWith("subscription")) {
-      // svix-id is stable across redeliveries of the same message — our
-      // idempotency key for credit grants.
-      await handleSubscriptionEvent(event, svixId);
-    } else if (event.type === "organization.created" || event.type === "organization.updated") {
+    if (event.type === "organization.created" || event.type === "organization.updated") {
       const clerkOrgId = event.data.id;
       const name = event.data.name;
       if (clerkOrgId) {
@@ -244,5 +364,4 @@ export async function handleClerkWebhook(req: Request, res: Response): Promise<v
   res.json({ received: true });
 }
 
-export { grantCreditsToOrg };
 export default router;
