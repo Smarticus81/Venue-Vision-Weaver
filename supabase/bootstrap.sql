@@ -9,9 +9,15 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   plan TEXT NOT NULL DEFAULT 'trial',
   credits_balance INTEGER NOT NULL DEFAULT 5,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
   billing_period_end TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
+  ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 
 CREATE TABLE IF NOT EXISTS venues (
   id SERIAL PRIMARY KEY,

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useAddVenueMedia,
+  useCreateOrgBillingCheckout,
+  useCreateOrgBillingPortal,
   useCreateSession,
   useDeleteSession,
   useDeleteVenueMedia,
@@ -14,9 +16,45 @@ import {
   type ErrorEnvelope,
   type ErrorType,
 } from "@workspace/api-client-react";
-import { PricingTable, useClerk, useUser } from "@clerk/clerk-react";
+import { useClerk, useUser } from "@clerk/clerk-react";
 import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
-import { clerkConfigured, darkroomAppearance } from "@/lib/clerk";
+import { clerkConfigured } from "@/lib/clerk";
+
+type BillingProductId = "starter" | "growth" | "credit_pack";
+
+const BILLING_PRODUCTS: Array<{
+  id: BillingProductId;
+  kicker: string;
+  title: string;
+  description: string;
+  credits: string;
+  cta: string;
+}> = [
+  {
+    id: "starter",
+    kicker: "Plan 01",
+    title: "Starter",
+    description: "For a single active venue building post-tour follow-up into the sales flow.",
+    credits: "25 credits / month",
+    cta: "Subscribe to Starter",
+  },
+  {
+    id: "growth",
+    kicker: "Plan 02",
+    title: "Growth",
+    description: "For organizations running several venues or a full tour calendar.",
+    credits: "100 credits / month",
+    cta: "Subscribe to Growth",
+  },
+  {
+    id: "credit_pack",
+    kicker: "Top-up",
+    title: "Credit pack",
+    description: "One-off boost when a busy weekend outruns the monthly allowance.",
+    credits: "+10 credits, one time",
+    cta: "Buy credit pack",
+  },
+];
 import { useUpload } from "@workspace/object-storage-web";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -494,6 +532,60 @@ function DashboardInner() {
     await signOut();
     setLocation("/login");
   };
+
+  const startCheckout = useCreateOrgBillingCheckout();
+  const openPortal = useCreateOrgBillingPortal();
+  const [checkoutProduct, setCheckoutProduct] = useState<BillingProductId | null>(null);
+
+  const handleCheckout = (product: BillingProductId) => {
+    setCheckoutProduct(product);
+    startCheckout.mutate(
+      { data: { product } },
+      {
+        onSuccess: (data) => {
+          window.location.assign(data.url);
+        },
+        onError: (err: ErrorType<ErrorEnvelope>) => {
+          setCheckoutProduct(null);
+          toast({
+            title: "Could not start checkout",
+            description: err.data?.error ?? "Try again.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  const handleOpenPortal = () => {
+    openPortal.mutate(undefined, {
+      onSuccess: (data) => {
+        window.location.assign(data.url);
+      },
+      onError: (err: ErrorType<ErrorEnvelope>) => {
+        toast({
+          title: "Could not open billing portal",
+          description: err.data?.error ?? "Try again.",
+          variant: "destructive",
+        });
+      },
+    });
+  };
+
+  // Returning from Stripe Checkout: refresh org billing state and confirm.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get("billing");
+    if (!billing) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    void queryClient.invalidateQueries({ queryKey: getGetOrganizationQueryKey() });
+    if (billing === "success") {
+      toast({
+        title: "Billing updated",
+        description: "Credits apply as soon as Stripe confirms the payment.",
+      });
+    }
+  }, [queryClient, toast]);
 
   if (orgQuery.isLoading || dashboard.isLoading) {
     return (
@@ -1036,16 +1128,53 @@ function DashboardInner() {
             </div>
           </div>
 
-          <div className="mt-10">
-            <PricingTable
-              for="organization"
-              appearance={darkroomAppearance}
-              newSubscriptionRedirectUrl="/dashboard"
-            />
-            <p className="mono-label mt-6 normal-case tracking-[0.08em] text-muted-foreground/70">
-              Managed by Clerk Billing · plan changes and renewals grant credits
-              automatically · 1 credit = 1 couple's complete gallery
+          <div className="mt-10 grid gap-px overflow-hidden border border-border bg-border md:grid-cols-3">
+            {BILLING_PRODUCTS.map((product) => (
+              <div key={product.id} className="flex flex-col bg-background p-6 md:p-8">
+                <p className="mono-label text-rose">{product.kicker}</p>
+                <h3 className="mt-3 font-display text-2xl font-medium text-foreground">
+                  {product.title}
+                </h3>
+                <p className="mt-2 flex-1 text-sm font-light leading-relaxed text-muted-foreground">
+                  {product.description}
+                </p>
+                <p className="mt-6 font-mono text-sm text-muted-foreground">
+                  {product.credits}
+                </p>
+                <Button
+                  variant={organization?.plan === product.id ? "outline" : "rose"}
+                  disabled={
+                    startCheckout.isPending || organization?.plan === product.id
+                  }
+                  onClick={() => handleCheckout(product.id)}
+                  className="mt-4 w-full rounded-none"
+                  data-testid={`billing-${product.id}`}
+                >
+                  {startCheckout.isPending && checkoutProduct === product.id ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {organization?.plan === product.id ? "Current plan" : product.cta}
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="mono-label normal-case tracking-[0.08em] text-muted-foreground/70">
+              Stripe billing, owned by the organization · renewals refresh the
+              shared credit pool · 1 credit = 1 couple's complete gallery
             </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={openPortal.isPending}
+              onClick={handleOpenPortal}
+              className="text-muted-foreground hover:text-foreground"
+              data-testid="billing-portal"
+            >
+              {openPortal.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Manage billing in Stripe
+            </Button>
           </div>
         </section>
       </main>

@@ -19,8 +19,8 @@ tags:
   - name: organization
     description: |
       Organization-level account and billing. Auth is a Clerk session; billing
-      is Clerk Billing (organization plans), with credits granted by the Clerk
-      webhook. One organization owns many venues.
+      is Stripe at the organization level (subscriptions + credit packs), with
+      credits granted by the Stripe webhook. One organization owns many venues.
 paths:
   /healthz:
     get:
@@ -193,6 +193,78 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "403":
           description: No active organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /org/billing/checkout:
+    post:
+      operationId: createOrgBillingCheckout
+      tags: [organization]
+      summary: Start Stripe Checkout for the caller's organization
+      description: |
+        Subscriptions (starter/growth) and one-off credit packs are purchased
+        by the organization; credits land in the shared org balance via the
+        Stripe webhook.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingCheckoutBody"
+      responses:
+        "200":
+          description: Checkout URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCheckoutResponse"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: No active organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Billing not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /org/billing/portal:
+    post:
+      operationId: createOrgBillingPortal
+      tags: [organization]
+      summary: Open the Stripe customer portal for the caller's organization
+      responses:
+        "200":
+          description: Portal URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPortalResponse"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: No active organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Billing not configured
           content:
             application/json:
               schema:
@@ -909,6 +981,30 @@ components:
           type: string
           format: date-time
 
+    BillingCheckoutBody:
+      type: object
+      required: [product]
+      properties:
+        product:
+          type: string
+          enum: [starter, growth, credit_pack]
+
+    BillingCheckoutResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+
+    BillingPortalResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+
     UpdateVenueBody:
       type: object
       description: |
@@ -983,6 +1079,9 @@ components:
               type: string
               nullable: true
               description: Caller's Clerk role in this organization (e.g. org:admin).
+            billingConfigured:
+              type: boolean
+              description: Whether Stripe billing is configured on this server.
         venues:
           type: array
           items:

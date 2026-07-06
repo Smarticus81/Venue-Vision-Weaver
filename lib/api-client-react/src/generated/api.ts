@@ -18,6 +18,9 @@ import type {
 
 import type {
   AddVenueMediaBody,
+  BillingCheckoutBody,
+  BillingCheckoutResponse,
+  BillingPortalResponse,
   CreateSessionBody,
   CreateVenueBody,
   DeleteSessionResponse,
@@ -624,6 +627,181 @@ export function useGetOrganization<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Subscriptions (starter/growth) and one-off credit packs are purchased
+by the organization; credits land in the shared org balance via the
+Stripe webhook.
+
+ * @summary Start Stripe Checkout for the caller's organization
+ */
+export const getCreateOrgBillingCheckoutUrl = () => {
+  return `/api/org/billing/checkout`;
+};
+
+export const createOrgBillingCheckout = async (
+  billingCheckoutBody: BillingCheckoutBody,
+  options?: RequestInit,
+): Promise<BillingCheckoutResponse> => {
+  return customFetch<BillingCheckoutResponse>(
+    getCreateOrgBillingCheckoutUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(billingCheckoutBody),
+    },
+  );
+};
+
+export const getCreateOrgBillingCheckoutMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOrgBillingCheckout>>,
+    TError,
+    { data: BodyType<BillingCheckoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createOrgBillingCheckout>>,
+  TError,
+  { data: BodyType<BillingCheckoutBody> },
+  TContext
+> => {
+  const mutationKey = ["createOrgBillingCheckout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createOrgBillingCheckout>>,
+    { data: BodyType<BillingCheckoutBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createOrgBillingCheckout(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateOrgBillingCheckoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createOrgBillingCheckout>>
+>;
+export type CreateOrgBillingCheckoutMutationBody =
+  BodyType<BillingCheckoutBody>;
+export type CreateOrgBillingCheckoutMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Start Stripe Checkout for the caller's organization
+ */
+export const useCreateOrgBillingCheckout = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOrgBillingCheckout>>,
+    TError,
+    { data: BodyType<BillingCheckoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createOrgBillingCheckout>>,
+  TError,
+  { data: BodyType<BillingCheckoutBody> },
+  TContext
+> => {
+  return useMutation(getCreateOrgBillingCheckoutMutationOptions(options));
+};
+
+/**
+ * @summary Open the Stripe customer portal for the caller's organization
+ */
+export const getCreateOrgBillingPortalUrl = () => {
+  return `/api/org/billing/portal`;
+};
+
+export const createOrgBillingPortal = async (
+  options?: RequestInit,
+): Promise<BillingPortalResponse> => {
+  return customFetch<BillingPortalResponse>(getCreateOrgBillingPortalUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCreateOrgBillingPortalMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOrgBillingPortal>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createOrgBillingPortal>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["createOrgBillingPortal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createOrgBillingPortal>>,
+    void
+  > = () => {
+    return createOrgBillingPortal(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateOrgBillingPortalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createOrgBillingPortal>>
+>;
+
+export type CreateOrgBillingPortalMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Open the Stripe customer portal for the caller's organization
+ */
+export const useCreateOrgBillingPortal = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOrgBillingPortal>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createOrgBillingPortal>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getCreateOrgBillingPortalMutationOptions(options));
+};
 
 /**
  * @summary Recent credit ledger entries for the caller's organization
