@@ -504,6 +504,29 @@ try {
     "complete production environment passes startup readiness validation",
   );
 
+  const clerklessProductionEnv = {
+    ...productionEnv,
+    CLERK_SECRET_KEY: "",
+    CLERK_PUBLISHABLE_KEY: "",
+    CLERK_WEBHOOK_SIGNING_SECRET: "",
+  };
+  assert.deepEqual(
+    validateProductionEnvironment(clerklessProductionEnv),
+    [],
+    "Clerk is optional at boot; owner/org routes degrade to 503 until configured",
+  );
+
+  const testKeyClerkEnv = {
+    ...productionEnv,
+    CLERK_SECRET_KEY: "sk_test_1234567890abcdef",
+    CLERK_PUBLISHABLE_KEY: "pk_test_1234567890abcdef",
+  };
+  assert.deepEqual(
+    validateProductionEnvironment(testKeyClerkEnv),
+    [],
+    "Clerk development-instance keys are accepted so staging deploys can boot",
+  );
+
   const brokenProductionEnv = {
     ...productionEnv,
     APP_BASE_URL: "http://localhost:5000",
@@ -527,8 +550,8 @@ try {
     GEMINI_IMAGE_SIZE: "2k",
     GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1",
     EMAIL_FROM: "glimpse <onboarding@resend.dev>",
-    CLERK_SECRET_KEY: "sk_test_placeholder",
-    CLERK_PUBLISHABLE_KEY: "pk_test_placeholder",
+    CLERK_SECRET_KEY: "not-a-clerk-secret",
+    CLERK_PUBLISHABLE_KEY: "not-a-clerk-publishable-key",
     STRIPE_SECRET_KEY: "sk_test_placeholder",
     STRIPE_PRICE_STARTER_MONTHLY: "price_starter",
   };
@@ -550,12 +573,12 @@ try {
     "production env rejects placeholder Supabase project URLs",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("live Clerk secret key")),
-    "production env requires live Clerk secret keys",
+    envErrors.some((error) => error.includes("CLERK_SECRET_KEY must be a Clerk secret key")),
+    "production env rejects malformed Clerk secret keys when set",
   );
   assert.ok(
     envErrors.some((error) => error.includes("CLERK_PUBLISHABLE_KEY")),
-    "production env rejects non-live Clerk publishable keys",
+    "production env rejects malformed Clerk publishable keys when set",
   );
   assert.ok(
     envErrors.some((error) => error.includes("live Stripe secret key")),
