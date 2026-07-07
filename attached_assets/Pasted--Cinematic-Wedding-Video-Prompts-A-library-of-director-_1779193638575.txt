@@ -32,7 +32,7 @@ A nostalgic wedding film shot on Super 8mm Kodak Ektachrome, 4:3 aspect ratio, 1
 
 **OPENING:** A handheld pan across the venue exterior, sunlight flaring directly into the lens, the camera operator’s shadow briefly visible. The bride steps into frame, laughing, holding her bouquet up to shield her eyes from the sun.
 
-**MIDDLE:** Disconnected, joyful fragments — the groom mid-laugh with his groomsmen, slightly out of focus; the couple feeding each other cake, frosting on a cheek; a flower girl spinning in circles on the dance floor; champagne being poured in slow, lingering shots. Every frame feels like a memory someone forgot they had.
+**MIDDLE:** Disconnected, joyful fragments — the groom mid-laugh with his gvenuemen, slightly out of focus; the couple feeding each other cake, frosting on a cheek; a flower girl spinning in circles on the dance floor; champagne being poured in slow, lingering shots. Every frame feels like a memory someone forgot they had.
 
 **CEREMONY:** Shot from the back of the room, partially obscured by a guest’s shoulder. The kiss is brief, distant, but the cheering crowd fills the frame as the camera shakes with applause.
 
@@ -129,6 +129,6 @@ A high-energy wedding film cut to the pulse of an unheard beat, in the style of 
 ## Usage Notes
 
 - **Couple image input:** Reference the couple’s likeness consistently across all scenes — same faces, same hair, same general styling, but allow for natural wardrobe changes (ceremony attire vs. reception attire vs. getting-ready looks).
-- **Venue image inputs:** Treat the venue as a character. Pull architectural details, lighting conditions, and spatial flow from the reference images. Different rooms should feel like different acts in the film.
+- **Venue image inputs:** Treat the venue as a character. Pull architectural details, lighting conditions, and spatial flow from the reference images. Different venue should feel like different acts in the film.
 - **Length:** Each prompt is calibrated for a 25–35 second cinematic trailer. For longer outputs, expand the celebration and intimate moments sections.
 - **Customization hooks:** Each style can be lightly modified with seasonal cues (autumn leaves, winter snow, spring blossoms), cultural traditions (specific ceremonies, dances, attire), or time-of-day shifts (sunrise ceremony, twilight reception, midnight sparkler send-off).

@@ -61,7 +61,7 @@ ghost/outline numerals (`.text-stroke`), mono labels (Space Mono), safelight
 `--wine` scene band.
 
 **Venue landing (`/`) — six numbered scenes:**
-001 manifesto hero ("EMPTY ROOMS / DON'T BOOK.", ~11vw uppercase Fraunces) with
+001 manifesto hero ("EMPTY venue / DON'T BOOK.", ~11vw uppercase Fraunces) with
 right-rail CTA and an italic marquee at the fold · 002 problem band on wine
 with a 30vw ghost numeral · 003 signature: pinned "developing print" — the
 venue photo scales from a small exposure to full width while four contact-sheet

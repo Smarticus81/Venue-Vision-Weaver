@@ -163,7 +163,7 @@ function HeroScene({ onStart, onSignIn }: { onStart: () => void; onSignIn: () =>
 
         <div className="mt-8 grid grid-cols-1 gap-10 pb-16 md:mt-12 md:grid-cols-[1fr_auto] md:items-end md:pb-20">
           <p className="font-display italic text-[clamp(1.6rem,3.4vw,3rem)] leading-tight text-muted-foreground max-w-3xl">
-            Couples see their wedding <span className="text-foreground">in your rooms</span> — before they decide.
+            Couples see their wedding <span className="text-foreground">in your venue</span> — before they decide.
           </p>
 
           <div className="max-w-sm md:justify-self-end">
@@ -218,18 +218,16 @@ function ProblemScene() {
         <div className="mt-14 grid gap-12 md:grid-cols-[1.2fr_1fr] md:gap-20">
           <h2 className="font-display text-[clamp(2.2rem,5vw,4.6rem)] leading-[1.05] font-medium">
             Every tour ends with{" "}
-            <em className="text-rose">"we'll think about it."</em>
+            <em className="text-rose">"wow, I can see it"</em>
           </h2>
           <div className="space-y-6 self-end text-lg font-light leading-relaxed text-muted-foreground max-w-md">
             <p>
-              Then they tour three more venues, and every unbooked tour is
-              revenue you already paid to earn — the ads, the inquiry, the
-              walkthrough.
+              Then a few days later, you send them a couple more visuals and a booking link.
             </p>
             <p>
               The venue that stays vivid wins the date. Photos of{" "}
               <em className="font-display text-foreground">them</em> in your
-              rooms stay vivid.
+              venue stay vivid.
             </p>
           </div>
         </div>
@@ -270,7 +268,7 @@ function DevelopingPrintScene() {
       <section className="px-5 py-24 md:px-10">
         <SceneLabel index="003" title="The deliverable" />
         <h2 className="mt-10 mb-12 font-display text-[clamp(2rem,4.5vw,4rem)] leading-[1.05] font-medium max-w-3xl">
-          One tour becomes a <em className="text-rose">contact sheet</em> of their day.
+          One tour becomes a <em className="text-rose">daydream</em> of their day.
         </h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-5">
           {GALLERY_FRAMES.map((f) => (
@@ -302,7 +300,7 @@ function PinnedContactSheet() {
           <div>
             <SceneLabel index="003" title="The deliverable" />
             <h2 className="mt-6 font-display text-[clamp(1.8rem,3vw,2.8rem)] font-medium leading-tight">
-              One tour becomes a <em className="text-rose">contact sheet</em> of their day.
+              One tour becomes a <em className="text-rose">daydream</em> of their day.
             </h2>
           </div>
           <div className="relative w-80 shrink-0 text-right">
@@ -367,7 +365,7 @@ const MECHANISM_STEPS = [
   {
     index: "03",
     title: "glimpse develops the gallery",
-    text: "Four photoreal portraits in your rooms, plus a branded motion reel.",
+    text: "Four photoreal portraits in your venue, plus a branded motion reel.",
   },
   {
     index: "04",
@@ -552,7 +550,7 @@ function Footer({ onStart }: { onStart: () => void }) {
         </button>
         <div className="mt-12 flex flex-col gap-6 border-t border-border/60 pt-8 md:flex-row md:items-center md:justify-between">
           <p className="mono-label text-muted-foreground">
-            A glimpse of their day — in your rooms
+            A glimpse of their day — in your venue
           </p>
           <nav className="flex items-center gap-8">
             <a href="/couple" className="mono-label text-muted-foreground transition-colors hover:text-foreground">
