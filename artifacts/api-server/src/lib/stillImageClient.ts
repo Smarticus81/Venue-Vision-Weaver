@@ -36,16 +36,16 @@ function geminiApiBase(): string {
   return (process.env.GEMINI_API_BASE_URL ?? DEFAULT_GEMINI_API_BASE).replace(/\/$/, "");
 }
 
-export class StillImageBlockedError extends Error {
+class StillImageBlockedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "StillImageBlockedError";
   }
 }
 
-export type StillAspectRatio = ReferenceAspectRatio;
+type StillAspectRatio = ReferenceAspectRatio;
 
-export interface GeneratedStillResult {
+interface GeneratedStillResult {
   buffer: Buffer;
   model: string;
 }
@@ -624,11 +624,6 @@ export async function generateCinematicStillWithMetadata(params: {
   }
 
   throw lastError instanceof Error ? lastError : new Error("Gemini image model request failed.");
-}
-
-export async function generateCinematicStill(params: Parameters<typeof generateCinematicStillWithMetadata>[0]): Promise<Buffer> {
-  const result = await generateCinematicStillWithMetadata(params);
-  return result.buffer;
 }
 
 function aspectRatioInstruction(ratio: StillAspectRatio): string {

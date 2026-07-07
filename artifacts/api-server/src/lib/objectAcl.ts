@@ -10,9 +10,9 @@ const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
 // - GROUP_MEMBER: the users who are members of a specific group;
 // - SUBSCRIBER: the users who are subscribers of a specific service / content
 //   creator.
-export enum ObjectAccessGroupType {}
+enum ObjectAccessGroupType {}
 
-export interface ObjectAccessGroup {
+interface ObjectAccessGroup {
   type: ObjectAccessGroupType;
   // The logic id that identifies qualified group members. Format depends on the
   // ObjectAccessGroupType - e.g. a user-list DB id, an email domain, a group id.

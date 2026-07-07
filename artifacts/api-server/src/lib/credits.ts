@@ -8,7 +8,7 @@ import {
 import { eq, and, sql, gte } from "drizzle-orm";
 import { logger } from "./logger.js";
 
-export const CREDITS_STANDARD = 1;
+const CREDITS_STANDARD = 1;
 export const VENUE_DAILY_SESSION_CAP = 50;
 export const MIN_VENUE_PHOTOS = 1;
 
@@ -62,7 +62,7 @@ async function resolveVenueOrgId(venueId: number): Promise<number | null> {
   return row?.organizationId ?? null;
 }
 
-export async function getOrgCreditsBalance(orgId: number): Promise<number> {
+async function getOrgCreditsBalance(orgId: number): Promise<number> {
   const [row] = await db
     .select({ creditsBalance: organizationsTable.creditsBalance })
     .from(organizationsTable)
@@ -71,7 +71,7 @@ export async function getOrgCreditsBalance(orgId: number): Promise<number> {
 }
 
 /** Effective spendable balance for a venue (org balance when adopted). */
-export async function getVenueCreditsBalance(venueId: number): Promise<number> {
+async function getVenueCreditsBalance(venueId: number): Promise<number> {
   const orgId = await resolveVenueOrgId(venueId);
   if (orgId != null) return getOrgCreditsBalance(orgId);
   const [row] = await db
@@ -157,48 +157,6 @@ export async function setOrgCreditsBalance(
   }
 }
 
-export async function debitCredits(
-  venueId: number,
-  sessionId: number,
-  amount: number,
-): Promise<boolean> {
-  const orgId = await resolveVenueOrgId(venueId);
-
-  return db.transaction(async (tx) => {
-    if (orgId != null) {
-      const [updated] = await tx
-        .update(organizationsTable)
-        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${amount}` })
-        .where(
-          and(eq(organizationsTable.id, orgId), gte(organizationsTable.creditsBalance, amount)),
-        )
-        .returning({ creditsBalance: organizationsTable.creditsBalance });
-      if (!updated) return false;
-    } else {
-      const [updated] = await tx
-        .update(venuesTable)
-        .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${amount}` })
-        .where(and(eq(venuesTable.id, venueId), gte(venuesTable.creditsBalance, amount)))
-        .returning({ creditsBalance: venuesTable.creditsBalance });
-      if (!updated) return false;
-    }
-
-    await tx.insert(creditTransactionsTable).values({
-      organizationId: orgId,
-      venueId,
-      delta: -amount,
-      reason: "session_debit",
-      sessionId,
-    });
-
-    await tx
-      .update(coupleSessionsTable)
-      .set({ creditsCharged: amount })
-      .where(eq(coupleSessionsTable.id, sessionId));
-
-    return true;
-  });
-}
 
 export async function refundCreditsForSession(sessionId: number): Promise<boolean> {
   const refunded = await db.transaction(async (tx) => {

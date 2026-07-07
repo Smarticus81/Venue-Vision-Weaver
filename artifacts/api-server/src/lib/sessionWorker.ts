@@ -51,10 +51,3 @@ export function startSessionWorker(): void {
     void tick();
   }, POLL_MS);
 }
-
-export function stopSessionWorker(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-}

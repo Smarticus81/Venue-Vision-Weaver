@@ -32,7 +32,7 @@ import {
   type VenueMediaCoverage,
 } from "./venueMediaCoverage.js";
 
-export interface GalleryGenerationContext {
+interface GalleryGenerationContext {
   session: CoupleSession;
   style: GalleryStyle;
   coupleBuffers: { buffer: Buffer; mimeType: string }[];
@@ -49,7 +49,7 @@ const MAX_COUPLE_REFERENCES = 3;
 
 type ImageRef = { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null };
 
-export interface GalleryFrameRenderResult {
+interface GalleryFrameRenderResult {
   raw: Buffer;
   qualityReport: GalleryQualityReport | null;
   venueReferenceIndexes: number[];
@@ -57,7 +57,7 @@ export interface GalleryFrameRenderResult {
   model: string;
 }
 
-export function venueReferenceIndexesForScene(sceneId: string): number[] {
+function venueReferenceIndexesForScene(sceneId: string): number[] {
   switch (sceneId) {
     case "portrait-vertical":
       return [1, 3, 0];

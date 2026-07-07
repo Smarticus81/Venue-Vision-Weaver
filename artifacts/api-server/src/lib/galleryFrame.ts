@@ -8,10 +8,6 @@ const SCENE_TITLES = [
   "Forever Begins",
 ];
 
-export function sceneTitleForIndex(index: number): string {
-  return SCENE_TITLES[index] ?? `Scene ${index + 1}`;
-}
-
 /**
  * Editorial polish: gentle vignette, subtle texture, optional couple name caption.
  */

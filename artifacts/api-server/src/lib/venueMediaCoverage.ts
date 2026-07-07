@@ -41,12 +41,6 @@ export function venueMediaCoverageStatus(
   };
 }
 
-export function venueCoverageReadinessMessage(missing: VenueMediaCoverage[]): string {
-  if (missing.length === 0) return "Venue media coverage is complete.";
-  const labels = missing.map((coverage) => VENUE_MEDIA_COVERAGE_LABELS[coverage]);
-  return `This venue isn't ready yet. The owner needs to upload venue photos for: ${labels.join(", ")}.`;
-}
-
 export function preferredVenueCoveragesForScene(sceneId: string): VenueMediaCoverage[] {
   switch (sceneId) {
     case "portrait-vertical":

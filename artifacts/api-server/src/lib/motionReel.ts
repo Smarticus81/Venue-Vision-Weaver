@@ -12,7 +12,7 @@ const REEL_HEIGHT = 720;
 const MIN_REEL_BYTES = 20_000;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-export interface MotionReelBrandingOptions {
+interface MotionReelBrandingOptions {
   venueName?: string | null;
 }
 

@@ -1,5 +1,3 @@
 - [Replit DB SSL fix](replit-db-ssl.md) — Replit internal PostgreSQL adds `?ssl` to DATABASE_URL but doesn't support SSL; pgPool.ts must strip it and skip SSL for `@helium` host.
-- [mockup-sandbox first-run setup](mockup-sandbox-setup.md) — mockup-sandbox needs `npm install` in its own dir before the preview server starts.
-- [Multi-page mockup sites](mockup-multipage.md) — `_`-prefixed files are shared (not routed); relative hrefs make pages browsable; place each page as its own canvas iframe.
 - [wedding-app typecheck false errors](wedding-app-typecheck.md) — `tsc -p` on wedding-app shows TS6305 + implicit-any from the api-client-react project ref; pre-existing, deploy build is vite-only (no typecheck).
 - [Glimpse real product workflow](glimpse-product-workflow.md) — venue-led B2B2C tour follow-up; owner uploads venue photos, couple captured in-person or self-serves at /preview/:slug, gallery at /v/:shareToken.

@@ -1,6 +1,6 @@
 import type { SessionDetailResponse } from "@workspace/api-client-react";
 
-export function getShareUrl(session: SessionDetailResponse): string | null {
+function getShareUrl(session: SessionDetailResponse): string | null {
   if (!session.shareToken) return null;
   return `${window.location.origin}/v/${session.shareToken}`;
 }

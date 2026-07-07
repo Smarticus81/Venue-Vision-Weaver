@@ -79,5 +79,3 @@ export function ownerProfileUrlForSlug(slug: string): string {
   return `${getAppBaseUrl()}/profile/${slug}`;
 }
 
-/** @deprecated Use ownerProfileUrlForSlug for external owner-facing links. */
-export const ownerDashboardUrlForSlug = ownerProfileUrlForSlug;

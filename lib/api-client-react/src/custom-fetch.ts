@@ -1,4 +1,4 @@
-export type CustomFetchOptions = RequestInit & {
+type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
 
@@ -199,7 +199,7 @@ export class ApiError<T = unknown> extends Error {
   }
 }
 
-export class ResponseParseError extends Error {
+class ResponseParseError extends Error {
   readonly name = "ResponseParseError";
   readonly status: number;
   readonly statusText: string;

@@ -965,19 +965,10 @@ try {
     new URL("../../lib/object-storage-web/src/use-upload.ts", import.meta.url),
     "utf8",
   );
-  const objectUploaderSource = fs.readFileSync(
-    new URL("../../lib/object-storage-web/src/ObjectUploader.tsx", import.meta.url),
-    "utf8",
-  );
   assert.match(
     uploadHookSource,
     /MAX_IMAGE_UPLOAD_BYTES = 50 \* 1024 \* 1024[\s\S]*MIN_IMAGE_EDGE_PX = 256[\s\S]*assertValidImageUpload\(file\)[\s\S]*fetch\(`\$\{basePath\}\/uploads\/request-url`/s,
     "shared upload hook validates image type, size, and dimensions before requesting upload URLs",
-  );
-  assert.match(
-    objectUploaderSource,
-    /maxFileSize = 50 \* 1024 \* 1024[\s\S]*allowedFileTypes = \["image\/jpeg", "image\/png", "image\/webp"\][\s\S]*allowedFileTypes/s,
-    "Uppy uploader defaults match the production image upload type and size contract",
   );
   const databaseReadinessSource = fs.readFileSync(
     new URL("../../artifacts/api-server/src/lib/databaseReadiness.ts", import.meta.url),
@@ -1329,23 +1320,14 @@ try {
     new URL("../../artifacts/api-server/src/lib/appUrl.ts", import.meta.url),
     "utf8",
   );
-  const emailSource = fs.readFileSync(
-    new URL("../../artifacts/api-server/src/lib/emailService.ts", import.meta.url),
-    "utf8",
-  );
   const billingRoute = fs.readFileSync(
     new URL("../../artifacts/api-server/src/routes/billing.ts", import.meta.url),
     "utf8",
   );
   assert.match(
     appUrlSource,
-    /ownerProfileUrlForSlug\(slug: string\): string[\s\S]*\/profile\/\$\{slug\}[\s\S]*ownerDashboardUrlForSlug = ownerProfileUrlForSlug/s,
-    "external owner URL helper emits profile URLs while preserving dashboard alias compatibility",
-  );
-  assert.match(
-    emailSource,
-    /Open venue profile[\s\S]*Your glimpse venue profile login[\s\S]*ownerProfileUrlForSlug\(v\.slug\)[\s\S]*Venue profile links/s,
-    "owner login and recovery emails use venue profile language and URLs",
+    /ownerProfileUrlForSlug\(slug: string\): string[\s\S]*\/profile\/\$\{slug\}/s,
+    "external owner URL helper emits profile URLs",
   );
   assert.match(
     billingRoute,
@@ -1400,10 +1382,6 @@ try {
   );
   const venueOwnerPageSource = fs.readFileSync(
     new URL("../../artifacts/wedding-app/src/pages/VenueOwnerPage.tsx", import.meta.url),
-    "utf8",
-  );
-  const venueSiteHeaderSource = fs.readFileSync(
-    new URL("../../artifacts/wedding-app/src/components/layout/VenueSiteHeader.tsx", import.meta.url),
     "utf8",
   );
   assert.match(

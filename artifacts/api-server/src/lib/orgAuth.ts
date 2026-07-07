@@ -187,7 +187,7 @@ async function adoptLegacyVenues(org: Organization, userEmail: string): Promise<
   }
 }
 
-export type OrgContext = {
+type OrgContext = {
   org: Organization;
   clerkUserId: string;
   clerkOrgId: string;
