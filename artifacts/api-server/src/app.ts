@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Response } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
@@ -111,11 +111,40 @@ app.use("/api/{*splat}", (_req, res) => {
 
 const frontendDist = path.resolve(__dirname, "../../../artifacts/wedding-app/dist/public");
 
+let cachedIndexHtml: string | null = null;
+function indexHtml(): string | null {
+  if (cachedIndexHtml !== null) return cachedIndexHtml;
+  const htmlPath = path.join(frontendDist, "index.html");
+  if (!fs.existsSync(htmlPath)) return null;
+  cachedIndexHtml = fs.readFileSync(htmlPath, "utf-8");
+  return cachedIndexHtml;
+}
+
+/**
+ * Serve the SPA shell with the Clerk publishable key injected as a meta tag.
+ * VITE_ vars are baked into the bundle at build time, so a container built
+ * without the key (the normal case on Railway) would otherwise ship a bundle
+ * where owner sign-in is permanently disabled; the runtime meta tag lets the
+ * frontend pick the key up from the server environment instead.
+ */
+function serveIndexHtml(res: Response, extraHeadHtml = ""): void {
+  const html = indexHtml();
+  if (html === null) {
+    res.status(404).send("Frontend build not found");
+    return;
+  }
+  const key = clerkPublishableKey();
+  const headHtml =
+    (key ? `<meta name="clerk-publishable-key" content="${escapeHtml(key)}" />` : "") +
+    extraHeadHtml;
+  res.type("html").send(headHtml ? html.replace("<head>", `<head>${headHtml}`) : html);
+}
+
 app.get("/v/:shareToken", async (req, res): Promise<void> => {
   try {
     const { shareToken } = req.params;
     if (!shareToken) {
-      res.sendFile(path.join(frontendDist, "index.html"));
+      serveIndexHtml(res);
       return;
     }
 
@@ -125,7 +154,7 @@ app.get("/v/:shareToken", async (req, res): Promise<void> => {
       .where(eq(coupleSessionsTable.shareToken, shareToken));
 
     if (!session) {
-      res.sendFile(path.join(frontendDist, "index.html"));
+      serveIndexHtml(res);
       return;
     }
 
@@ -161,11 +190,7 @@ app.get("/v/:shareToken", async (req, res): Promise<void> => {
     const title = `${coupleName}'s glimpse gallery`;
     const description = `Explore a cinematic AI wedding gallery of ${coupleName} at ${venueName}.`;
 
-    const htmlPath = path.join(frontendDist, "index.html");
-    if (fs.existsSync(htmlPath)) {
-      let html = fs.readFileSync(htmlPath, "utf-8");
-
-      const metaTags = `
+    const metaTags = `
         <title>${escapeHtml(title)}</title>
         <meta name="description" content="${escapeHtml(description)}" />
         <meta property="og:title" content="${escapeHtml(title)}" />
@@ -178,20 +203,18 @@ app.get("/v/:shareToken", async (req, res): Promise<void> => {
         <meta name="twitter:image" content="${escapeHtml(thumbnail)}" />
       `;
 
-      html = html.replace("<head>", `<head>${metaTags}`);
-      res.send(html);
-    } else {
-      res.sendFile(htmlPath);
-    }
+    serveIndexHtml(res, metaTags);
   } catch (err) {
     logger.error({ err }, "Error serving shareable URL");
-    res.sendFile(path.join(frontendDist, "index.html"));
+    serveIndexHtml(res);
   }
 });
 
-app.use(express.static(frontendDist));
+// index: false so `/` falls through to the handler below and gets the
+// runtime-injected HTML instead of the raw file.
+app.use(express.static(frontendDist, { index: false }));
 app.get("/{*splat}", (_req, res) => {
-  res.sendFile(path.join(frontendDist, "index.html"));
+  serveIndexHtml(res);
 });
 
 export default app;

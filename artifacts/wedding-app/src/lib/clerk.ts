@@ -1,7 +1,21 @@
 import type { Appearance } from "@clerk/types";
 
+// The server injects the key into index.html at request time (see the
+// api-server's serveIndexHtml), so a bundle built without
+// VITE_CLERK_PUBLISHABLE_KEY still picks it up from the deployment
+// environment. The runtime value wins so a rotated key needs no rebuild.
+const runtimeKey =
+  typeof document !== "undefined"
+    ? document
+        .querySelector('meta[name="clerk-publishable-key"]')
+        ?.getAttribute("content")
+        ?.trim()
+    : undefined;
+
 export const CLERK_PUBLISHABLE_KEY =
-  (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim() || null;
+  runtimeKey ||
+  (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim() ||
+  null;
 
 export const clerkConfigured = Boolean(CLERK_PUBLISHABLE_KEY);
 
