@@ -10,13 +10,13 @@ import {
   setObjectAclPolicy,
 } from "./objectAcl";
 
-export type ObjectFileHandle = {
+type ObjectFileHandle = {
   download(): Promise<[Buffer]>;
   getMetadata(): Promise<{ contentType?: string | null; size?: string | number }>;
   createReadStream(): Readable;
 };
 
-export const objectStorageClient = new Storage();
+const objectStorageClient = new Storage();
 
 function useSupabaseStorage(): boolean {
   return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);

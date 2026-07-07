@@ -2,7 +2,6 @@ import { Suspense, lazy } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useParams } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 const queryClient = new QueryClient();
 
@@ -81,12 +80,10 @@ function RouteLoading() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+      <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
+        <Router />
+      </WouterRouter>
+      <Toaster />
     </QueryClientProvider>
   );
 }

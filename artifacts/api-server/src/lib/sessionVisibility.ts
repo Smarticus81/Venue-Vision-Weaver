@@ -1,4 +1,4 @@
-export type GalleryAssetVisibilityInput = {
+type GalleryAssetVisibilityInput = {
   assetType: string;
   displayOrder: number;
 };

@@ -55,3 +55,7 @@ Thumbs.db
 
 # Temp commit messages
 .git-commit-msg.tmp
+
+# Dev-server and QA output artifacts
+*.log
+qa-output/

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 
-export interface SavedSession {
+interface SavedSession {
   sessionId: number;
   shareToken: string | null;
   venueSlug: string;
@@ -96,7 +96,7 @@ export function useSavedSessions(venueSlug?: string) {
   return { sessions, save, remove };
 }
 
-export interface RecoverRequestResult {
+interface RecoverRequestResult {
   accepted: boolean;
   error?: string;
 }

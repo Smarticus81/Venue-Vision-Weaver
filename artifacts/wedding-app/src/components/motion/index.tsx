@@ -9,7 +9,7 @@ import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-moti
 import { cn } from "@/lib/utils";
 
 /** True on devices with a precise pointer (mouse/trackpad), false on touch. */
-export function useFinePointer() {
+function useFinePointer() {
   const [fine, setFine] = useState(false);
   useEffect(() => {
     const mql = window.matchMedia("(pointer: fine)");

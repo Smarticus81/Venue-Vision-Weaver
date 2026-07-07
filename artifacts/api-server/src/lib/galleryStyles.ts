@@ -48,17 +48,12 @@ export const GALLERY_STYLES: GalleryStyle[] = [
   },
 ];
 
-export function pickRandomGalleryStyle(): GalleryStyle {
-  const index = Math.floor(Math.random() * GALLERY_STYLES.length);
-  return GALLERY_STYLES[index]!;
-}
-
 export function findGalleryStyle(id: string | null | undefined): GalleryStyle | null {
   if (!id) return null;
   return GALLERY_STYLES.find((style) => style.id === id) ?? null;
 }
 
-export interface PublicGalleryStyle {
+interface PublicGalleryStyle {
   id: string;
   name: string;
   description: string;

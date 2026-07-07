@@ -1,10 +1,6 @@
 import { Resend } from "resend";
 import { logger } from "./logger.js";
-import {
-  getAppBaseUrl,
-  ownerProfileUrlForSlug,
-  shareUrlForToken,
-} from "./appUrl.js";
+import { getAppBaseUrl, shareUrlForToken } from "./appUrl.js";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.EMAIL_FROM ?? "glimpse <onboarding@resend.dev>";
@@ -193,62 +189,3 @@ export async function sendRecoveryEmail(
   );
 }
 
-export async function sendOwnerLoginEmail(
-  email: string,
-  loginUrl: string,
-): Promise<boolean> {
-  const body = `<p>Use this secure link to open your glimpse venue profile. It expires in 15 minutes and can only be used once.</p>
-    ${ctaButton(loginUrl, "Open venue profile")}
-    <p style="margin-top:20px;font-size:13px;color:#8a8278;">If you did not request this email, you can ignore it.</p>`;
-  return sendEmail(
-    email,
-    "Your glimpse venue profile login",
-    emailLayout("Open your venue profile", body),
-  );
-}
-
-export async function sendOwnerRecoveryEmail(
-  email: string,
-  venues: Array<{ name: string; slug: string; createdAt: Date | string; loginUrl: string }>,
-): Promise<boolean> {
-  if (venues.length === 0) return false;
-  const rows = venues
-    .map((v) => {
-      const url = v.loginUrl || ownerProfileUrlForSlug(v.slug);
-      const when = new Date(v.createdAt).toLocaleDateString();
-      return `<tr>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;">${escapeHtml(v.name)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;color:#666;font-family:monospace;font-size:13px;">${escapeHtml(v.slug)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;color:#666;">${when}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;">
-          <a href="${escapeHtml(url)}" style="color:#b8955a;font-weight:600;text-decoration:none;">Open profile</a>
-        </td>
-      </tr>`;
-    })
-    .join("");
-
-  const body = `<p>Here are the venue profiles registered to this email:</p>
-     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:16px 0;font-family:system-ui,sans-serif;font-size:14px;">
-       <thead>
-         <tr style="text-align:left;color:#666;">
-           <th style="padding:8px;border-bottom:2px solid #ddd;">Venue</th>
-           <th style="padding:8px;border-bottom:2px solid #ddd;">Code</th>
-           <th style="padding:8px;border-bottom:2px solid #ddd;">Created</th>
-           <th style="padding:8px;border-bottom:2px solid #ddd;"></th>
-         </tr>
-       </thead>
-       <tbody>${rows}</tbody>
-     </table>
-     <p>Profile links now use secure magic-link sign-in. If you did not request this, you can ignore it.</p>`;
-
-  return sendEmail(
-    email,
-    "Your glimpse venue profiles",
-    emailLayout("Venue profile links", body),
-  );
-}
-
-/** @deprecated Use shareUrlForToken from appUrl.js */
-export function shareUrl(shareToken: string | null | undefined): string {
-  return shareUrlForToken(shareToken);
-}

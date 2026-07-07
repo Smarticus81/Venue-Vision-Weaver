@@ -4,7 +4,7 @@ import { getAppBaseUrl as resolveAppBaseUrl } from "./appUrl.js";
 
 const secretKey = process.env.STRIPE_SECRET_KEY;
 
-export const stripe = secretKey ? new Stripe(secretKey) : null;
+const stripe = secretKey ? new Stripe(secretKey) : null;
 
 export const STRIPE_PRICES = {
   starter: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "",
