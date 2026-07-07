@@ -61,7 +61,7 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 
 - `DATABASE_URL` - Supabase PostgreSQL URI (`pnpm run setup:db`)
 - `APP_BASE_URL` - Public URL for emails and share links
-- `CLERK_SECRET_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` - Clerk auth + org sync
+- `CLERK_SECRET_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` - Clerk auth + org sync (optional at boot: without them the app deploys, owner/org routes return 503, and the web app shows a setup notice)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` - Organization billing
 - `GOOGLE_AI_API_KEY` - Gemini gallery generation and quality review
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` - file uploads (`pnpm run setup:storage`)

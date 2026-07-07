@@ -103,8 +103,8 @@ function supabaseUrlError(env: EnvLike): string | null {
 function clerkSecretError(env: EnvLike): string | null {
   const secret = env.CLERK_SECRET_KEY?.trim() ?? "";
   if (!secret) return null;
-  if (!/^sk_live_[A-Za-z0-9]+/.test(secret)) {
-    return "CLERK_SECRET_KEY must be a live Clerk secret key in production";
+  if (!/^sk_(test|live)_[A-Za-z0-9]+/.test(secret)) {
+    return "CLERK_SECRET_KEY must be a Clerk secret key (sk_test_ or sk_live_)";
   }
   return null;
 }
@@ -121,8 +121,8 @@ function clerkWebhookSecretError(env: EnvLike): string | null {
 function clerkPublishableKeyError(env: EnvLike): string | null {
   const key = env.CLERK_PUBLISHABLE_KEY?.trim() ?? env.VITE_CLERK_PUBLISHABLE_KEY?.trim() ?? "";
   if (!key) return null;
-  if (!/^pk_live_[A-Za-z0-9]+/.test(key)) {
-    return "CLERK_PUBLISHABLE_KEY must be a live Clerk publishable key in production";
+  if (!/^pk_(test|live)_[A-Za-z0-9]+/.test(key)) {
+    return "CLERK_PUBLISHABLE_KEY must be a Clerk publishable key (pk_test_ or pk_live_)";
   }
   return null;
 }
@@ -198,8 +198,8 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
     "DATABASE_URL",
     "UPLOAD_TOKEN_SECRET",
     "SESSION_SECRET",
-    "CLERK_SECRET_KEY",
-    "CLERK_WEBHOOK_SIGNING_SECRET",
+    // Clerk is optional at boot: owner/organization routes return 503 and the
+    // web app shows a setup notice until CLERK_SECRET_KEY is configured.
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
     "STRIPE_PRICE_STARTER_MONTHLY",
