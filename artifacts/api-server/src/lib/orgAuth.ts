@@ -11,8 +11,19 @@ import {
 import { isCorsOriginAllowed } from "./httpSecurity.js";
 import { logger } from "./logger.js";
 
+export function clerkPublishableKey(): string {
+  return (
+    process.env.CLERK_PUBLISHABLE_KEY?.trim() ||
+    process.env.VITE_CLERK_PUBLISHABLE_KEY?.trim() ||
+    ""
+  );
+}
+
 export function clerkEnabled(): boolean {
-  return Boolean(process.env.CLERK_SECRET_KEY);
+  // clerkMiddleware() needs the secret AND publishable key. A partial config
+  // must degrade to 503s on owner/org routes, not throw on every request
+  // passing through the middleware.
+  return Boolean(process.env.CLERK_SECRET_KEY?.trim() && clerkPublishableKey());
 }
 
 /* ————— Mutation-origin checks (unchanged policy, moved from ownerAuth) ————— */
@@ -195,7 +206,10 @@ export type OrgContext = {
  */
 export async function requireOrg(req: Request, res: Response): Promise<OrgContext | null> {
   if (!clerkEnabled()) {
-    res.status(503).json({ error: "Authentication is not configured on this server (CLERK_SECRET_KEY missing)." });
+    res.status(503).json({
+      error:
+        "Authentication is not configured on this server (CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY are both required).",
+    });
     return null;
   }
 

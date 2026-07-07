@@ -12,7 +12,7 @@ import router from "./routes";
 import { handleClerkWebhook, handleStripeWebhook } from "./routes/billing.js";
 import { logger } from "./lib/logger";
 import { logStripeMissing } from "./lib/stripe.js";
-import { clerkEnabled } from "./lib/orgAuth.js";
+import { clerkEnabled, clerkPublishableKey } from "./lib/orgAuth.js";
 import { corsOptions, securityHeaders } from "./lib/httpSecurity.js";
 import { trustProxySetting } from "./lib/trustProxy.js";
 import { hasCompletePublicGalleryAssets } from "./lib/sessionVisibility.js";
@@ -58,11 +58,23 @@ logStripeMissing();
 if (clerkEnabled()) {
   // Verifies the Clerk session (cookie or Authorization header) and exposes
   // getAuth(req) to every route. Does not itself reject unauthenticated
-  // requests — org-scoped routes enforce that via requireOrg.
-  app.use(clerkMiddleware());
+  // requests — org-scoped routes enforce that via requireOrg. Keys are passed
+  // explicitly so VITE_CLERK_PUBLISHABLE_KEY alone also satisfies the SDK.
+  app.use(
+    clerkMiddleware({
+      secretKey: process.env.CLERK_SECRET_KEY,
+      publishableKey: clerkPublishableKey(),
+    }),
+  );
 } else {
+  const missing = [
+    !process.env.CLERK_SECRET_KEY?.trim() && "CLERK_SECRET_KEY",
+    !clerkPublishableKey() && "CLERK_PUBLISHABLE_KEY (or VITE_CLERK_PUBLISHABLE_KEY)",
+  ]
+    .filter(Boolean)
+    .join(" and ");
   logger.warn(
-    "CLERK_SECRET_KEY is not set — owner/organization routes will refuse requests until Clerk is configured",
+    `${missing} not set — owner/organization routes will refuse requests until Clerk is configured`,
   );
 }
 
