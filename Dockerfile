@@ -16,6 +16,13 @@ COPY scripts ./scripts
 COPY supabase ./supabase
 
 RUN pnpm install --frozen-lockfile
+
+# Optional: bake the (public) Clerk publishable key into the SPA bundle.
+# Railway passes service variables as build args when declared here. The
+# server also injects the key at runtime, so this is best-effort only.
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+
 RUN pnpm run build
 
 ENV NODE_ENV=production

@@ -18,9 +18,9 @@ export function ClerkSetupNotice() {
         <p className="mono-label mb-4 text-rose">Setup required</p>
         <h1 className="font-display text-2xl font-medium mb-3">Sign-in isn't configured yet</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Set <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> (and{" "}
-          <span className="font-mono">CLERK_SECRET_KEY</span> on the server), then rebuild.
-          See <span className="font-mono">.env.example</span>.
+          Set <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> and{" "}
+          <span className="font-mono">CLERK_SECRET_KEY</span> in the server environment,
+          then redeploy. See <span className="font-mono">.env.example</span>.
         </p>
       </div>
     </div>

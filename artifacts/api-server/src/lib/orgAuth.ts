@@ -10,14 +10,9 @@ import {
 } from "@workspace/db";
 import { isCorsOriginAllowed } from "./httpSecurity.js";
 import { logger } from "./logger.js";
+import { clerkPublishableKey } from "./clerkEnv.js";
 
-export function clerkPublishableKey(): string {
-  return (
-    process.env.CLERK_PUBLISHABLE_KEY?.trim() ||
-    process.env.VITE_CLERK_PUBLISHABLE_KEY?.trim() ||
-    ""
-  );
-}
+export { clerkPublishableKey };
 
 export function clerkEnabled(): boolean {
   // clerkMiddleware() needs the secret AND publishable key. A partial config

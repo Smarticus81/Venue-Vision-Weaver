@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { CorsOptions } from "cors";
+import { clerkFrontendApiOrigin } from "./clerkEnv.js";
 
 function normalizeOrigin(raw: string | undefined): string | null {
   if (!raw?.trim()) return null;
@@ -64,7 +65,17 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   // Browser uploads go straight to Supabase Storage via presigned URLs, so
   // connect-src must include the Supabase origin when it is configured.
   const supabaseOrigin = normalizeOrigin(process.env.SUPABASE_URL);
-  const connectSrc = supabaseOrigin ? `connect-src 'self' ${supabaseOrigin}` : "connect-src 'self'";
+  // clerk-js is loaded from the instance's frontend API (encoded in the
+  // publishable key) and talks to it directly from the browser; Clerk's smart
+  // CAPTCHA runs in a Cloudflare Turnstile frame and session refresh uses a
+  // blob worker.
+  const clerkOrigin = clerkFrontendApiOrigin();
+  const connectSrc = ["connect-src 'self'", supabaseOrigin, clerkOrigin, clerkOrigin && "https://clerk-telemetry.com"]
+    .filter(Boolean)
+    .join(" ");
+  const scriptSrc = ["script-src 'self'", clerkOrigin, clerkOrigin && "https://challenges.cloudflare.com"]
+    .filter(Boolean)
+    .join(" ");
   res.setHeader(
     "Content-Security-Policy",
     [
@@ -72,14 +83,18 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
       "base-uri 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",
-      "script-src 'self'",
+      scriptSrc,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https://img.clerk.com",
       "media-src 'self' blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
+      "worker-src 'self' blob:",
+      clerkOrigin && "frame-src 'self' https://challenges.cloudflare.com",
       connectSrc,
       "form-action 'self'",
-    ].join("; "),
+    ]
+      .filter(Boolean)
+      .join("; "),
   );
   next();
 }
