@@ -173,10 +173,10 @@ function HeroScene({ onStart, onSignIn }: { onStart: () => void; onSignIn: () =>
               your booking link on it.
             </p>
             <TickButton onClick={onStart} testId="venue-hero-register">
-              Start with 5 free galleries
+              Create your venue workspace
             </TickButton>
             <p className="mono-label mt-5 text-muted-foreground/80 normal-case tracking-normal text-[0.72rem]">
-              No card. No contract. 1 credit = 1 couple's gallery.
+              1 credit = 1 couple's gallery.
             </p>
             <button
               type="button"
@@ -513,13 +513,13 @@ function OfferScene({ onStart }: { onStart: () => void }) {
       <div className="relative z-10">
         <p className="mono-label mb-10 text-rose">006 — The offer</p>
         <h2 className="font-display font-medium leading-[0.98] text-[clamp(2.8rem,8.5vw,8rem)]">
-          Five galleries.
+          One link.
           <br />
-          <em className="text-rose">On us.</em>
+          <em className="text-rose">Every tour.</em>
         </h2>
         <p className="mx-auto mt-8 max-w-xl text-lg font-light leading-relaxed text-muted-foreground">
-          Hand the link to the next couple who tours. No card, no subscription —
-          add credits when the bookings follow.
+          Hand the link to the next couple who tours. Add credits when the
+          bookings follow.
         </p>
         <Magnetic className="mt-12 inline-block">
           <TickButton onClick={onStart} size="xl" testId="venue-trial-register">
