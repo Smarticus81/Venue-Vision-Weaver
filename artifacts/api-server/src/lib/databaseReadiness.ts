@@ -131,7 +131,8 @@ export const REQUIRED_DATABASE_NOT_NULL_COLUMNS = {
   ],
   couple_media: ["id", "session_id", "object_key", "created_at"],
   generated_assets: ["id", "session_id", "object_key", "asset_type", "display_order", "created_at"],
-  credit_transactions: ["id", "venue_id", "delta", "reason", "created_at"],
+  // Ledger rows belong to the organization; venue_id is nullable provenance.
+  credit_transactions: ["id", "delta", "reason", "created_at"],
   owner_credentials: ["id", "owner_email", "password_hash", "created_at", "updated_at"],
   owner_login_tokens: ["id", "token_hash", "owner_email", "expires_at", "created_at"],
   owner_sessions: ["id", "session_hash", "owner_email", "expires_at", "revoked", "created_at"],
