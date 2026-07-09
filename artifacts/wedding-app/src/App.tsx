@@ -1,20 +1,47 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ComponentType } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useParams } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 
 const queryClient = new QueryClient();
 
-const LandingPage = lazy(() => import("@/pages/LandingPage"));
-const VenueLandingPage = lazy(() => import("@/pages/VenueLandingPage"));
-const CoupleEntryPage = lazy(() => import("@/pages/CoupleEntryPage"));
-const CreateVenuePage = lazy(() => import("@/pages/CreateVenuePage"));
-const VenueOwnerPage = lazy(() => import("@/pages/VenueOwnerPage"));
-const CouplePage = lazy(() => import("@/pages/CouplePage"));
-const GallerySharePage = lazy(() => import("@/pages/GallerySharePage"));
-const FindMyGalleryPage = lazy(() => import("@/pages/FindMyGalleryPage"));
-const OwnerLoginPage = lazy(() => import("@/pages/OwnerLoginPage"));
-const NotFound = lazy(() => import("@/pages/not-found"));
+const CHUNK_RELOAD_KEY = "glimpse:chunk-reloaded";
+
+/**
+ * After a redeploy the hashed chunk filenames change, so a browser holding a
+ * stale index.html gets a 404 when it lazily imports a route and the page
+ * goes blank. Reload once to pick up the fresh index.html; if the import
+ * still fails, let the error boundary show its recovery screen.
+ */
+function lazyRoute<T extends ComponentType>(loader: () => Promise<{ default: T }>) {
+  return lazy(() =>
+    loader().then(
+      (module) => {
+        sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+        return module;
+      },
+      (error) => {
+        if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+          sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+          window.location.reload();
+          return new Promise<never>(() => {});
+        }
+        throw error;
+      },
+    ),
+  );
+}
+
+const LandingPage = lazyRoute(() => import("@/pages/LandingPage"));
+const VenueLandingPage = lazyRoute(() => import("@/pages/VenueLandingPage"));
+const CoupleEntryPage = lazyRoute(() => import("@/pages/CoupleEntryPage"));
+const CreateVenuePage = lazyRoute(() => import("@/pages/CreateVenuePage"));
+const VenueOwnerPage = lazyRoute(() => import("@/pages/VenueOwnerPage"));
+const CouplePage = lazyRoute(() => import("@/pages/CouplePage"));
+const GallerySharePage = lazyRoute(() => import("@/pages/GallerySharePage"));
+const FindMyGalleryPage = lazyRoute(() => import("@/pages/FindMyGalleryPage"));
+const OwnerLoginPage = lazyRoute(() => import("@/pages/OwnerLoginPage"));
+const NotFound = lazyRoute(() => import("@/pages/not-found"));
 
 function RedirectVenueToPreview() {
   const { slug } = useParams<{ slug: string }>();

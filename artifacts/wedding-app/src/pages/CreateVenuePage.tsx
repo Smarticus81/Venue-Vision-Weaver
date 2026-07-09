@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toVenueSlug } from "@/lib/venueSlug";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 import { FrameTicks } from "@/components/motion";
-import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
+import { ClerkSetupNotice, ClerkWidgetFrame, OrgGate } from "@/components/auth/OrgGate";
 import { clerkConfigured, darkroomAppearance } from "@/lib/clerk";
 
 /**
@@ -36,32 +36,34 @@ export default function CreateVenuePage() {
       <main className="grain flex-1 flex items-center justify-center p-6 relative py-20">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_50%_0%,hsl(var(--rose)/0.08),transparent_70%)] pointer-events-none" />
 
-        <SignedOut>
-          <div className="relative z-10 mt-10 flex flex-col items-center gap-6">
-            <div className="text-center max-w-md">
-              <p className="mono-label mb-3 text-rose">For venues</p>
-              <h1 className="font-display text-3xl font-medium tracking-tight">
-                Create your profile
-              </h1>
-              <p className="mt-2 text-muted-foreground font-light">
-                Then name your organization — it owns billing, credits, and every
-                venue you add.
-              </p>
+        <ClerkWidgetFrame>
+          <SignedOut>
+            <div className="relative z-10 mt-10 flex flex-col items-center gap-6">
+              <div className="text-center max-w-md">
+                <p className="mono-label mb-3 text-rose">For venues</p>
+                <h1 className="font-display text-3xl font-medium tracking-tight">
+                  Create your profile
+                </h1>
+                <p className="mt-2 text-muted-foreground font-light">
+                  Then name your organization — it owns billing, credits, and every
+                  venue you add.
+                </p>
+              </div>
+              <SignUp
+                appearance={darkroomAppearance}
+                routing="hash"
+                signInUrl="/login"
+                forceRedirectUrl="/create-venue"
+              />
             </div>
-            <SignUp
-              appearance={darkroomAppearance}
-              routing="hash"
-              signInUrl="/login"
-              forceRedirectUrl="/create-venue"
-            />
-          </div>
-        </SignedOut>
+          </SignedOut>
 
-        <SignedIn>
-          <OrgGate>
-            <VenueForm />
-          </OrgGate>
-        </SignedIn>
+          <SignedIn>
+            <OrgGate>
+              <VenueForm />
+            </OrgGate>
+          </SignedIn>
+        </ClerkWidgetFrame>
       </main>
     </div>
   );

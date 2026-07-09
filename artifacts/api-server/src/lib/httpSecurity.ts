@@ -56,7 +56,10 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  // allow-popups: Clerk's OAuth flows (e.g. "Continue with Google") open a
+  // popup that must keep a handle on the opener; plain same-origin severs it
+  // and the sign-in silently never completes.
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   res.setHeader(
     "Permissions-Policy",

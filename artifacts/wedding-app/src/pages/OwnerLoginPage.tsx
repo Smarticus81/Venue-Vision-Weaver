@@ -2,7 +2,7 @@ import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import { Redirect } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
-import { ClerkSetupNotice } from "@/components/auth/OrgGate";
+import { ClerkSetupNotice, ClerkWidgetFrame } from "@/components/auth/OrgGate";
 import { clerkConfigured, darkroomAppearance } from "@/lib/clerk";
 
 /**
@@ -29,27 +29,29 @@ export default function OwnerLoginPage() {
       </header>
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-6 px-4 py-10">
-        <SignedOut>
-          <div className="text-center">
-            <p className="mono-label mb-3 text-rose">Venue teams</p>
-            <h1 className="font-display text-3xl font-medium">Sign in to your profile</h1>
-          </div>
-          <SignIn
-            appearance={darkroomAppearance}
-            routing="hash"
-            signUpUrl="/create-venue"
-            forceRedirectUrl="/dashboard"
-          />
-          <a
-            href="/create-venue"
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            New here? Create your organization and first venue
-          </a>
-        </SignedOut>
-        <SignedIn>
-          <Redirect to="/dashboard" />
-        </SignedIn>
+        <ClerkWidgetFrame>
+          <SignedOut>
+            <div className="text-center">
+              <p className="mono-label mb-3 text-rose">Venue teams</p>
+              <h1 className="font-display text-3xl font-medium">Sign in to your profile</h1>
+            </div>
+            <SignIn
+              appearance={darkroomAppearance}
+              routing="hash"
+              signUpUrl="/create-venue"
+              forceRedirectUrl="/dashboard"
+            />
+            <a
+              href="/create-venue"
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              New here? Create your organization and first venue
+            </a>
+          </SignedOut>
+          <SignedIn>
+            <Redirect to="/dashboard" />
+          </SignedIn>
+        </ClerkWidgetFrame>
       </main>
     </div>
   );
