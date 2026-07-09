@@ -24,3 +24,26 @@ export function clerkFrontendApiOrigin(): string | null {
     return null;
   }
 }
+
+/**
+ * Production Clerk keys only work on the instance's domain (and subdomains).
+ * When APP_BASE_URL points anywhere else — e.g. the *.up.railway.app URL
+ * while the key belongs to the custom domain — browsers get a 400 from
+ * Clerk's API and owner sign-in pages cannot initialize. Returns the
+ * expected domain when such a mismatch is detected, otherwise null.
+ */
+export function clerkDomainMismatch(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (!clerkPublishableKey().startsWith("pk_live_")) return null;
+  const origin = clerkFrontendApiOrigin();
+  if (!origin) return null;
+  const domain = new URL(origin).hostname.replace(/^clerk\./, "");
+  const base = env.APP_BASE_URL?.trim();
+  if (!base) return null;
+  try {
+    const hostname = new URL(base.includes("://") ? base : `https://${base}`).hostname.toLowerCase();
+    if (hostname === domain || hostname.endsWith(`.${domain}`)) return null;
+    return domain;
+  } catch {
+    return null;
+  }
+}
