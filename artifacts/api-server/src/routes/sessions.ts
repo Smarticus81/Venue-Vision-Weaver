@@ -43,6 +43,7 @@ import {
 import {
   assertReferenceImageQuality,
   hammingDistance,
+  MIN_REFERENCE_EDGE_PX,
   type ReferenceImageQuality,
 } from "../lib/referenceImageQuality.js";
 import {
@@ -56,7 +57,7 @@ const router: IRouter = Router();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_COUPLE_PHOTOS = 1;
 const MAX_COUPLE_PHOTOS = 3;
-const MIN_COUPLE_PHOTO_EDGE_PX = 256;
+const MIN_COUPLE_PHOTO_EDGE_PX = MIN_REFERENCE_EDGE_PX;
 const MAX_COUPLE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const DEFAULT_STYLE_ID = "cinematic-editorial";
 const objectStorageService = new ObjectStorageService();

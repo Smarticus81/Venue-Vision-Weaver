@@ -2,6 +2,13 @@ import sharp from "sharp";
 
 type ReferenceProfile = "couple" | "venue";
 
+/**
+ * Minimum edge for reference photos, shared by upload routes and generation.
+ * Must stay in sync with MIN_IMAGE_EDGE_PX in lib/object-storage-web and the
+ * couple-app upload validation so photos accepted at upload never fail later.
+ */
+export const MIN_REFERENCE_EDGE_PX = 256;
+
 export interface ReferenceImageQuality {
   width: number;
   height: number;
