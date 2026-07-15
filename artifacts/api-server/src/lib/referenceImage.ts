@@ -2,6 +2,7 @@ import sharp from "sharp";
 import {
   assertReferenceImageQuality,
   hammingDistance,
+  MIN_REFERENCE_EDGE_PX,
   type ReferenceImageQuality,
 } from "./referenceImageQuality.js";
 
@@ -9,7 +10,6 @@ type ImageRef = { buffer: Buffer; mimeType: string };
 
 export type ReferenceAspectRatio = "3:4" | "4:3" | "16:9" | "1:1" | "9:16";
 
-const MIN_REFERENCE_EDGE_PX = 1024;
 const MIN_COUPLE_REFERENCES = 2;
 const MIN_VENUE_REFERENCES = 5;
 

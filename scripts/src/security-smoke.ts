@@ -1166,7 +1166,7 @@ try {
   );
   assert.match(
     galleryQaDocs,
-    /same production reference validation as live sessions[\s\S]*at least 1024px on each side[\s\S]*couple references must not be near-duplicates/s,
+    /same production reference validation as live sessions[\s\S]*at least 256px on each side[\s\S]*couple references must not be near-duplicates/s,
     "gallery QA docs explain the live-session reference quality requirements",
   );
   assert.match(
@@ -1506,7 +1506,7 @@ try {
   const goodQuality = await assertReferenceImageQuality({
     buffer: goodReference,
     label: "Couple photo 1",
-    minEdgePx: 1024,
+    minEdgePx: 256,
     profile: "couple",
   });
   assert.ok(goodQuality.sharpness > 14, "clear synthetic couple reference passes sharpness gate");
@@ -1521,7 +1521,7 @@ try {
       assertReferenceImageQuality({
         buffer: await referenceQualityImage("dark"),
         label: "Couple photo 2",
-        minEdgePx: 1024,
+        minEdgePx: 256,
         profile: "couple",
       }),
     /too dark/,
@@ -1532,7 +1532,7 @@ try {
       assertReferenceImageQuality({
         buffer: await referenceQualityImage("washed"),
         label: "Venue photo",
-        minEdgePx: 1024,
+        minEdgePx: 256,
         profile: "venue",
       }),
     /washed out/,
@@ -1543,7 +1543,7 @@ try {
       assertReferenceImageQuality({
         buffer: await referenceQualityImage("blurry"),
         label: "Couple photo 3",
-        minEdgePx: 1024,
+        minEdgePx: 256,
         profile: "couple",
       }),
     /blurry/,
