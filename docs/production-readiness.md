@@ -69,6 +69,20 @@ not be treated as healthy.
 
 ## Gallery Quality Gate
 
+Before Gemini generation, the server prepares in-memory copies of every couple
+and venue reference with deterministic Lanczos resampling. References whose
+shortest edge is below 1024px are upscaled to that minimum, while large images
+are reduced when possible without dropping below it. Exposure normalization and
+mild sharpening are then applied. Stored originals are never modified, and no
+generative face restoration is used because invented facial detail would weaken
+identity fidelity.
+
+Run the focused preprocessing check after changing this path:
+
+```bash
+pnpm run test:reference-upscaler
+```
+
 Before changing model, prompt, scene, or reference-selection logic, run the live
 gallery QA harness with real consented couple and venue references:
 
