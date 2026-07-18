@@ -10,6 +10,7 @@
     "smoke:security": "node ./scripts/node_modules/tsx/dist/cli.mjs ./scripts/src/security-smoke.ts",
     "verify:production": "node ./scripts/node_modules/tsx/dist/cli.mjs ./scripts/src/verify-production.ts",
     "gallery:qa": "node ./scripts/node_modules/tsx/dist/cli.mjs ./artifacts/api-server/src/tools/galleryQa.ts",
+    "test:reference-upscaler": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/lib/referenceImagePreparation.test.ts",
     "setup:db": "node scripts/setup-database.cjs",
     "setup:storage": "node scripts/setup-supabase-storage.cjs",
     "generate:secrets": "node scripts/generate-secrets.cjs",
