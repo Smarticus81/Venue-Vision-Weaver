@@ -55,6 +55,15 @@ check can still pass if `railway.toml` deploys the Dockerfile and the Dockerfile
 installs ffmpeg. The post-deploy `--url` readiness check remains mandatory
 because it proves the actual running container can execute ffmpeg.
 
+Motion reels are encoded as fast-start H.264 MP4 files and the protected storage
+route must preserve `Range` requests as `206 Partial Content` responses for
+mobile Safari and other mobile players. After changing storage delivery or the
+gallery video player, run:
+
+```bash
+pnpm run test:mobile-reel
+```
+
 The `database` readiness check is intentionally stricter than a connection
 test. It degrades if launch-critical schema items are missing or nullable,
 including owner magic-link/session columns, generated-asset quality metadata

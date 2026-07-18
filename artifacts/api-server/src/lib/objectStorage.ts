@@ -9,11 +9,14 @@ import {
   getObjectAclPolicy,
   setObjectAclPolicy,
 } from "./objectAcl";
+import { parseByteRange } from "./byteRange.js";
+
+type ReadStreamOptions = { start?: number; end?: number };
 
 type ObjectFileHandle = {
   download(): Promise<[Buffer]>;
   getMetadata(): Promise<{ contentType?: string | null; size?: string | number }>;
-  createReadStream(): Readable;
+  createReadStream(options?: ReadStreamOptions): Promise<Readable>;
 };
 
 const objectStorageClient = new Storage();
@@ -76,7 +79,7 @@ function gcsHandle(file: File): ObjectFileHandle {
       const [metadata] = await file.getMetadata();
       return metadata;
     },
-    createReadStream: () => file.createReadStream(),
+    createReadStream: async (options) => file.createReadStream(options),
   };
 }
 
@@ -84,6 +87,7 @@ function supabaseHandle(
   bucket: string,
   objectPath: string,
   contentType?: string | null,
+  size?: string | number,
 ): ObjectFileHandle {
   return {
     download: async () => {
@@ -94,22 +98,34 @@ function supabaseHandle(
     },
     getMetadata: async () => ({
       contentType: contentType ?? mimeTypeFromObjectPath(objectPath),
+      size,
     }),
-    createReadStream: () => {
-      const pass = new Readable({ read() {} });
-      void getSupabaseAdmin()
-        .storage.from(bucket)
-        .download(objectPath)
-        .then(async ({ data, error }) => {
-          if (error || !data) {
-            pass.destroy(error ?? new ObjectNotFoundError());
-            return;
-          }
-          pass.push(Buffer.from(await data.arrayBuffer()));
-          pass.push(null);
-        })
-        .catch((err) => pass.destroy(err));
-      return pass;
+    createReadStream: async (options) => {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !serviceKey) throw new ObjectNotFoundError();
+
+      const encodedPath = objectPath.split("/").map(encodeURIComponent).join("/");
+      const url = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${encodedPath}`;
+      const response = await fetch(url, {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          ...(options?.start != null
+            ? { Range: `bytes=${options.start}-${options.end ?? ""}` }
+            : {}),
+        },
+      });
+      if (!response.ok || !response.body) {
+        throw new ObjectNotFoundError();
+      }
+      if (options?.start != null && response.status !== 206) {
+        const completeBuffer = Buffer.from(await response.arrayBuffer());
+        return Readable.from(
+          completeBuffer.subarray(options.start, (options.end ?? completeBuffer.length - 1) + 1),
+        );
+      }
+      return Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
     },
   };
 }
@@ -185,10 +201,9 @@ export class ObjectStorageService {
     file: ObjectFileHandle,
     cacheTtlSec: number = 3600,
     objectPathHint?: string,
+    rangeHeader?: string,
   ): Promise<Response> {
     const metadata = await file.getMetadata();
-    const nodeStream = file.createReadStream();
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
 
     const inferred =
       objectPathHint && metadata.contentType === "application/octet-stream"
@@ -204,10 +219,45 @@ export class ObjectStorageService {
       "Cache-Control": `public, max-age=${cacheTtlSec}`,
       "Accept-Ranges": "bytes",
     };
-    if (metadata.size) {
-      headers["Content-Length"] = String(metadata.size);
+
+    let size = Number(metadata.size);
+    let fallbackBuffer: Buffer | null = null;
+    if (!Number.isSafeInteger(size) || size <= 0) {
+      if (rangeHeader) {
+        [fallbackBuffer] = await file.download();
+        size = fallbackBuffer.length;
+      } else {
+        size = 0;
+      }
     }
 
+    if (rangeHeader) {
+      const range = parseByteRange(rangeHeader, size);
+      if (!range) {
+        headers["Content-Range"] = `bytes */${size}`;
+        return new Response(null, { status: 416, headers });
+      }
+
+      const contentLength = range.end - range.start + 1;
+      headers["Content-Range"] = `bytes ${range.start}-${range.end}/${size}`;
+      headers["Content-Length"] = String(contentLength);
+      if (fallbackBuffer) {
+        return new Response(fallbackBuffer.subarray(range.start, range.end + 1), {
+          status: 206,
+          headers,
+        });
+      }
+
+      const rangeStream = await file.createReadStream(range);
+      return new Response(Readable.toWeb(rangeStream) as ReadableStream, {
+        status: 206,
+        headers,
+      });
+    }
+
+    const nodeStream = await file.createReadStream();
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
+    if (size > 0) headers["Content-Length"] = String(size);
     return new Response(webStream, { headers });
   }
 
@@ -257,23 +307,25 @@ export class ObjectStorageService {
       const storagePath = entityId.startsWith("uploads/")
         ? entityId
         : `uploads/${entityId}`;
-      const { error } = await getSupabaseAdmin().storage.from(bucket).download(storagePath);
-      if (error) throw new ObjectNotFoundError();
       let storedType: string | null = null;
+      let storedSize: string | number | undefined;
       try {
-        const { data: listed } = await getSupabaseAdmin().storage.from(bucket).list(
+        const { data: listed, error } = await getSupabaseAdmin().storage.from(bucket).list(
           storagePath.includes("/") ? storagePath.split("/").slice(0, -1).join("/") : "",
           { search: storagePath.split("/").pop() },
         );
+        if (error) throw error;
         const meta = listed?.find((f) => f.name === storagePath.split("/").pop());
+        if (!meta) throw new ObjectNotFoundError();
         if (meta?.metadata && typeof meta.metadata === "object") {
           const m = meta.metadata as Record<string, unknown>;
           if (typeof m.mimetype === "string") storedType = m.mimetype;
+          if (typeof m.size === "string" || typeof m.size === "number") storedSize = m.size;
         }
       } catch {
-        /* optional metadata */
+        throw new ObjectNotFoundError();
       }
-      return supabaseHandle(bucket, storagePath, storedType);
+      return supabaseHandle(bucket, storagePath, storedType, storedSize);
     }
 
     let entityDir = this.getPrivateObjectDir();
