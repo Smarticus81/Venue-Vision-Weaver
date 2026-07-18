@@ -21,6 +21,7 @@ import {
   Loader2,
   Mail,
   Phone,
+  Play,
   RotateCcw,
   Share2,
   Volume2,
@@ -519,15 +520,52 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
   const [, setLocation] = useLocation();
   const [activeStill, setActiveStill] = useState(0);
   const [muted, setMuted] = useState(true);
+  const [reelReady, setReelReady] = useState(false);
+  const [reelPlaying, setReelPlaying] = useState(false);
+  const [reelError, setReelError] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const attemptedAutoplayRef = useRef(false);
   const reelSrc = reel ? storageAssetUrl(reel.objectKey, session.shareToken) : null;
+  const reelPoster = stills[0]
+    ? storageAssetUrl(stills[0].objectKey, session.shareToken)
+    : undefined;
   const venueName = session.venue?.name ?? "this venue";
   const contactAction = venueContactAction(session.venue);
 
   useEffect(() => {
-    if (!videoRef.current || !reelSrc) return;
-    videoRef.current.play().catch(() => undefined);
+    attemptedAutoplayRef.current = false;
+    setReelReady(false);
+    setReelPlaying(false);
+    setReelError(false);
+    videoRef.current?.load();
   }, [reelSrc]);
+
+  const playReel = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      await video.play();
+      setReelPlaying(true);
+    } catch {
+      setReelPlaying(false);
+    }
+  };
+
+  const handleReelCanPlay = () => {
+    setReelReady(true);
+    if (attemptedAutoplayRef.current) return;
+    attemptedAutoplayRef.current = true;
+    void playReel();
+  };
+
+  const handleMuteToggle = () => {
+    const nextMuted = !muted;
+    setMuted(nextMuted);
+    if (videoRef.current) {
+      videoRef.current.muted = nextMuted;
+      if (videoRef.current.paused) void playReel();
+    }
+  };
 
   const activeAsset = stills[activeStill] ?? stills[0]!;
 
@@ -539,7 +577,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
       data-testid="gallery-view"
     >
       <header className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-20 flex justify-between items-center">
            <div className="pointer-events-auto">
              <GlimpseLogo variant="mark" href="/" className="h-8 w-auto opacity-90 drop-shadow-md" />
            </div>
@@ -549,10 +587,11 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setMuted((value) => !value)}
-                  className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
+                  onClick={handleMuteToggle}
+                  className="h-11 w-11 bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                   data-testid="gallery-mute"
                   title={muted ? "Unmute" : "Mute"}
+                  aria-label={muted ? "Unmute motion reel" : "Mute motion reel"}
                 >
                   {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </Button>
@@ -562,7 +601,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                   asChild
                   variant="ghost"
                   size="icon"
-                  className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
+                  className="h-11 w-11 bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                   data-testid="gallery-download-reel"
                   title="Download reel"
                 >
@@ -575,7 +614,7 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                 variant="ghost"
                 size="icon"
                 onClick={onRestart}
-                className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
+                className="h-11 w-11 bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                 data-testid="gallery-restart"
                 title="Create another"
               >
@@ -585,8 +624,9 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
                 variant="ghost"
                 size="icon"
                 onClick={() => setLocation("/couple")}
-                className="bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
+                className="h-11 w-11 bg-card/80 backdrop-blur text-foreground hover:bg-card border border-card-border"
                 title="Home"
+                aria-label="Return home"
               >
                 <Home className="h-5 w-5" />
               </Button>
@@ -595,28 +635,83 @@ function GalleryVisionView({ session, reel, stills, onRestart }: GalleryVisionVi
       </header>
 
       {reelSrc ? (
-        <div className="relative w-full min-h-[85vh] bg-black flex flex-col items-center justify-center overflow-hidden">
+        <div className="relative isolate h-[100svh] min-h-[34rem] w-full overflow-hidden bg-black md:h-[85vh] md:min-h-[42rem]">
+          {reelPoster && (
+            <img
+              src={reelPoster}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-2xl md:hidden"
+            />
+          )}
           <video
             ref={videoRef}
             src={reelSrc}
+            poster={reelPoster}
             autoPlay
             playsInline
             muted={muted}
             loop
             controls
-            preload="auto"
-            className="w-full h-full max-h-[85vh] object-contain md:object-cover opacity-90"
+            preload="metadata"
+            aria-label={`Motion reel created for ${venueName}`}
+            onCanPlay={handleReelCanPlay}
+            onPlaying={() => {
+              setReelReady(true);
+              setReelPlaying(true);
+            }}
+            onPause={() => setReelPlaying(false)}
+            onWaiting={() => setReelReady(false)}
+            onError={() => {
+              setReelError(true);
+              setReelReady(false);
+              setReelPlaying(false);
+            }}
+            className="absolute inset-0 z-[1] h-full w-full object-contain opacity-95 md:object-cover"
             data-testid="gallery-reel"
           />
-          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black via-transparent to-black/30" />
+          <div className="absolute inset-0 z-[2] pointer-events-none bg-gradient-to-t from-black via-transparent to-black/30" />
           <div aria-hidden className="pointer-events-none absolute inset-3 md:inset-5 z-10">
             <FrameTicks size={14} className="text-foreground/40" />
           </div>
 
-          <div className="absolute bottom-16 left-6 right-6 md:bottom-24 max-w-7xl mx-auto flex flex-col items-center text-center pointer-events-none">
+          {!reelError && !reelReady && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+              <div className="flex items-center gap-3 rounded-full bg-black/65 px-5 py-3 text-sm text-white backdrop-blur">
+                <Loader2 className="h-5 w-5 animate-spin" /> Loading motion reel
+              </div>
+            </div>
+          )}
+
+          {!reelError && reelReady && !reelPlaying && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void playReel()}
+                className="min-h-14 rounded-full border border-white/40 bg-black/70 px-6 text-base text-white backdrop-blur hover:bg-black/85"
+                data-testid="gallery-play-reel"
+              >
+                <Play className="h-5 w-5 fill-current" /> Play motion reel
+              </Button>
+            </div>
+          )}
+
+          {reelError && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center px-6 text-center">
+              <div className="max-w-sm bg-black/75 p-6 text-white backdrop-blur">
+                <p className="font-display text-xl mb-3">The reel could not play here.</p>
+                <a className="underline underline-offset-4" href={reelSrc} target="_blank" rel="noreferrer">
+                  Open the motion reel
+                </a>
+              </div>
+            </div>
+          )}
+
+          <div className="absolute bottom-20 left-4 right-4 z-10 mx-auto flex max-w-7xl flex-col items-center text-center pointer-events-none sm:bottom-24 md:left-6 md:right-6">
              <p className="mono-label text-white/90 drop-shadow mb-3">The motion reel</p>
              <p className="mono-label text-white/70 drop-shadow mb-6">Created for {venueName}</p>
-             <h2 className="font-display text-4xl md:text-6xl lg:text-7xl font-medium text-white drop-shadow-lg leading-tight max-w-4xl">
+             <h2 className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-medium text-white drop-shadow-lg leading-tight max-w-4xl">
                {session.coupleName ? `${session.coupleName}` : "Your Wedding Vision"}
              </h2>
           </div>
