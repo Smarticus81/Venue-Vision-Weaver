@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   motion,
   useReducedMotion,
@@ -15,7 +15,6 @@ import {
   FrameTicks,
   Magnetic,
   Marquee,
-  RiseLines,
 } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { BRAND_ASSETS, GALLERY_FRAMES } from "@/lib/brandAssets";
@@ -92,38 +91,21 @@ export default function VenueLandingPage() {
         style={{ scaleX: pageProgress }}
       />
 
-      <header className="fixed inset-x-0 top-0 z-50 mix-blend-normal">
-        <div className="flex items-center justify-between px-5 md:px-10 h-16 md:h-20 border-b border-border/60 bg-background/70 backdrop-blur-md">
-          <GlimpseLogo href="/" />
-          <p className="mono-label hidden md:block text-muted-foreground">
-            For wedding venues — film no. 001
-          </p>
-          <div className="flex items-center gap-6">
-            <button
-              type="button"
-              onClick={() => setLocation("/login")}
-              className="mono-label text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-              data-testid="venue-header-sign-in"
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation("/create-venue")}
-              className="mono-label border border-foreground/40 px-4 py-2.5 text-foreground hover:border-rose hover:text-rose transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              data-testid="venue-header-register"
-            >
-              Start free
-            </button>
-          </div>
-        </div>
-      </header>
+      <PillNav
+        onStart={() => setLocation("/create-venue")}
+        onSignIn={() => setLocation("/login")}
+      />
 
       <main>
         <HeroScene onStart={() => setLocation("/create-venue")} onSignIn={() => setLocation("/login")} />
+        <MarqueeBand />
         <ProblemScene />
-        <DevelopingPrintScene />
-        <MechanismScene />
+        <div id="deliverable">
+          <DevelopingPrintScene />
+        </div>
+        <div id="how-it-works">
+          <MechanismScene />
+        </div>
         <GuardrailScene />
         <OfferScene onStart={() => setLocation("/create-venue")} />
       </main>
@@ -133,72 +115,273 @@ export default function VenueLandingPage() {
   );
 }
 
-/* ————————————————— 001 · Manifesto hero ————————————————— */
+/* ————————————————— Pill navigation ————————————————— */
+
+function useScrolledPast(threshold = 40) {
+  const [past, setPast] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setPast(window.scrollY > threshold);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [threshold]);
+  return past;
+}
+
+function PillNav({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void }) {
+  const past = useScrolledPast();
+  return (
+    <div className="fixed inset-x-0 top-0 z-50 px-4 pt-4 md:px-8 md:pt-5">
+      <nav className="mx-auto flex max-w-[110rem] items-center justify-between gap-3">
+        <div
+          className={cn(
+            "flex items-center rounded-full border border-white/10 px-4 py-2.5 backdrop-blur-xl transition-colors duration-300",
+            past ? "bg-background/85" : "bg-background/55",
+          )}
+        >
+          <GlimpseLogo href="/" className="text-[1.2rem]" />
+        </div>
+
+        <div
+          className={cn(
+            "hidden items-center rounded-full border border-white/10 px-2 py-1.5 backdrop-blur-xl transition-colors duration-300 lg:flex",
+            past ? "bg-background/85" : "bg-background/55",
+          )}
+        >
+          {[
+            { label: "How it works", href: "#how-it-works" },
+            { label: "The deliverable", href: "#deliverable" },
+            { label: "For couples", href: "/couple" },
+          ].map((l) => (
+            <a
+              key={l.label}
+              href={l.href}
+              className="rounded-full px-4 py-2 text-sm text-foreground/60 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {l.label}
+            </a>
+          ))}
+          <button
+            type="button"
+            onClick={onSignIn}
+            data-testid="venue-header-sign-in"
+            className="rounded-full px-4 py-2 text-sm text-foreground/60 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Sign in
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onStart}
+          data-testid="venue-header-register"
+          data-cursor="focus"
+          className="rounded-full bg-foreground px-5 py-3 text-sm font-medium text-background transition-colors duration-200 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          Create your venue
+        </button>
+      </nav>
+    </div>
+  );
+}
+
+/* ————————————————— 001 · Video hero ————————————————— */
+
+const HERO_STATS = [
+  { pos: "s-tr", value: "4+1", label: "portraits + a branded reel", rule: "up" as const },
+  { pos: "s-br", value: "5", label: "free credits to start", rule: "down" as const },
+];
 
 function HeroScene({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void }) {
+  const reduce = useReducedMotion();
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
+  const videoScale = useTransform(scrollYProgress, [0, 1], [1, 1.12]);
+  const fgY = useTransform(scrollYProgress, [0, 1], ["0%", "-16%"]);
+  const fgOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
   return (
-    <section className="grain relative flex min-h-screen flex-col justify-end overflow-hidden pt-24">
-      <img
-        src={BRAND_ASSETS.heroAtmosphere}
-        alt=""
+    <section
+      ref={heroRef}
+      id="hero"
+      className="relative h-[100svh] min-h-[38rem] w-full overflow-hidden bg-background"
+    >
+      <motion.video
+        className="absolute inset-0 h-full w-full object-cover [transform-origin:50%_45%]"
+        style={reduce ? undefined : { scale: videoScale }}
+        autoPlay
+        loop
+        muted
+        playsInline
+        poster={BRAND_ASSETS.heroAtmosphere}
         aria-hidden
-        fetchPriority="high"
-        decoding="async"
-        className="absolute inset-0 h-full w-full object-cover opacity-70"
+        src="/brand/hero.mp4"
+      />
+
+      {/* Scrims: left for text legibility, bottom for the seam into the page. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(105deg, hsl(var(--background)/0.82) 0%, hsl(var(--background)/0.42) 42%, hsl(var(--background)/0) 72%)",
+        }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/55 via-background/70 to-background"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-64"
+        style={{ background: "linear-gradient(to bottom, transparent, hsl(var(--background)))" }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_70%_10%,hsl(var(--rose)/0.1),transparent_70%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_78%_18%,hsl(var(--rose)/0.14),transparent_70%)]"
       />
 
-      <div className="relative z-10 px-5 md:px-10">
-        <p className="mono-label mb-6 text-rose">For wedding venues</p>
-        <h1 className="font-display font-medium uppercase leading-[0.92] tracking-[-0.02em] text-[clamp(3.2rem,11.5vw,11.5rem)]">
-          <RiseLines lines={["Turn tours", <>into{" "}<em className="text-rose">bookings.</em></>]} />
-        </h1>
+      <motion.div
+        className="relative z-10 h-full w-full"
+        style={reduce ? undefined : { y: fgY, opacity: fgOpacity }}
+      >
+        {/* Accessible heading (the visual lines below are decorative). */}
+        <h1 className="sr-only">Turn tours into bookings</h1>
 
-        <div className="mt-8 grid grid-cols-1 gap-10 pb-16 md:mt-12 md:grid-cols-[1fr_auto] md:items-end md:pb-20">
-          <p className="font-display italic text-[clamp(1.6rem,3.4vw,3rem)] leading-tight text-muted-foreground max-w-3xl">
-            Couples see their wedding <span className="text-foreground">in your venue</span> — before they decide.
+        {/* Mobile: clean stacked lockup. */}
+        <div className="flex h-full flex-col justify-center px-6 md:hidden">
+          <p className="mono-label mb-6 text-rose">For wedding venues</p>
+          <div aria-hidden className="display-editorial text-[19vw] text-foreground">
+            <span className="drape block" style={{ "--drape-delay": "80ms" } as CSSProperties}>
+              <span>turn tours</span>
+            </span>
+            <span className="drape block" style={{ "--drape-delay": "200ms" } as CSSProperties}>
+              <span>into</span>
+            </span>
+            <span className="drape block" style={{ "--drape-delay": "320ms" } as CSSProperties}>
+              <span className="text-rose">bookings.</span>
+            </span>
+          </div>
+          <p className="mt-7 max-w-sm text-[15px] leading-relaxed text-foreground/85">
+            Couples scan your code and generate a four-image vision gallery plus
+            a branded motion reel — at your venue, before they've booked it.
           </p>
-
-          <div className="max-w-sm md:justify-self-end">
-            <p className="mb-6 text-base leading-relaxed text-muted-foreground">
-              After each tour, glimpse sends the couple four photoreal portraits
-              of themselves in your venue, plus a branded motion reel — with
-              your booking link on it.
-            </p>
+          <div className="mt-8">
             <TickButton onClick={onStart} testId="venue-hero-register">
-              Create your venue workspace
+              Create your venue
             </TickButton>
-            <p className="mono-label mt-5 text-muted-foreground/80 normal-case tracking-normal text-[0.72rem]">
-              1 credit = 1 couple's gallery.
-            </p>
             <button
               type="button"
               onClick={onSignIn}
-              className="mt-3 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
               data-testid="owner-cta"
+              className="mt-4 block text-sm text-foreground/70 underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             >
               Already set up? Sign in
             </button>
           </div>
         </div>
-      </div>
 
-      <Marquee className="relative z-10 border-y border-border py-4 md:py-6" speed={30}>
-        {["more bookings", "faster yeses", "follow-up that sells", "four portraits + a reel"].map((t) => (
-          <span key={t} className="mx-6 inline-flex items-baseline gap-12 font-display italic text-[clamp(1.6rem,3.2vw,3rem)] leading-none text-foreground/90">
-            {t}
-            <span aria-hidden className="inline-block h-[0.5em] w-[0.5em] translate-y-[-0.05em] rounded-full bg-rose/70" />
-          </span>
+        {/* Desktop/tablet: editorial stacked lockup, indented lines + right-rail facts. */}
+        <div
+          aria-hidden
+          className="hidden h-full flex-col justify-center px-8 md:flex lg:px-14"
+        >
+          <p className="mono-label mb-6 text-rose">For wedding venues</p>
+          <div className="display-editorial max-w-[62vw] text-foreground text-[clamp(3.5rem,8.8vw,9.5rem)]">
+            <span className="drape block" style={{ "--drape-delay": "80ms" } as CSSProperties}>
+              <span>turn tours</span>
+            </span>
+            <span
+              className="drape block ml-[16%]"
+              style={{ "--drape-delay": "220ms" } as CSSProperties}
+            >
+              <span>into</span>
+            </span>
+            <span
+              className="drape block ml-[5%]"
+              style={{ "--drape-delay": "360ms" } as CSSProperties}
+            >
+              <span className="text-rose">bookings.</span>
+            </span>
+          </div>
+
+          <div className="mt-10 flex max-w-xl flex-col gap-6">
+            <p className="max-w-md text-[15px] leading-relaxed text-foreground/85">
+              Couples scan your code and generate a four-image vision gallery
+              plus a branded motion reel — at your venue, before they've booked
+              it.
+            </p>
+            <div className="flex items-center gap-6">
+              <TickButton onClick={onStart} testId="venue-hero-register">
+                Create your venue
+              </TickButton>
+              <button
+                type="button"
+                onClick={onSignIn}
+                data-testid="owner-cta"
+                className="text-sm text-foreground/70 underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              >
+                Sign in
+              </button>
+            </div>
+            <p className="mono-label text-foreground/50">
+              1 credit = 1 couple's gallery
+            </p>
+          </div>
+        </div>
+
+        {HERO_STATS.map((s) => (
+          <HeroStat key={s.pos} {...s} />
         ))}
-      </Marquee>
+      </motion.div>
     </section>
+  );
+}
+
+function HeroStat({
+  pos,
+  value,
+  label,
+  rule,
+}: {
+  pos: string;
+  value: string;
+  label: string;
+  rule: "up" | "down";
+}) {
+  const place =
+    pos === "s-tr"
+      ? "right-8 top-[13%] text-right lg:right-24"
+      : pos === "s-bl"
+        ? "left-8 bottom-[9%] lg:left-20"
+        : "right-8 bottom-[6%] text-right lg:right-20";
+  const alignRight = pos !== "s-bl";
+  return (
+    <div className={cn("absolute hidden lg:block", place)}>
+      <div className={cn("flex items-center gap-4", alignRight && "justify-end")}>
+        {alignRight && <span className={cn("h-px w-24 bg-rose/70", rule === "up" ? "rotate-[20deg]" : "-rotate-[20deg]")} />}
+        <span className="mono-figure text-5xl font-medium text-foreground">{value}</span>
+        {!alignRight && <span className={cn("h-px w-24 bg-rose/70", rule === "up" ? "rotate-[20deg]" : "-rotate-[20deg]")} />}
+      </div>
+      <p className="mono-label mt-3 text-foreground/60">{label}</p>
+    </div>
+  );
+}
+
+/* ————————————————— Marquee bridge ————————————————— */
+
+function MarqueeBand() {
+  return (
+    <Marquee className="border-y border-border bg-background py-5 md:py-7" speed={32}>
+      {["more bookings", "faster yeses", "follow-up that sells", "four portraits + a reel"].map((t) => (
+        <span
+          key={t}
+          className="mx-8 inline-flex items-baseline gap-16 font-display italic font-light text-[clamp(1.5rem,3.2vw,3rem)] leading-none text-foreground/90"
+        >
+          {t}
+          <span aria-hidden className="inline-block h-[0.42em] w-[0.42em] translate-y-[-0.05em] rounded-full bg-rose/70" />
+        </span>
+      ))}
+    </Marquee>
   );
 }
 
@@ -216,7 +399,7 @@ function ProblemScene() {
       <div className="relative z-10 px-5 py-24 md:px-10 md:py-36">
         <SceneLabel index="002" title="The follow-up problem" />
         <div className="mt-14 grid gap-12 md:grid-cols-[1.2fr_1fr] md:gap-20">
-          <h2 className="font-display text-[clamp(2.2rem,5vw,4.6rem)] leading-[1.05] font-medium">
+          <h2 className="font-display text-[clamp(2.2rem,5vw,4.6rem)] leading-[1.05] font-normal tracking-[-0.03em]">
             Every tour ends with{" "}
             <em className="text-rose">"wow, I can see it"</em>
           </h2>
@@ -267,7 +450,7 @@ function DevelopingPrintScene() {
     return (
       <section className="px-5 py-24 md:px-10">
         <SceneLabel index="003" title="The deliverable" />
-        <h2 className="mt-10 mb-12 font-display text-[clamp(2rem,4.5vw,4rem)] leading-[1.05] font-medium max-w-3xl">
+        <h2 className="mt-10 mb-12 font-display text-[clamp(2rem,4.5vw,4rem)] leading-[1.05] font-normal tracking-[-0.03em] max-w-3xl">
           One tour becomes a <em className="text-rose">daydream</em> of their day.
         </h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-5">
@@ -299,7 +482,7 @@ function PinnedContactSheet() {
         <div className="mb-10 flex items-end justify-between">
           <div>
             <SceneLabel index="003" title="The deliverable" />
-            <h2 className="mt-6 font-display text-[clamp(1.8rem,3vw,2.8rem)] font-medium leading-tight">
+            <h2 className="mt-6 font-display text-[clamp(1.8rem,3vw,2.8rem)] font-normal tracking-[-0.03em] leading-tight">
               One tour becomes a <em className="text-rose">daydream</em> of their day.
             </h2>
           </div>
@@ -382,7 +565,7 @@ function MechanismScene() {
     return (
       <section className="border-t border-border px-5 py-24 md:px-10">
         <SceneLabel index="004" title="How it works" />
-        <h2 className="mt-10 font-display text-[clamp(2rem,4.5vw,4rem)] font-medium leading-[1.05]">
+        <h2 className="mt-10 font-display text-[clamp(2rem,4.5vw,4rem)] font-normal tracking-[-0.03em] leading-[1.05]">
           The 48 hours <em className="text-rose">after</em> the tour.
         </h2>
         <ol className="mt-14 space-y-14">
@@ -431,7 +614,7 @@ function HorizontalMechanism() {
               </span>
               <div className="relative z-10 max-w-xl">
                 <p className="mono-label mb-6 text-rose">Step {s.index} / 04</p>
-                <h3 className="mb-6 font-display text-[clamp(2.4rem,4.4vw,4.2rem)] font-medium leading-[1.02]">
+                <h3 className="mb-6 font-display text-[clamp(2.4rem,4.4vw,4.2rem)] font-normal tracking-[-0.03em] leading-[1.02]">
                   {s.title}
                 </h3>
                 <p className="text-lg font-light leading-relaxed text-muted-foreground">{s.text}</p>
@@ -474,7 +657,7 @@ function GuardrailScene() {
   return (
     <section className="border-t border-border px-5 py-24 md:px-10 md:py-32">
       <SceneLabel index="005" title="What it does for the business" />
-      <h2 className="mt-10 mb-16 max-w-4xl font-display text-[clamp(2rem,4.5vw,4rem)] font-medium leading-[1.05]">
+      <h2 className="mt-10 mb-16 max-w-4xl font-display text-[clamp(2rem,4.5vw,4rem)] font-normal tracking-[-0.03em] leading-[1.05]">
         Follow-up that <em className="text-rose">sells the date.</em>
       </h2>
       <div>
@@ -512,7 +695,7 @@ function OfferScene({ onStart }: { onStart: () => void }) {
       />
       <div className="relative z-10">
         <p className="mono-label mb-10 text-rose">006 — The offer</p>
-        <h2 className="font-display font-medium leading-[0.98] text-[clamp(2.8rem,8.5vw,8rem)]">
+        <h2 className="display-editorial font-light leading-[0.94] text-[clamp(2.8rem,8.5vw,8rem)]">
           One link.
           <br />
           <em className="text-rose">Every tour.</em>
@@ -544,7 +727,7 @@ function Footer({ onStart }: { onStart: () => void }) {
           className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Create your venue workspace"
         >
-          <span className="font-display font-medium lowercase leading-[0.85] tracking-[-0.03em] text-[clamp(4rem,17vw,17rem)] text-foreground/95 transition-colors hover:text-rose">
+          <span className="display-editorial lowercase leading-[0.85] tracking-[-0.045em] text-[clamp(4rem,17vw,17rem)] text-foreground/95 transition-colors hover:text-rose">
             glimpse<span className="text-rose">.</span>
           </span>
         </button>

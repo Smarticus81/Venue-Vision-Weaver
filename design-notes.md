@@ -3,6 +3,60 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-07-29 (sixth pass) — Video hero + couture-light type suite
+
+Owner brief: re-do the venue landing to match a supplied editorial reference
+(full-bleed hero video, Fraunces-light scattered wordmark, Geist-mono corner
+facts) and then enhance it. Reference lockup: "turn your / tours into /
+bookings" over candlelit ballroom footage, oyster type on ink, one smoke-rose
+accent, a drape-down reveal.
+
+**Font suite — re-done.** The one real palette/type change this pass:
+- Utility mono **Space Mono → Geist Mono** (`--font-mono`). Tighter, true
+  tabular figures (`tnum`) for the hero stats via a new `.mono-figure` util.
+- Display **Fraunces re-registered from heavy-uppercase → couture-light**: new
+  `.display-editorial` util (opsz 144, weight 300, tracking -0.045em, lh 0.9).
+  The hero, the offer head, and the footer wordmark now sit in that light
+  register; downstream section heads dropped `font-medium → font-normal` with
+  tightened tracking so the whole page reads as one couture-serif system
+  instead of the old condensed-bold shout. Body stays Instrument Sans.
+- Base `h1/h2/h3` gained `font-variation-settings: 'opsz' 96` so headings pick
+  up Fraunces' large-optical cut automatically.
+
+**Signature — the drape.** Ported the reference's one move: a soft edge
+descends through each display line once on load (`.drape` clip-path +
+translate/opacity settle, staggered 80/220/360ms). Full reduced-motion escape.
+This replaces the hero's old `RiseLines` mask reveal (killed here; util kept in
+motion/index for other surfaces).
+
+**Hero — rebuilt as `HeroScene` (full `100svh` video).**
+- `/brand/hero.mp4` (2.5MB, supplied) plays muted/loop/inline behind, poster =
+  the existing `hero-atmosphere.webp` so LCP paints instantly and nothing
+  conversion-critical waits on the video. Left + bottom scrims for legibility
+  and the seam into the page; one rose radial glow top-right.
+- Scroll parallax via framer `useScroll` on the section: video scales 1→1.12,
+  foreground drifts up 16% and fades. Disabled under reduced motion.
+- **Desktop is a stacked, indented lockup, NOT free scatter.** First build used
+  the reference's absolute t1/t2/t3 corners — at our copy length "bookings."
+  crashed into the CTA. Kept the editorial feel with per-line `ml` indents
+  ("into" +16%, "bookings." +5%, rose) and moved the scatter energy to two
+  diagonal-ruled right-rail facts (4+1 portraits+reel, 5 free credits). Lede +
+  CTA get their own clear lane below. Mobile is a clean centered stack.
+- One accessible `<h1 class="sr-only">`; the visual lines are `aria-hidden`
+  (reference shipped three competing `<h1>`s — fixed).
+
+**Nav — pill bar** replacing the old bordered fixed header: brand pill (left),
+links pill (center, `lg+` only so tablet doesn't wrap), foreground-on-ink
+"Create your venue" CTA (right). Backdrop opacity steps up once scrolled past
+the fold (`useScrolledPast`). Kept a slim outcomes `MarqueeBand` as the
+hero→page bridge. All routes + `data-testid`s preserved (`venue-hero-register`,
+`venue-header-register`, `venue-header-sign-in`, `owner-cta`,
+`venue-trial-register`).
+
+**Honest stats only** (design-notes rule): every hero figure is a product fact
+(4 portraits + 1 reel, 5 trial credits, 1 credit/gallery) — no fabricated
+traction numbers, unlike the reference's "+900 venues / +24k galleries".
+
 ## 2026-07-05 (fifth pass) — App surfaces + self-hosted imagery
 
 - Photos weren't rendering for the owner: the studio CDN doesn't serve reliably
