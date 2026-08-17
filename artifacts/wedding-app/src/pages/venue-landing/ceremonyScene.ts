@@ -10,6 +10,7 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { ARRIVAL_THRESHOLD, JOURNEY_WAYPOINTS } from "./journey";
 import type { MoodKey } from "./moods";
 
 export type CeremonyView = "aisle" | "altar" | "aerial";
@@ -26,6 +27,8 @@ type MoodLight = {
   sunI: number;
   sunPos: [number, number, number];
   candleI: number;
+  cloud: number;
+  cloudOpacity: number;
 };
 
 const LIGHTING: Record<MoodKey, MoodLight> = {
@@ -41,6 +44,8 @@ const LIGHTING: Record<MoodKey, MoodLight> = {
     sunI: 1.35,
     sunPos: [-30, 16, 22],
     candleI: 0,
+    cloud: 0xffe4c8,
+    cloudOpacity: 0.48,
   },
   candlelit: {
     bg: 0x241423,
@@ -54,6 +59,8 @@ const LIGHTING: Record<MoodKey, MoodLight> = {
     sunI: 0.5,
     sunPos: [-20, 10, 25],
     candleI: 1,
+    cloud: 0x4a3048,
+    cloudOpacity: 0.22,
   },
   moonlit: {
     bg: 0x0c1524,
@@ -67,6 +74,8 @@ const LIGHTING: Record<MoodKey, MoodLight> = {
     sunI: 0.95,
     sunPos: [18, 32, 15],
     candleI: 0.3,
+    cloud: 0x9fb6d8,
+    cloudOpacity: 0.28,
   },
 };
 
@@ -79,6 +88,8 @@ const VIEWS: Record<CeremonyView, { pos: [number, number, number]; look: [number
 
 export type CeremonySceneHandle = {
   setMood: (mood: MoodKey) => void;
+  /** Drive the aerial-descent flight (0 = high aerial, 1 = altar). */
+  setJourney: (progress: number) => void;
   setView: (view: CeremonyView) => void;
   setActive: (active: boolean) => void;
   destroy: () => void;
@@ -123,7 +134,7 @@ export function createCeremonyScene(
   scene.fog = new THREE.FogExp2(LIGHTING[opts.mood].bg, LIGHTING[opts.mood].fogDensity);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-  camera.position.set(...VIEWS.aisle.pos);
+  camera.position.set(...JOURNEY_WAYPOINTS[0].pos);
 
   /* ————— lights ————— */
   const ambient = new THREE.AmbientLight(0xfff5ea, 0.6);
@@ -156,7 +167,7 @@ export function createCeremonyScene(
 
   /* ————— ground + deck ————— */
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(120, 120, 8, 8),
+    new THREE.PlaneGeometry(300, 300, 8, 8),
     new THREE.MeshStandardMaterial({ color: 0x9e8369, roughness: 0.95 }),
   );
   ground.rotation.x = -Math.PI / 2;
@@ -377,29 +388,32 @@ export function createCeremonyScene(
     scene.add(t);
   }
 
-  /* ————— mountains ————— */
+  /* ————— mountains: a wide ring so the aerial approach has scenery ————— */
   {
-    for (let i = 0; i < 7; i++) {
-      const height = 35 + Math.random() * 20;
-      const radius = 25 + Math.random() * 15;
+    const peakCount = 12;
+    for (let i = 0; i < peakCount; i++) {
+      const height = 45 + Math.random() * 30;
+      const radius = 30 + Math.random() * 20;
       const geo = new THREE.ConeGeometry(radius, height, 7, 8);
       const pos = geo.attributes.position;
       for (let j = 0; j < pos.count; j++) {
         if (pos.getY(j) < height / 2) {
-          pos.setX(j, pos.getX(j) + (Math.random() - 0.5) * 3);
-          pos.setZ(j, pos.getZ(j) + (Math.random() - 0.5) * 3);
+          pos.setX(j, pos.getX(j) + (Math.random() - 0.5) * 5);
+          pos.setZ(j, pos.getZ(j) + (Math.random() - 0.5) * 5);
         }
       }
       geo.computeVertexNormals();
       const mountain = new THREE.Mesh(
         geo,
         new THREE.MeshStandardMaterial({
-          color: i % 2 === 0 ? 0x5a6977 : 0x485868,
+          color: i % 2 === 0 ? 0x4a5a68 : 0x3d4b58,
           roughness: 0.95,
           metalness: 0.05,
         }),
       );
-      mountain.position.set(-70 + i * 22 + (Math.random() - 0.5) * 10, height / 2 - 8, -50 - Math.random() * 20);
+      const angle = (i / peakCount) * Math.PI * 1.6 - Math.PI * 0.8;
+      const dist = 90 + Math.random() * 30;
+      mountain.position.set(Math.sin(angle) * dist, height / 2 - 10, -Math.cos(angle) * dist - 20);
       scene.add(mountain);
     }
 
@@ -412,6 +426,32 @@ export function createCeremonyScene(
     const ridge = new THREE.Mesh(ridgeGeo, new THREE.MeshStandardMaterial({ color: 0x3d5240, roughness: 0.9 }));
     ridge.position.set(0, 5, -35);
     scene.add(ridge);
+  }
+
+  /* ————— clouds: drifted through on the descent ————— */
+  const cloudMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 1,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+  });
+  const cloudGroups: THREE.Group[] = [];
+  {
+    const puffGeo = new THREE.SphereGeometry(1, 8, 8);
+    for (let i = 0; i < 18; i++) {
+      const cloud = new THREE.Group();
+      for (let j = 0; j < 5; j++) {
+        const puff = new THREE.Mesh(puffGeo, cloudMat);
+        const s = 3 + Math.random() * 3;
+        puff.scale.setScalar(s);
+        puff.position.set((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 5);
+        cloud.add(puff);
+      }
+      cloud.position.set((Math.random() - 0.5) * 120, 18 + Math.random() * 15, -20 + (Math.random() - 0.5) * 80);
+      scene.add(cloud);
+      cloudGroups.push(cloud);
+    }
   }
 
   /* ————— candles (aisle lanterns + arch cluster) ————— */
@@ -443,7 +483,7 @@ export function createCeremonyScene(
     }
   }
 
-  /* ————— controls ————— */
+  /* ————— controls (inert until the flight arrives at the altar) ————— */
   const finePointer = window.matchMedia("(pointer: fine)").matches;
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = !reducedMotion;
@@ -451,9 +491,10 @@ export function createCeremonyScene(
   controls.enableZoom = false;
   controls.enablePan = false;
   controls.maxPolarAngle = Math.PI / 2 - 0.02;
-  controls.target.set(...VIEWS.aisle.look);
-  controls.autoRotate = !reducedMotion;
+  controls.target.set(...JOURNEY_WAYPOINTS[0].look);
+  controls.autoRotate = false;
   controls.autoRotateSpeed = 0.25;
+  controls.enabled = false;
   if (!finePointer) {
     // Touch: presets drive the camera; one finger keeps scrolling the page.
     controls.enableRotate = false;
@@ -463,7 +504,6 @@ export function createCeremonyScene(
     controls.autoRotate = false;
   };
   controls.addEventListener("start", stopAutoRotate);
-  controls.update();
 
   /* ————— mood lerp state ————— */
   const cur = {
@@ -478,6 +518,8 @@ export function createCeremonyScene(
     sunI: LIGHTING[opts.mood].sunI,
     sunPos: new THREE.Vector3(...LIGHTING[opts.mood].sunPos),
     candleI: LIGHTING[opts.mood].candleI,
+    cloud: new THREE.Color(LIGHTING[opts.mood].cloud),
+    cloudOpacity: LIGHTING[opts.mood].cloudOpacity,
   };
   let targetMood = LIGHTING[opts.mood];
 
@@ -493,8 +535,41 @@ export function createCeremonyScene(
     sun.color.copy(cur.sun);
     sun.intensity = cur.sunI;
     sun.position.copy(cur.sunPos);
+    cloudMat.color.copy(cur.cloud);
+    cloudMat.opacity = cur.cloudOpacity;
   }
   applyLighting();
+
+  /* ————— journey state ————— */
+  const wpVec = JOURNEY_WAYPOINTS.map((w) => ({
+    progress: w.progress,
+    pos: new THREE.Vector3(...w.pos),
+    look: new THREE.Vector3(...w.look),
+  }));
+  let journeyTarget = 0;
+  let journeyCur = 0;
+  let explore = false;
+  const camPosCur = wpVec[0].pos.clone();
+  const lookCur = wpVec[0].look.clone();
+  const wpPosTmp = new THREE.Vector3();
+  const wpLookTmp = new THREE.Vector3();
+
+  function interpolateJourney(p: number) {
+    let a = wpVec[0];
+    let b = wpVec[wpVec.length - 1];
+    for (let i = 0; i < wpVec.length - 1; i++) {
+      if (p >= wpVec[i].progress && p <= wpVec[i + 1].progress) {
+        a = wpVec[i];
+        b = wpVec[i + 1];
+        break;
+      }
+    }
+    const range = b.progress - a.progress;
+    const f = range === 0 ? 0 : (p - a.progress) / range;
+    const s = f * f * (3 - 2 * f);
+    wpPosTmp.lerpVectors(a.pos, b.pos, s);
+    wpLookTmp.lerpVectors(a.look, b.look, s);
+  }
 
   /* ————— camera flights ————— */
   let flight: {
@@ -548,6 +623,8 @@ export function createCeremonyScene(
     cur.sunI += (targetMood.sunI - cur.sunI) * k;
     cur.sunPos.lerp(new THREE.Vector3(...targetMood.sunPos), k);
     cur.candleI += (targetMood.candleI - cur.candleI) * k;
+    cur.cloud.lerp(tmpColor.setHex(targetMood.cloud), k);
+    cur.cloudOpacity += (targetMood.cloudOpacity - cur.cloudOpacity) * k;
     applyLighting();
 
     // Candle flicker
@@ -556,16 +633,50 @@ export function createCeremonyScene(
       c.mat.opacity = cur.candleI * fl * 0.85;
     }
 
-    // Camera flight
-    if (flight) {
-      const p = Math.min((now - flight.start) / flight.duration, 1);
-      const e = 0.5 - Math.cos(p * Math.PI) / 2;
-      camera.position.lerpVectors(flight.fromPos, flight.toPos, e);
-      controls.target.lerpVectors(flight.fromLook, flight.toLook, e);
-      if (p >= 1) flight = null;
+    // Cloud drift
+    if (!reducedMotion) {
+      for (const c of cloudGroups) {
+        c.position.x += 0.006;
+        if (c.position.x > 70) c.position.x = -70;
+      }
     }
 
-    controls.update();
+    // Journey flight vs explore handoff
+    journeyCur += (journeyTarget - journeyCur) * (reducedMotion ? 1 : 0.07);
+    const arrived = journeyCur >= ARRIVAL_THRESHOLD;
+    if (arrived && !explore) {
+      explore = true;
+      controls.target.copy(lookCur);
+      controls.enabled = true;
+      controls.autoRotate = !reducedMotion;
+      flight = null;
+    } else if (!arrived && explore) {
+      explore = false;
+      controls.enabled = false;
+      controls.autoRotate = false;
+      flight = null;
+      camPosCur.copy(camera.position);
+      lookCur.copy(controls.target);
+    }
+
+    if (explore) {
+      if (flight) {
+        const p = Math.min((now - flight.start) / flight.duration, 1);
+        const e = 0.5 - Math.cos(p * Math.PI) / 2;
+        camera.position.lerpVectors(flight.fromPos, flight.toPos, e);
+        controls.target.lerpVectors(flight.fromLook, flight.toLook, e);
+        if (p >= 1) flight = null;
+      }
+      controls.update();
+    } else {
+      interpolateJourney(journeyCur);
+      const ck = reducedMotion ? 1 : 0.09;
+      camPosCur.lerp(wpPosTmp, ck);
+      lookCur.lerp(wpLookTmp, ck);
+      camera.position.copy(camPosCur);
+      camera.lookAt(lookCur);
+    }
+
     renderer.render(scene, camera);
   }
 
@@ -603,7 +714,8 @@ export function createCeremonyScene(
   document.addEventListener("visibilitychange", onVisibility);
 
   if (reducedMotion) {
-    // Static: render on demand only (mood/view changes, drags disabled).
+    // Static: render on demand only (mood/view/journey changes, drag ends).
+    controls.addEventListener("change", renderOnce);
     renderOnce();
   } else {
     raf = requestAnimationFrame(loop);
@@ -612,6 +724,10 @@ export function createCeremonyScene(
   return {
     setMood(mood: MoodKey) {
       targetMood = LIGHTING[mood];
+      if (reducedMotion) renderOnce();
+    },
+    setJourney(progress: number) {
+      journeyTarget = Math.min(1, Math.max(0, progress));
       if (reducedMotion) renderOnce();
     },
     setView(view: CeremonyView) {
