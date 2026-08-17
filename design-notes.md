@@ -3,6 +3,35 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (eleventh pass) — The footage IS the page
+
+Owner directive: no remnants of the old backdrop anywhere; the flight
+video must be the true full-bleed background with the interface over
+it, photorealism untouched.
+
+- Killed the entire old background stack: `.lp-sky` mood gradients,
+  `.lp-vignette`, and the hero particle scene (`venueScene.ts` +
+  `SceneCanvas.tsx` deleted). The only remaining flat color is a
+  `#070b14` base that exists solely for the instant before the poster
+  paints.
+- New `FlightBackdrop`: `position:fixed; inset:0; object-fit:cover`
+  video behind everything (`z-0`, content `z-10`), scrubbed by GLOBAL
+  scroll — video time maps from page top to 90% through
+  `#descent-track`, so: hero = night sky, problem/gallery = ridge and
+  landscape drifting by, descent chapters = the approach, post-descent
+  sections = the held candlelit-altar frame. Poster =
+  `descent-flight-poster.webp` (real frame 0, 1280w). Reduced motion
+  renders that frame as a static full-bleed image.
+- The descent's WebGL ceremony now crossfades IN (progress 0.8→0.93)
+  above the footage instead of the footage fading out inside the
+  section — same arrival handoff, but the film is the page background
+  everywhere, edge to edge.
+- No scrims added: the footage is dark enough that porcelain type and
+  the existing ink-glass chapter cards carry legibility on their own.
+- Mood-dial scope note: with the gradients gone, moods now re-light the
+  ceremony scene + accent system only (the footage is fixed night —
+  matches the default candlelit read).
+
 ## 2026-08-17 (tenth pass) — Real flight footage, scrubbed by scroll
 
 Owner supplied an 8s aerial video (night ridge → candlelit hilltop

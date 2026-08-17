@@ -1,13 +1,13 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { motion, useReducedMotion, useScroll } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 import { cn } from "@/lib/utils";
 import { GALLERY_FRAMES } from "@/lib/brandAssets";
 import { DescentJourney } from "./venue-landing/DescentJourney";
+import { FlightBackdrop } from "./venue-landing/FlightBackdrop";
 import { MoodDial } from "./venue-landing/MoodDial";
-import { SceneCanvas } from "./venue-landing/SceneCanvas";
 import { DEFAULT_MOOD, MOOD_THEME_COLOR, type MoodKey } from "./venue-landing/moods";
 
 /**
@@ -26,7 +26,6 @@ import { DEFAULT_MOOD, MOOD_THEME_COLOR, type MoodKey } from "./venue-landing/mo
 export default function VenueLandingPage() {
   const [, setLocation] = useLocation();
   const [mood, setMood] = useState<MoodKey>(DEFAULT_MOOD);
-  const { scrollYProgress } = useScroll();
 
   // Keep the browser chrome in the scene's light.
   useEffect(() => {
@@ -42,12 +41,14 @@ export default function VenueLandingPage() {
   const goSignIn = () => setLocation("/login");
 
   return (
-    <div className="theme-dusk relative min-h-screen overflow-x-clip" data-mood={mood}>
-      {/* Scene stack: CSS sky (instant, and the no-WebGL fallback) →
-          WebGL evening → legibility vignette. Content floats above. */}
-      <div aria-hidden className="lp-sky fixed inset-0" />
-      <SceneCanvas mood={mood} progress={scrollYProgress} />
-      <div aria-hidden className="lp-vignette pointer-events-none fixed inset-0" />
+    <div
+      className="theme-dusk relative min-h-screen overflow-x-clip bg-[#070b14]"
+      data-mood={mood}
+    >
+      {/* The flight footage is the page background — fixed, full-bleed,
+          scrubbed by scroll. The flat base color above only exists for
+          the instant before the poster paints. */}
+      <FlightBackdrop />
 
       <div className="relative z-10">
         <Nav onStart={goStart} onSignIn={goSignIn} />
