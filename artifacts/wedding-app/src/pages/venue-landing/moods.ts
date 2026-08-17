@@ -1,8 +1,4 @@
-/**
- * Mood metadata shared by the page UI and the WebGL scene. This module
- * must stay dependency-free: the page imports it eagerly, while three.js
- * (via ceremonyScene.ts) loads lazily after first paint.
- */
+/** Mood metadata for the accent system the mood dial swaps. */
 
 export type MoodKey = "golden" | "candlelit" | "moonlit";
 

@@ -3,6 +3,25 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (twelfth pass) — Kill the low-poly ceremony
+
+Owner verdict on the WebGL ceremony at the threshold: "if that is here
+it's a failure" — the stylized low-poly world clashed with the
+photoreal footage. Removed entirely; the footage is the only scene.
+
+- `ceremonyScene.ts` deleted; `three` + `@types/three` dropped from the
+  package (the whole 3D chunk is gone from the bundle).
+- The descent no longer crossfades to a canvas at the threshold — the
+  film simply holds its final candlelit-altar frame. Chapters, the
+  elevation/cam HUD, the progress rail, and the scroll cue all remain.
+- With the 3D world gone, the Aisle/Altar/Aerial presets, orbit, and
+  the arrival control bar are gone too. The mood dial remains in the
+  hero only, as the accent-system control.
+- Reduced motion now shows a real still of the altar
+  (`descent-altar.webp`, extracted from the last frame) instead of the
+  3D panel.
+- Nav label "The ceremony" → "The descent" (same `#ceremony` anchor).
+
 ## 2026-08-17 (eleventh pass) — The footage IS the page
 
 Owner directive: no remnants of the old backdrop anywhere; the flight

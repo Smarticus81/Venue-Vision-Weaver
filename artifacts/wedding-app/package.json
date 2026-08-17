@@ -20,7 +20,6 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
     "@workspace/object-storage-web": "workspace:*",
@@ -37,7 +36,6 @@
     "wouter": "^3.10.0"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.61.3",
-    "three": "^0.185.1"
+    "@clerk/clerk-react": "^5.61.3"
   }
 }
