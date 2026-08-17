@@ -60,6 +60,7 @@ function useCeremonyHandle(reduce: boolean, moodRef: React.RefObject<MoodKey>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<CeremonySceneHandle | null>(null);
   const [ready, setReady] = useState(false);
+  const [inView, setInView] = useState(false);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -69,6 +70,7 @@ function useCeremonyHandle(reduce: boolean, moodRef: React.RefObject<MoodKey>) {
 
     const io = new IntersectionObserver(
       ([entry]) => {
+        setInView(entry.isIntersecting);
         if (entry.isIntersecting && !handleRef.current) {
           import("./ceremonyScene").then(({ createCeremonyScene }) => {
             if (cancelled || handleRef.current) return;
@@ -99,7 +101,7 @@ function useCeremonyHandle(reduce: boolean, moodRef: React.RefObject<MoodKey>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce]);
 
-  return { wrapRef, canvasRef, handleRef, ready };
+  return { wrapRef, canvasRef, handleRef, ready, inView };
 }
 
 function ViewPills({
@@ -156,7 +158,9 @@ export function DescentJourney({
   const reduce = useReducedMotion() ?? false;
   const moodRef = useRef(mood);
   moodRef.current = mood;
-  const { wrapRef, canvasRef, handleRef, ready } = useCeremonyHandle(reduce, moodRef);
+  const { wrapRef, canvasRef, handleRef, ready, inView } = useCeremonyHandle(reduce, moodRef);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scrubTarget = useRef(0);
   const [view, setView] = useState<CeremonyView>("altar");
   const [chapter, setChapter] = useState(0);
   const [arrived, setArrived] = useState(reduce);
@@ -167,9 +171,13 @@ export function DescentJourney({
   });
   const elevText = useTransform(scrollYProgress, (v) => journeyElevation(v));
   const stateText = useTransform(scrollYProgress, (v) => journeyStage(v).state);
+  // The flight footage carries the descent, then dissolves into the live
+  // WebGL ceremony just before the arrival unlock.
+  const videoOpacity = useTransform(scrollYProgress, [0.82, 0.94], [1, 0]);
 
   useMotionValueEvent(scrollYProgress, "change", (v) => {
     if (reduce) return;
+    scrubTarget.current = Math.min(v / 0.9, 1);
     handleRef.current?.setJourney(v);
     const idx = chapterIndex(v);
     setChapter((prev) => (prev === idx ? prev : idx));
@@ -182,6 +190,28 @@ export function DescentJourney({
   useEffect(() => {
     handleRef.current?.setMood(mood);
   }, [mood, ready, handleRef]);
+
+  // Scrub the flight footage toward the scroll position. Seeks are
+  // cheap: the encode is all-keyframe (-g 1). Runs only while the
+  // section is on screen.
+  useEffect(() => {
+    if (reduce || !inView) return;
+    let raf = 0;
+    let cur = scrubTarget.current;
+    const tick = () => {
+      const vid = videoRef.current;
+      if (vid && Number.isFinite(vid.duration) && vid.duration > 0) {
+        cur += (scrubTarget.current - cur) * 0.14;
+        const t = cur * Math.max(0, vid.duration - 0.06);
+        if (Math.abs(vid.currentTime - t) > 1 / 30 && vid.readyState >= 2) {
+          vid.currentTime = t;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [reduce, inView]);
 
   const pickView = (v: CeremonyView) => {
     setView(v);
@@ -257,6 +287,21 @@ export function DescentJourney({
               <p className="lp-eyebrow text-foreground/40">Setting the ceremony…</p>
             </div>
           )}
+
+          {/* Flight footage: scrubbed by scroll, dissolving into the
+              live scene at the threshold. */}
+          <motion.video
+            ref={videoRef}
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+            style={{ opacity: videoOpacity }}
+          >
+            <source src="/brand/descent-flight.webm" type="video/webm" />
+            <source src="/brand/descent-flight.mp4" type="video/mp4" />
+          </motion.video>
 
           {/* HUD */}
           <div className="pointer-events-none absolute inset-x-0 top-20 z-10 flex items-center justify-between px-5 md:top-24 md:px-10">
