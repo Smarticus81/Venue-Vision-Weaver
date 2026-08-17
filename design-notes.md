@@ -3,6 +3,28 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (tenth pass) — Real flight footage, scrubbed by scroll
+
+Owner supplied an 8s aerial video (night ridge → candlelit hilltop
+altar with string lights) that mirrors the descent narrative. It now
+carries the flight:
+
+- Encoded for scrubbing per the doctrine: all-keyframe (`-g 1`), muted,
+  1280w — `descent-flight.webm` (VP9, ~2.4MB) + `descent-flight.mp4`
+  (H.264, ~2.1MB) dual sources. Sandbox Chromium has no H.264 decoder
+  (canPlayType returned "" — how the missing-video bug was found), so
+  webm leads and mp4 covers Safari.
+- The video sits between the WebGL canvas and the HUD in the sticky
+  viewport; a rAF loop lerps `currentTime` toward scroll progress
+  (mapped over the first 90% of the journey) and only runs while the
+  section is on screen. Opacity dissolves 1→0 over progress 0.82–0.94,
+  so the film hands off to the live, re-lightable WebGL ceremony right
+  at the arrival unlock — "the film becomes live."
+- Reduced motion: video not mounted at all (static WebGL panel stands).
+- The WebGL world remains the arrival/explore surface and the moods
+  still re-light it; the footage is fixed night, which matches the
+  default candlelit approach.
+
 ## 2026-08-17 (ninth pass) — The descent
 
 Owner supplied a second prototype ("The Mountain Threshold"): a
