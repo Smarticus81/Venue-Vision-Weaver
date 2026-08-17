@@ -3,6 +3,34 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (eighth pass) — The explorable ceremony
+
+Owner supplied a standalone three.js prototype (daylight mountain
+wedding ceremony: deck stage + aisle, folding chairs with blankets,
+autumn floral arc, pines/aspens, displaced-cone mountains, OrbitControls
++ camera preset buttons). Integrated it as a new `#ceremony` section
+("Stand where they'll stand.") between the gallery and how-it-works.
+
+- `venue-landing/ceremonyScene.ts`: the prototype's world, re-built to
+  the page's craft bar — florals instanced per material, plank seams
+  clamped to the semicircle stage, ACES tone mapping, shadows off +
+  DPR 1.5 on mobile.
+- Art-directed into the mood system: full lighting rig (bg/fog, ambient,
+  hemi, sun pos/color) lerps per mood, plus flickering candle sprites
+  along the aisle and arch (full in candlelit, off in golden, dim in
+  moonlit). A compact mood dial sits in the section header, wired to the
+  same page-level state as the hero dial.
+- Views: Aisle / Altar / Aerial with eased 1.1s camera flights. Altar
+  re-aimed vs the prototype (its numbers put the camera inside the
+  floral arc) — now stands at the arch looking back down the aisle.
+- UX discipline: three-per-section lazy import via IntersectionObserver
+  (rootMargin 260px), RAF paused when the panel scrolls away or the tab
+  hides, orbit is desktop-only (touch keeps one-finger page scroll;
+  presets drive the camera), autoRotate 0.25 until first drag,
+  reduced-motion renders static frames with jump-cut presets.
+- Lighting brightened ~1.4x over first pass after screenshots — night
+  moods were murky silhouettes at the prototype's intensities.
+
 ## 2026-08-17 (seventh pass) — “The venue at dusk”: full WebGL rebuild
 
 Owner brief: a total transformation of `/` after a reference video on
