@@ -3,6 +3,67 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (seventh pass) — “The venue at dusk”: full WebGL rebuild
+
+Owner brief: a total transformation of `/` after a reference video on
+high-craft layered Three.js landing pages (procedural sky, multi-plane
+depth, particles, foreground lens bleed, live environment toggles,
+<1MB budgets, zero AI-slop defaults). Nothing from the old page survives
+except the four gallery frames.
+
+**Direction (one line):** the venue at dusk — one continuous procedural
+evening (indigo→ember sky, sagging string lights, candle bokeh, drifting
+petals) behind the whole page; the visitor re-lights it.
+
+**Signature — the mood dial.** Golden hour / Candlelit / Moonlit toggle
+in the hero re-lights the entire scene (sky shader, disc, bulbs, petals)
+AND the page accent — and the caption says the quiet part: this is
+literally what glimpse does for couples. The reference video's "theme /
+environment control bar" productized as the sales pitch.
+
+**Scene (`venue-landing/venueScene.ts`, vanilla three, lazy chunk):**
+fullscreen sky shader (3-stop gradient + sun/moon disc + hash grain, no
+banding) → 3 catenary strands of twinkling bulbs + wires → 130 candle
+bokeh points → ~100 instanced petals mid-field + 7 huge pre-blurred ones
+near the lens (fake DOF frame-bleed) → 3 drifting mist planes. All
+textures canvas-drawn at runtime; zero fetched assets; the 2.5MB
+hero.mp4 is gone from the page. Pointer parallax on the camera; page
+scroll dims the sky mid-page (sin curve) so the offer glows again at the
+end. Palette lerps ~1s on mood switch. DPR≤2 (1.75 mobile), counts
+halved on mobile, RAF paused on hidden tab, full dispose, static single
+frame under reduced motion, CSS `.lp-sky` gradient as the no-WebGL/no-JS
+fallback. three.js is a dynamically imported chunk (~132KB gz) that
+never blocks first paint — hero text is CSS-revealed (`.lp-rise`
+blur-up, no JS gate).
+
+**New token/type system (scoped `.theme-dusk[data-mood]`, app-wide
+darkroom tokens untouched):** Instrument Serif display + Schibsted
+Grotesk body (Fraunces/Instrument Sans/Geist Mono remain app-side
+only); per-mood accent (champagne / amber / moon-silver) driving CTA,
+selection, logo aperture, thread, and dots via `--lp-accent`;
+`meta[theme-color]` follows the mood.
+
+**Layout:** centered cinematic hero → asymmetric 12-col problem split →
+gallery as tilted white-matte prints that spring straight on entry
+(springs, stagger, hover lift) → how-it-works steps alternating on a
+glowing vertical thread (one more string of light) → outcomes as
+offset ink-glass panels → giant offer → slim glass footer.
+
+**Kills (the entire sixth-pass vocabulary):** video hero + scrims,
+drape reveal, pill nav trio, marquee band, custom viewfinder cursor,
+FrameTicks, ghost/outline numerals, mono labels, wine scene bands,
+pinned contact sheet, horizontal-scroll mechanism, giant footer
+wordmark, reading-progress hairline.
+
+**Kept (non-negotiables):** routes, `#how-it-works`/`#deliverable`
+anchors, all five data-testids, sr-only h1, owner-approved copy claims,
+honest product facts only, the four sample gallery frames.
+
+**Verified:** typecheck + build green; Playwright screenshots at
+375/768/1440 across all three moods (swiftshader). Note: Google Fonts
+is proxy-blocked in the dev sandbox, so local shots render fallback
+serifs — the families load fine outside the sandbox.
+
 ## 2026-07-29 (sixth pass) — Video hero + couture-light type suite
 
 Owner brief: re-do the venue landing to match a supplied editorial reference

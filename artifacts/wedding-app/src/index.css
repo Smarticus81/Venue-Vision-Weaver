@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -286,6 +286,171 @@
       animation: none;
     }
     .marquee-track {
+      animation: none;
+    }
+  }
+}
+
+/* ————————————————————————————————————————————————————————————————
+   “The venue at dusk” — landing-page theme (scoped; the app-wide
+   darkroom tokens above are untouched). A living evening sky renders
+   behind everything; the visitor can re-light the venue in three
+   moods. All landing utilities are lp-*; tokens the shared components
+   read (--foreground, --rose, fonts) are overridden inside the scope.
+   ———————————————————————————————————————————————————————————————— */
+
+.theme-dusk {
+  --foreground: 36 30% 94%;
+  --ring: var(--rose);
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+/* Mood palettes. The WebGL scene mirrors these hexes in
+   venueScene.ts — keep the two in sync when tuning. */
+.theme-dusk[data-mood="golden"] {
+  --rose: 36 90% 62%;
+  --lp-accent: #f2ae44;
+  --lp-accent-ink: #241304;
+  --lp-sky-top: #241b3d;
+  --lp-sky-mid: #67284a;
+  --lp-sky-low: #c25c2a;
+}
+
+.theme-dusk[data-mood="candlelit"] {
+  --rose: 38 75% 64%;
+  --lp-accent: #e8b460;
+  --lp-accent-ink: #21130a;
+  --lp-sky-top: #120d20;
+  --lp-sky-mid: #2c1526;
+  --lp-sky-low: #55301b;
+}
+
+.theme-dusk[data-mood="moonlit"] {
+  --rose: 206 60% 78%;
+  --lp-accent: #a5cbe8;
+  --lp-accent-ink: #0a1420;
+  --lp-sky-top: #070b16;
+  --lp-sky-mid: #131c30;
+  --lp-sky-low: #29405c;
+}
+
+.theme-dusk ::selection {
+  background: var(--lp-accent);
+  color: var(--lp-accent-ink);
+}
+
+@layer utilities {
+  /* Static sky — paints before (and beneath) the WebGL canvas, and is
+     the whole show when WebGL/JS is unavailable. */
+  .lp-sky {
+    background:
+      radial-gradient(120% 55% at 50% 108%, var(--lp-sky-low) 0%, transparent 62%),
+      linear-gradient(to bottom, var(--lp-sky-top) 0%, var(--lp-sky-mid) 62%, var(--lp-sky-low) 125%);
+  }
+
+  /* Soft edge vignette that keeps copy legible over the scene. */
+  .lp-vignette {
+    background:
+      radial-gradient(130% 90% at 50% 42%, transparent 48%, rgba(4, 3, 10, 0.5) 100%),
+      linear-gradient(to bottom, rgba(4, 3, 10, 0.36), transparent 22%, transparent 78%, rgba(4, 3, 10, 0.44));
+  }
+
+  .lp-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.015em;
+    line-height: 0.95;
+  }
+
+  .lp-eyebrow {
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .lp-accent {
+    color: var(--lp-accent);
+  }
+
+  /* Ink-glass panel for content floating over the scene. */
+  .lp-panel {
+    background: linear-gradient(160deg, rgba(10, 8, 18, 0.62), rgba(10, 8, 18, 0.4));
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 1.25rem;
+  }
+
+  /* Line reveal: rises out of a blur, once, pure CSS (no JS gate). */
+  .lp-rise {
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(10px);
+    animation: lpRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--lp-d, 0ms);
+  }
+
+  @keyframes lpRise {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+  }
+
+  /* Primary CTA sheen sweep on hover. */
+  .lp-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .lp-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-130%) skewX(-18deg);
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+  }
+
+  .lp-sheen:hover::after,
+  .lp-sheen:focus-visible::after {
+    transform: translateX(130%) skewX(-18deg);
+  }
+
+  /* The glowing thread the how-it-works steps hang from. */
+  .lp-thread {
+    background: linear-gradient(to bottom, transparent, var(--lp-accent) 12%, var(--lp-accent) 88%, transparent);
+    opacity: 0.45;
+  }
+
+  .lp-scroll-cue {
+    animation: lpCue 2.2s ease-in-out infinite;
+  }
+
+  @keyframes lpCue {
+    0%, 100% { transform: translateY(0); opacity: 0.7; }
+    50% { transform: translateY(8px); opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lp-rise {
+      animation: none;
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+    .lp-sheen::after {
+      display: none;
+    }
+    .lp-scroll-cue {
       animation: none;
     }
   }
