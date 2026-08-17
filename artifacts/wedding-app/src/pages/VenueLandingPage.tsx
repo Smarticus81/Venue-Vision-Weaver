@@ -1,21 +1,17 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 import { cn } from "@/lib/utils";
 import { GALLERY_FRAMES } from "@/lib/brandAssets";
-import { DescentJourney } from "./venue-landing/DescentJourney";
-import { FlightBackdrop } from "./venue-landing/FlightBackdrop";
-import { MoodDial } from "./venue-landing/MoodDial";
-import { DEFAULT_MOOD, MOOD_THEME_COLOR, type MoodKey } from "./venue-landing/moods";
+import { CinematicHero } from "./venue-landing/CinematicHero";
 
 /**
- * “The venue at dusk” — the entire page floats over one continuous
- * procedural WebGL evening (sky, string lights, candle bokeh, drifting
- * petals). The signature interaction is the mood dial: visitors re-light
- * the venue in golden hour / candlelight / moonlight — which is exactly
- * what the product does for couples.
+ * The transformation — the hero is the venue-transformation film,
+ * scrubbed by scroll: a couple tours the undecorated venue, and as the
+ * visitor scrolls, the wedding materializes around them. The footage
+ * carries the story; the interface stays editorial and restrained.
  *
  * Conversion spine: get venue owners to create a venue workspace,
  * because a vivid personalized gallery reopens the booking conversation
@@ -25,44 +21,33 @@ import { DEFAULT_MOOD, MOOD_THEME_COLOR, type MoodKey } from "./venue-landing/mo
 
 export default function VenueLandingPage() {
   const [, setLocation] = useLocation();
-  const [mood, setMood] = useState<MoodKey>(DEFAULT_MOOD);
-
-  // Keep the browser chrome in the scene's light.
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]');
-    const prev = meta?.getAttribute("content") ?? null;
-    meta?.setAttribute("content", MOOD_THEME_COLOR[mood]);
-    return () => {
-      if (prev) meta?.setAttribute("content", prev);
-    };
-  }, [mood]);
 
   const goStart = () => setLocation("/create-venue");
   const goSignIn = () => setLocation("/login");
 
   return (
     <div
-      className="theme-dusk relative min-h-screen overflow-x-clip bg-[#070b14]"
-      data-mood={mood}
+      className="theme-dusk relative min-h-screen overflow-x-clip bg-[#0d0b09]"
+      data-mood="candlelit"
     >
-      {/* The flight footage is the page background — fixed, full-bleed,
-          scrubbed by scroll. The flat base color above only exists for
-          the instant before the poster paints. */}
-      <FlightBackdrop />
-
-      <div className="relative z-10">
-        <Nav onStart={goStart} onSignIn={goSignIn} />
-        <main>
-          <Hero mood={mood} onMood={setMood} onStart={goStart} onSignIn={goSignIn} />
-          <ProblemScene />
-          <GalleryScene />
-          <DescentJourney />
-          <StepsScene />
-          <OutcomesScene />
-          <OfferScene onStart={goStart} />
-        </main>
-        <Footer />
-      </div>
+      <Nav onStart={goStart} onSignIn={goSignIn} />
+      <main>
+        <CinematicHero
+          onStart={goStart}
+          onSignIn={goSignIn}
+          startCta={
+            <GlowButton onClick={goStart} testId="venue-hero-register">
+              Create your venue
+            </GlowButton>
+          }
+        />
+        <ProblemScene />
+        <GalleryScene />
+        <StepsScene />
+        <OutcomesScene />
+        <OfferScene onStart={goStart} />
+      </main>
+      <Footer />
     </div>
   );
 }
@@ -169,7 +154,6 @@ function Nav({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void 
           {[
             { label: "How it works", href: "#how-it-works" },
             { label: "The gallery", href: "#deliverable" },
-            { label: "The descent", href: "#ceremony" },
             { label: "For couples", href: "/couple" },
           ].map((l) => (
             <a
@@ -197,86 +181,6 @@ function Nav({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void 
         </div>
       </nav>
     </header>
-  );
-}
-
-/* ————————————————— hero ————————————————— */
-
-function Hero({
-  mood,
-  onMood,
-  onStart,
-  onSignIn,
-}: {
-  mood: MoodKey;
-  onMood: (m: MoodKey) => void;
-  onStart: () => void;
-  onSignIn: () => void;
-}) {
-  return (
-    <section className="relative flex min-h-[100svh] flex-col items-center justify-center px-5 pb-28 pt-28 text-center md:pb-32">
-      <h1 className="sr-only">Turn tours into bookings</h1>
-
-      <div aria-hidden>
-        <p className="lp-rise lp-eyebrow lp-accent" style={{ "--lp-d": "0ms" } as CSSProperties}>
-          For wedding venues
-        </p>
-        <div className="lp-display mt-6 text-[clamp(3.1rem,10vw,8.75rem)] text-foreground">
-          <span className="lp-rise block" style={{ "--lp-d": "90ms" } as CSSProperties}>
-            Turn tours into
-          </span>
-          <span className="lp-rise block italic lp-accent" style={{ "--lp-d": "210ms" } as CSSProperties}>
-            bookings.
-          </span>
-        </div>
-      </div>
-
-      <p
-        className="lp-rise mx-auto mt-8 max-w-xl text-[15px] leading-relaxed text-foreground/80 md:text-base"
-        style={{ "--lp-d": "330ms" } as CSSProperties}
-      >
-        Couples scan your code and generate a four-image vision gallery plus a
-        branded motion reel — at your venue, before they've booked it.
-      </p>
-
-      <div
-        className="lp-rise mt-10 flex flex-col items-center gap-5 sm:flex-row"
-        style={{ "--lp-d": "430ms" } as CSSProperties}
-      >
-        <GlowButton onClick={onStart} testId="venue-hero-register">
-          Create your venue
-        </GlowButton>
-        <button
-          type="button"
-          onClick={onSignIn}
-          data-testid="owner-cta"
-          className="rounded-sm text-sm text-foreground/70 underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          Already set up? Sign in
-        </button>
-      </div>
-
-      <p
-        className="lp-rise mt-6 text-[13px] text-foreground/50"
-        style={{ "--lp-d": "520ms" } as CSSProperties}
-      >
-        5 free galleries to start · 1 credit = 1 couple's gallery
-      </p>
-
-      <div className="lp-rise mt-14" style={{ "--lp-d": "620ms" } as CSSProperties}>
-        <MoodDial mood={mood} onMood={onMood} />
-      </div>
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-7 left-1/2 hidden -translate-x-1/2 md:block"
-      >
-        <div className="lp-scroll-cue flex flex-col items-center gap-2 text-foreground/50">
-          <span className="lp-eyebrow">Scroll</span>
-          <span className="h-8 w-px bg-foreground/40" />
-        </div>
-      </div>
-    </section>
   );
 }
 

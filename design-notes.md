@@ -3,6 +3,46 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (thirteenth pass) — The transformation hero
+
+Owner supplied an 8s portrait film (couple tours the undecorated venue
+in day clothes → dissolve ~3.0–4.5s → full candlelit wedding with
+guests) and a detailed brief: this becomes the scroll-scrubbed
+cinematic hero; the mountain concept is abandoned entirely.
+
+- **Removed the whole mountain arc:** FlightBackdrop, DescentJourney,
+  journey.ts, MoodDial, moods.ts, and all descent-* media. The mood
+  system is gone with it — data-mood pinned to "candlelit" so the
+  accent tokens hold. Nav loses "The descent".
+- **New `CinematicHero`:** 450vh section, sticky 100svh viewport,
+  full-bleed cover video (portrait source, object-position 50% 42%).
+  Scroll drives a piecewise timeline with holds: 0–8% first frame,
+  8–42% the walk (→0.36), 42–74% the transformation dissolve
+  (→0.60, widest scroll band), 74–92% into the wedding, 92–100%
+  hold the finale. RAF loop (IO-gated) eases currentTime toward the
+  scroll target (0.12/frame); zero React re-renders during scrub
+  (MotionValue opacities for copy; one state flip at 0.86 for CTA
+  pointer-events).
+- **Copy choreography:** opening editorial lockup bottom-left ("Turn
+  tours into bookings." / "Let couples see themselves here." / CTA)
+  fades by 48%; final lockup ("Make the tour unforgettable." + "See
+  how glimpse works →") settles in from 86%; scroll cue dies at 6%.
+  Light text-shadows only — no panels, no heavy scrims; the veil is
+  the brief's 0.16/0.02/0.14 gradient.
+- **Media:** original kept at /media/glimpse-venue-transformation.mp4;
+  web derivatives per the brief's recipe (H.264 crf17 g12 faststart
+  7.9MB + VP9 crf30 g12 5.5MB for Chrome/Firefox — sandbox Chromium
+  decodes only VP9), poster + final-frame stills (webp q88).
+  Muted/playsinline/preload=auto, play-then-pause prime for iOS frame
+  rendering.
+- **Reduced motion:** no 450vh — a 100svh hero on the completed-wedding
+  still with all copy/CTAs present.
+- Verified in-browser: scrub lands 0.03s→1.84→3.81→4.52→6.68→7.91s at
+  the mapped scroll points, reverse scroll returns exactly, desktop +
+  mobile shots at every phase, later sections sit on the solid #0d0b09
+  base. Final lockup moved bottom-left after the centered version
+  covered the couple.
+
 ## 2026-08-17 (twelfth pass) — Kill the low-poly ceremony
 
 Owner verdict on the WebGL ceremony at the threshold: "if that is here
