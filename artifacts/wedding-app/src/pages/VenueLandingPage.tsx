@@ -5,15 +5,10 @@ import { useLocation } from "wouter";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 import { cn } from "@/lib/utils";
 import { GALLERY_FRAMES } from "@/lib/brandAssets";
-import { CeremonyCanvas } from "./venue-landing/CeremonyCanvas";
+import { DescentJourney } from "./venue-landing/DescentJourney";
+import { MoodDial } from "./venue-landing/MoodDial";
 import { SceneCanvas } from "./venue-landing/SceneCanvas";
-import {
-  DEFAULT_MOOD,
-  MOOD_LABELS,
-  MOOD_ORDER,
-  MOOD_THEME_COLOR,
-  type MoodKey,
-} from "./venue-landing/moods";
+import { DEFAULT_MOOD, MOOD_THEME_COLOR, type MoodKey } from "./venue-landing/moods";
 
 /**
  * “The venue at dusk” — the entire page floats over one continuous
@@ -60,7 +55,7 @@ export default function VenueLandingPage() {
           <Hero mood={mood} onMood={setMood} onStart={goStart} onSignIn={goSignIn} />
           <ProblemScene />
           <GalleryScene />
-          <CeremonySection mood={mood} onMood={setMood} />
+          <DescentJourney mood={mood} onMood={setMood} />
           <StepsScene />
           <OutcomesScene />
           <OfferScene onStart={goStart} />
@@ -205,57 +200,6 @@ function Nav({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void 
 }
 
 /* ————————————————— hero ————————————————— */
-
-function MoodDial({
-  mood,
-  onMood,
-  className,
-  compact = false,
-}: {
-  mood: MoodKey;
-  onMood: (m: MoodKey) => void;
-  className?: string;
-  compact?: boolean;
-}) {
-  return (
-    <div className={className}>
-      {!compact && (
-        <p className="lp-eyebrow mb-3 text-foreground/55">See your venue in another light</p>
-      )}
-      <div
-        role="group"
-        aria-label="Scene lighting"
-        className="inline-flex rounded-full border border-white/10 bg-black/30 p-1 backdrop-blur-md"
-      >
-        {MOOD_ORDER.map((m) => (
-          <button
-            key={m}
-            type="button"
-            aria-pressed={mood === m}
-            onClick={() => onMood(m)}
-            className={cn(
-              "rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4",
-              mood === m ? "" : "text-foreground/60 hover:text-foreground",
-            )}
-            style={
-              mood === m
-                ? { background: "var(--lp-accent)", color: "var(--lp-accent-ink)" }
-                : undefined
-            }
-          >
-            {MOOD_LABELS[m]}
-          </button>
-        ))}
-      </div>
-      {!compact && (
-        <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-foreground/50">
-          That's the product: couples see themselves at your venue, in the
-          light they're imagining.
-        </p>
-      )}
-    </div>
-  );
-}
 
 function Hero({
   mood,
@@ -441,41 +385,6 @@ function GalleryScene() {
           Frames from sample glimpse galleries · every gallery ships with a
           branded motion reel
         </p>
-      </Reveal>
-    </section>
-  );
-}
-
-/* ————————————————— the explorable ceremony ————————————————— */
-
-function CeremonySection({
-  mood,
-  onMood,
-}: {
-  mood: MoodKey;
-  onMood: (m: MoodKey) => void;
-}) {
-  return (
-    <section id="ceremony" className="mx-auto max-w-7xl px-5 py-28 md:px-8 md:py-40">
-      <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
-        <Reveal className="max-w-3xl">
-          <Eyebrow>The venue, explorable</Eyebrow>
-          <h2 className="lp-display mt-6 text-[clamp(2.2rem,5.4vw,4.8rem)] text-foreground">
-            <em className="lp-accent">Stand</em> where they'll stand.
-          </h2>
-          <p className="mt-6 max-w-xl leading-relaxed text-foreground/70">
-            A ceremony built in light. Jump between the views a couple falls
-            for — then re-light the whole evening. This is the feeling glimpse
-            delivers to their phone.
-          </p>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <MoodDial mood={mood} onMood={onMood} compact />
-        </Reveal>
-      </div>
-
-      <Reveal delay={0.12} className="mt-12">
-        <CeremonyCanvas mood={mood} />
       </Reveal>
     </section>
   );

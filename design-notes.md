@@ -3,6 +3,36 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-17 (ninth pass) — The descent
+
+Owner supplied a second prototype ("The Mountain Threshold"): a
+scroll-driven aerial flight — fixed canvas, 500vh scroll, waypoint
+camera descending from 12,400 FT through clouds to the altar, chapter
+cards, elevation/cam HUD, progress rail. Integrated as the evolution of
+the `#ceremony` section.
+
+- The ceremony section is now a 480vh sticky journey: scroll flies the
+  camera through four smoothstep waypoints (aerial → mist → valley →
+  altar) with double-lerp smoothing. At `ARRIVAL_THRESHOLD` (0.94) the
+  scene hands off to explore mode — orbit, Aisle/Altar/Aerial presets,
+  and the compact mood dial fade in. Scrolling back up re-takes the
+  camera.
+- Scene additions: 18 drifting cloud clusters (mood-tinted + opacity
+  lerped), the mountain ring widened to 12 peaks on a 90–120u arc so
+  the aerial approach has scenery, ground plane 300u.
+- HUD: live-interpolated elevation readout (12,400→9,800 FT) and cam
+  state, rendered from MotionValues so scroll doesn't re-render React;
+  chapter cards crossfade at fixed progress ranges; accent progress
+  rail right.
+- `journey.ts` is three-free (page reads labels, scene builds vectors).
+  MoodDial extracted to its own module (hero + arrival bar share it).
+- Reduced motion: no tall scroll — static altar panel with presets,
+  dial, and the four chapters as a text grid.
+- Fixes found via screenshots: chapter card was shrink-to-fit (one word
+  per line) → explicit `w-[min(26rem,82vw)]`; final HUD stage never
+  read "Altar threshold" → last waypoint reached at the arrival
+  threshold.
+
 ## 2026-08-17 (eighth pass) — The explorable ceremony
 
 Owner supplied a standalone three.js prototype (daylight mountain
