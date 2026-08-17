@@ -309,8 +309,7 @@
   color-scheme: dark;
 }
 
-/* Mood palettes: the accent system the mood dial swaps. The ceremony
-   scene mirrors its lighting rigs in ceremonyScene.ts. */
+/* Mood palettes: the accent system the mood dial swaps. */
 .theme-dusk[data-mood="golden"] {
   --rose: 36 90% 62%;
   --lp-accent: #f2ae44;

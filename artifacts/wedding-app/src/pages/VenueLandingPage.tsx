@@ -56,7 +56,7 @@ export default function VenueLandingPage() {
           <Hero mood={mood} onMood={setMood} onStart={goStart} onSignIn={goSignIn} />
           <ProblemScene />
           <GalleryScene />
-          <DescentJourney mood={mood} onMood={setMood} />
+          <DescentJourney />
           <StepsScene />
           <OutcomesScene />
           <OfferScene onStart={goStart} />
@@ -169,7 +169,7 @@ function Nav({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void 
           {[
             { label: "How it works", href: "#how-it-works" },
             { label: "The gallery", href: "#deliverable" },
-            { label: "The ceremony", href: "#ceremony" },
+            { label: "The descent", href: "#ceremony" },
             { label: "For couples", href: "/couple" },
           ].map((l) => (
             <a
