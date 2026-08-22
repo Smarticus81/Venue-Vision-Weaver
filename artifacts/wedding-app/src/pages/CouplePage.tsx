@@ -254,31 +254,44 @@ export default function CouplePage() {
 
   const venue = venueQuery.data;
 
-  // Guard rail: if the venue has too few photos, the AI has no reliable venue reference
-  if (!venue.media || venue.media.length < 5) {
+  // Readiness comes from the API (isReady: the venue has reference
+  // photography). Mirrors the server's own session-create guard, so a couple
+  // who passes here never hits a readiness error later. Any ready venue goes
+  // straight into the experience.
+  if (!venue.isReady) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
         <Heart className="h-12 w-12 text-rose/40 mb-6" />
-        <p className="mono-label text-rose mb-4">Not ready yet</p>
+        <p className="mono-label text-rose mb-4">Opening soon</p>
         <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">
-          {venue.name} is still being prepared
+          {venue.name} is putting on the finishing touches
         </h1>
-        <p className="text-lg text-muted-foreground mb-3 max-w-md font-light">
-          This venue needs at least one photograph before glimpse can compose
-          your wedding gallery.
+        <p className="text-lg text-muted-foreground mb-10 max-w-md font-light">
+          Your interactive preview isn't open quite yet — please check back
+          shortly. We can't wait to show you your day here.
         </p>
-        <p className="text-sm text-muted-foreground mb-10 max-w-md">
-          Ask your venue team to finish setting up glimpse by adding the required
-          venue photographs before couples can begin.
-        </p>
-        <Button
-          onClick={() => setLocation("/couple")}
-          variant="rose"
-          className="px-8 py-6 text-base font-medium"
-          data-testid="venue-not-ready-browse"
-        >
-          Try another venue code
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+          <Button
+            onClick={() => venueQuery.refetch()}
+            variant="rose"
+            className="px-8 py-6 text-base font-medium"
+            data-testid="venue-not-ready-refresh"
+          >
+            Check again
+          </Button>
+          {(venue.websiteUrl || venue.bookingUrl) && (
+            <Button
+              asChild
+              variant="ghost"
+              className="px-8 py-6 text-base font-medium text-muted-foreground hover:text-foreground"
+              data-testid="venue-not-ready-site"
+            >
+              <a href={venue.websiteUrl ?? venue.bookingUrl ?? "#"} target="_blank" rel="noreferrer">
+                Visit {venue.name}
+              </a>
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
