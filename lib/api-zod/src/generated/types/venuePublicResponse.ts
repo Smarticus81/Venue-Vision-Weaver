@@ -26,7 +26,7 @@ export interface VenuePublicResponse {
   bookingUrl?: string | null;
   createdAt?: Date;
   media: VenueMediaItem[];
-  /** True when the venue has at least five uploaded photos and complete required coverage. */
+  /** True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves. */
   isReady: boolean;
   /** Short-lived venue-scoped token required for couple photo upload URL requests. */
   uploadToken?: string;

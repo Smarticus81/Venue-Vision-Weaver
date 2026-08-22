@@ -288,9 +288,11 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
   const venueMediaCount = venueMediaForReadiness.length;
 
   if (!venueMediaCount || venueMediaCount < MIN_VENUE_PHOTOS) {
+    // Couple-facing copy: the couple sees this message, so it must not read
+    // like venue setup instructions.
     res.status(409).json({
       error:
-        `This venue isn't ready yet. The owner needs to upload at least ${MIN_VENUE_PHOTOS} venue photo${MIN_VENUE_PHOTOS === 1 ? "" : "s"} before couples can create a gallery.`,
+        "This venue's glimpse experience isn't open quite yet. Please check back shortly.",
     });
     return;
   }

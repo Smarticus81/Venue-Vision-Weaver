@@ -120,7 +120,7 @@ export const GetVenueResponse = zod
     isReady: zod
       .boolean()
       .describe(
-        "True when the venue has at least five uploaded photos and complete required coverage.",
+        "True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves.",
       ),
     uploadToken: zod
       .string()
@@ -534,7 +534,7 @@ export const GetSessionResponse = zod
         isReady: zod
           .boolean()
           .describe(
-            "True when the venue has at least five uploaded photos and complete required coverage.",
+            "True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves.",
           ),
         uploadToken: zod
           .string()
@@ -690,7 +690,7 @@ export const GetSessionByTokenResponse = zod
         isReady: zod
           .boolean()
           .describe(
-            "True when the venue has at least five uploaded photos and complete required coverage.",
+            "True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves.",
           ),
         uploadToken: zod
           .string()
