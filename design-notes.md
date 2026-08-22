@@ -3,6 +3,32 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-08-22 (fourteenth pass) — Stable looping hero, scrub killed
+
+Owner supplied the hero film again (byte-identical to the existing
+`/brand/hero.mp4`) with the direction: no scroll effect — just a nice
+stable looping background; remove the other video.
+
+- **`CinematicHero` deleted, `VideoHero` in its place:** one 100svh
+  section, `/brand/hero.mp4` autoplay/muted/loop/playsinline behind the
+  editorial lockup, poster = `/brand/hero-atmosphere.webp` so first
+  paint never waits on the video. No 450vh pin, no scroll→currentTime
+  timeline, no rAF scrub loop, no final "Make the tour unforgettable"
+  lockup, no scroll cue — the page scrolls normally past the hero.
+- Copy is the full opening lockup (headline, lede incl. the
+  portraits-and-reel sentence from the reduced-motion variant, CTA,
+  sign-in, credits line) with the same veil gradient and text-shadows.
+- **Reduced motion:** identical layout, poster still instead of the
+  playing video.
+- **Media removed:** all `/media/glimpse-venue-transformation*` files
+  (original + web mp4/webm derivatives + poster/final stills, ~19MB).
+- **Media added:** `/brand/hero.webm` (VP9 crf34, no audio, 2.0MB)
+  listed before the mp4 — Chromium builds without licensed H.264
+  (incl. the test sandbox) decode only VP9; mp4 stays the Safari path.
+- Verified in-browser: webm source selected, playing/looping (t=5.3s →
+  8.9s across a 10s loop), copy legible over the veil, scroll exits the
+  hero normally into the follow-up sections.
+
 ## 2026-08-17 (thirteenth pass) — The transformation hero
 
 Owner supplied an 8s portrait film (couple tours the undecorated venue
