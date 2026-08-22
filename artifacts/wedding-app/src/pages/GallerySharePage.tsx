@@ -413,7 +413,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
         title: data.sent ? "Email sent" : "Email not sent",
         description: data.sent
           ? "Check your inbox for the link to your gallery."
-          : "Email service is not configured on this server.",
+          : "We couldn't send the email right now. Copy your gallery link to keep it, and try again soon.",
         variant: data.sent ? "default" : "destructive",
       });
       if (data.sent) setShowEmail(false);

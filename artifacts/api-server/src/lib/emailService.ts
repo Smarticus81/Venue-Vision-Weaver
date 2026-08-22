@@ -4,8 +4,28 @@ import { getAppBaseUrl, shareUrlForToken } from "./appUrl.js";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.EMAIL_FROM ?? "glimpse <onboarding@resend.dev>";
+const usingSandboxSender = fromEmail.includes("onboarding@resend.dev");
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
+// Make broken email config loud at boot instead of failing silently per-send.
+if (!resend) {
+  logger.warn(
+    "Email delivery is DISABLED: RESEND_API_KEY is not set. Gallery links, owner notifications, and recovery emails will not be sent.",
+  );
+} else if (usingSandboxSender) {
+  logger.warn(
+    { from: fromEmail },
+    "EMAIL_FROM is the Resend sandbox sender (onboarding@resend.dev). Resend only delivers sandbox mail to the Resend account owner's own address — couples and venue owners will NOT receive email. Set EMAIL_FROM to a sender on a domain verified in Resend.",
+  );
+}
+
+export type EmailSendResult = { sent: true } | { sent: false; reason: string };
+
+const NOT_CONFIGURED_REASON =
+  "Email is not configured on this server (RESEND_API_KEY is not set).";
+const SANDBOX_HINT =
+  " Note: EMAIL_FROM is the Resend sandbox sender (onboarding@resend.dev), which can only deliver to the Resend account owner's own address — set EMAIL_FROM to a sender on a domain verified in Resend.";
 
 function escapeHtml(text: string): string {
   return text
@@ -68,21 +88,28 @@ function ctaButton(href: string, label: string): string {
   </p>`;
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+async function sendEmail(to: string, subject: string, html: string): Promise<EmailSendResult> {
   if (!resend) {
     logger.warn({ to, subject }, "RESEND_API_KEY not set - skipping email");
-    return false;
+    return { sent: false, reason: NOT_CONFIGURED_REASON };
   }
   try {
     const { error } = await resend.emails.send({ from: fromEmail, to, subject, html });
     if (error) {
-      logger.error({ error, to, subject }, "Resend email failed");
-      return false;
+      logger.error({ error, to, subject, from: fromEmail }, "Resend email failed");
+      const providerMessage = error.message || "The email provider rejected the send.";
+      return {
+        sent: false,
+        reason: `${providerMessage}${usingSandboxSender ? SANDBOX_HINT : ""}`,
+      };
     }
-    return true;
+    return { sent: true };
   } catch (err) {
     logger.error({ err, to, subject }, "Email send threw");
-    return false;
+    return {
+      sent: false,
+      reason: "The email provider request failed. Check server connectivity and RESEND_API_KEY.",
+    };
   }
 }
 
@@ -123,7 +150,7 @@ export async function sendGalleryToCouple(
   coupleEmail: string,
   session: { id: number; shareToken?: string | null; coupleName?: string | null },
   venue: { name: string },
-): Promise<boolean> {
+): Promise<EmailSendResult> {
   const url = shareUrlForToken(session.shareToken);
   const greeting = session.coupleName
     ? escapeHtml(session.coupleName)
@@ -149,8 +176,8 @@ export async function sendRecoveryEmail(
     status: string;
     createdAt: Date | string;
   }>,
-): Promise<boolean> {
-  if (sessions.length === 0) return false;
+): Promise<EmailSendResult> {
+  if (sessions.length === 0) return { sent: false, reason: "No sessions to include." };
   const rows = sessions
     .filter((s) => !!s.shareToken)
     .map((s) => {
