@@ -676,6 +676,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: >-
+            The email could not be delivered (provider rejected the send or
+            email is not configured). The error message states the cause so
+            the owner can fix the sender configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /sessions/by-token/{shareToken}/send-email:
     post:
@@ -725,6 +734,12 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "429":
           description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: The email could not be delivered right now (couple-facing message, no config detail).
           content:
             application/json:
               schema:
