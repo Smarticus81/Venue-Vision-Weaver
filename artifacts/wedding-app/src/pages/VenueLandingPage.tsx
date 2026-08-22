@@ -5,13 +5,12 @@ import { useLocation } from "wouter";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 import { cn } from "@/lib/utils";
 import { GALLERY_FRAMES } from "@/lib/brandAssets";
-import { CinematicHero } from "./venue-landing/CinematicHero";
+import { VideoHero } from "./venue-landing/VideoHero";
 
 /**
- * The transformation — the hero is the venue-transformation film,
- * scrubbed by scroll: a couple tours the undecorated venue, and as the
- * visitor scrolls, the wedding materializes around them. The footage
- * carries the story; the interface stays editorial and restrained.
+ * The hero is the supplied venue film looping quietly behind the
+ * editorial lockup — stable ambience, no scroll effects. The footage
+ * sets the mood; the interface stays editorial and restrained.
  *
  * Conversion spine: get venue owners to create a venue workspace,
  * because a vivid personalized gallery reopens the booking conversation
@@ -32,8 +31,7 @@ export default function VenueLandingPage() {
     >
       <Nav onStart={goStart} onSignIn={goSignIn} />
       <main>
-        <CinematicHero
-          onStart={goStart}
+        <VideoHero
           onSignIn={goSignIn}
           startCta={
             <GlowButton onClick={goStart} testId="venue-hero-register">
