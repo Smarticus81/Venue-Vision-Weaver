@@ -3,6 +3,61 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-09-03 (fifteenth pass) — Product screens: dashboard, share page, couple flow
+
+Autonomous observe → diagnose → fix → render loop over the app surfaces
+(the landing pages were left as the owner set them). Everything was
+rendered headlessly at 390 / 820 / 1440 with a mock API and a Clerk stub;
+functional and accessibility checks ran as a Playwright script (dialog
+focus trap and return, radio arrow keys, lightbox keys, tab-stop focus
+rings, 36px+ touch targets, overflow measurement).
+
+**Dashboard (owner)** — the product's hand-off was missing: nothing on the
+dashboard showed the couple link. Now the top of the page is the venue
+name, readiness, three figures (credits / ready / developing) and a
+**couple-link card with a QR code** (Copy, Open, QR as PNG; `qrcode`
+loaded lazily). Sections reordered to the owner's real loop: galleries →
+venue photos → details + billing. The five-view coverage checklist and the
+photo library are one grid: missing views render as dashed upload targets
+pre-tagged with that coverage. "New gallery" opens the intake inline.
+Deletes confirm in a Radix dialog (focus handed back to the trash button
+on close, since it opens programmatically). Per-row actions are quiet
+outlines so the accent stays with the page's real CTAs; "Email couple"
+flips to a green "Sent" for a few seconds. Long names/emails wrap
+(`min-w-0`, `break-words`/`break-all`) — the old grid overflowed to 538px
+on a 390px phone. Loading is a layout-mirroring skeleton, not a spinner.
+Status vocabulary is one component (`StatusPill`: Ready / Developing /
+Queued / Failed).
+
+**Share page (couple + venue conversion)** — the fixed bottom share
+toolbar sat on top of the venue's "Book a tour" card at every width;
+killed. Order is now: reel hero with the names (brand `.drape` reveal) →
+the venue's ask (one rose CTA) → Copy / Share / Email as a quiet row →
+four stills → reel download. Stills open a lightbox (arrow keys, Escape,
+download, focus return) instead of duplicating the selected still below
+the grid. Landscape reels are cropped on phones (orientation read from
+`loadedmetadata`); portrait reels still letterbox. The small states
+(missing, failed, legacy, processing) share one layout with a logo header;
+processing shows a three-stage list instead of a spinning ornament.
+404s render immediately — React Query no longer retries a 404 for ~7s
+before showing "not found" (same fix on the couple venue page).
+
+**Couple flow** — the three photo roles are the upload targets (guidance,
+action and preview in one tile) instead of three info cards + a drop zone
++ a preview grid. Style picker uses native radios in labels (arrow keys
+work). Email and names sit in one form row; the delivery blurb is one line
+under the submit. Shared step header with a 3-segment progress bar.
+
+**Cross-page** — one radius for controls (the `Button` primitive's
+`rounded-md`; tiles and photos stay square), 404 / not-found / not-ready /
+failed pages on one centered layout with the logo, `GlimpseShell` deleted
+(unused), header email dropped, alert icons dropped from state pages.
+
+Killed: whole-page fade on the dashboard main (a paused animation left the
+page blank in capture — content must paint without JS), the processing
+page's spinning rings, "Interactive preview" / "Owner approval enabled"
+labels, the numbered 001–006 section eyebrows.
+
 ## 2026-08-22 (fourteenth pass) — Stable looping hero, scrub killed
 
 Owner supplied the hero film again (byte-identical to the existing
