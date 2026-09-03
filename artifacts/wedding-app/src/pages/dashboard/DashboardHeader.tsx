@@ -10,14 +10,12 @@ export function DashboardHeader({
   onSelectVenue,
   onAddVenue,
   onSignOut,
-  userEmail,
 }: {
   venues: VenueOption[];
   selectedSlug: string;
   onSelectVenue: (slug: string) => void;
   onAddVenue: () => void;
   onSignOut: () => void;
-  userEmail?: string | null;
 }) {
   const multi = venues.length > 1;
   return (
@@ -67,11 +65,6 @@ export function DashboardHeader({
             >
               <Plus className="h-4 w-4" /> Add venue
             </button>
-          )}
-          {userEmail && (
-            <span className="hidden max-w-[14rem] truncate px-2 text-xs text-muted-foreground md:block" title={userEmail}>
-              {userEmail}
-            </span>
           )}
           <button
             type="button"

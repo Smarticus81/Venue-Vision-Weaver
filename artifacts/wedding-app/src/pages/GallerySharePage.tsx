@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { copyShareLink, shareSession } from "@/lib/shareSession";
 import {
-  AlertCircle,
   CalendarCheck,
   Check,
   ChevronLeft,
@@ -82,6 +81,7 @@ export default function GallerySharePage() {
     query: {
       queryKey: getGetSessionByTokenQueryKey(shareToken || ""),
       enabled: !!shareToken,
+      retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1,
       refetchInterval: (query) => {
         const status = query.state.data?.status;
         return status === "pending" || status === "processing" ? 3000 : false;
@@ -130,13 +130,11 @@ function StatePage({
   eyebrow,
   title,
   children,
-  icon,
   actions,
 }: {
   eyebrow: string;
   title: string;
   children: React.ReactNode;
-  icon?: React.ReactNode;
   actions: React.ReactNode;
 }) {
   return (
@@ -145,7 +143,6 @@ function StatePage({
         <GlimpseLogo href="/couple" />
       </header>
       <main className="flex flex-1 flex-col items-center justify-center px-6 pb-24 text-center">
-        {icon}
         <p className="mono-label mb-4 text-rose">{eyebrow}</p>
         <h1 className="font-display text-3xl font-medium tracking-tight md:text-4xl">{title}</h1>
         <div className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">{children}</div>
@@ -161,7 +158,6 @@ function NotAvailable() {
     <StatePage
       eyebrow="Gallery link"
       title="This gallery isn't here"
-      icon={<AlertCircle className="mb-6 h-10 w-10 text-muted-foreground" />}
       actions={
         <>
           <Button onClick={() => setLocation("/find-my-gallery")} variant="rose" className="h-12 px-6" data-testid="button-find-my-gallery">
@@ -186,7 +182,6 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
     <StatePage
       eyebrow="Start again"
       title="This gallery needs a fresh start"
-      icon={<AlertCircle className="mb-6 h-10 w-10 text-rose" />}
       actions={
         <>
           {venueSlug && (
@@ -213,7 +208,6 @@ function FailureView({ session, message }: { session: SessionDetailResponse; mes
     <StatePage
       eyebrow="Didn't develop"
       title="We couldn't finish your gallery"
-      icon={<AlertCircle className="mb-6 h-10 w-10 text-destructive" />}
       actions={
         <>
           <Button onClick={() => setLocation(venueSlug ? `/preview/${venueSlug}` : "/couple")} variant="rose" className="h-12 px-6" data-testid="failed-try-again">
@@ -243,7 +237,6 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
     <div className="grain relative flex min-h-screen flex-col bg-background text-foreground" data-testid="processing-screen">
       <header className="flex h-16 items-center justify-between px-5 md:h-20 md:px-10">
         <GlimpseLogo href="/couple" />
-        <p className="mono-label hidden text-muted-foreground sm:block">Created for {venueName}</p>
       </header>
 
       <main className="flex flex-1 flex-col items-center justify-center px-6 pb-24 text-center">
@@ -385,7 +378,7 @@ function ShareActions({ session, compact = false }: { session: SessionDetailResp
               placeholder="you@example.com"
               autoComplete="email"
               aria-label="Your email"
-              className="h-11 flex-1 border border-input bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-rose focus:outline-none focus:ring-2 focus:ring-ring/50"
+              className="h-11 flex-1 rounded-md border border-input bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-rose focus:outline-none focus:ring-2 focus:ring-ring/50"
               data-testid="email-input"
             />
           )}
@@ -459,7 +452,7 @@ function GalleryView({ session, reel, stills }: { session: SessionDetailResponse
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 md:h-20">
           <div className="pointer-events-auto">
-            <GlimpseLogo variant="mark" href="/couple" className="opacity-90 drop-shadow-md" />
+            <GlimpseLogo variant="mark" href="/couple" className="p-2 opacity-90 drop-shadow-md" />
           </div>
           {reelSrc && !reelError && (
             <button
@@ -543,8 +536,8 @@ function GalleryView({ session, reel, stills }: { session: SessionDetailResponse
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 mx-auto max-w-7xl px-4 pb-10 sm:px-6 md:pb-14">
           <p className="mono-label text-white/80 [text-shadow:0_1px_10px_rgba(0,0,0,0.5)]">At {venueName}</p>
-          <h1 className="mt-3 font-display text-4xl font-medium leading-[0.95] tracking-tight text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.45)] sm:text-6xl md:text-7xl">
-            {title}
+          <h1 className="drape mt-3 font-display text-4xl font-medium leading-[0.95] tracking-tight text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.45)] sm:text-6xl md:text-7xl">
+            <span>{title}</span>
           </h1>
         </div>
       </section>
@@ -624,7 +617,7 @@ function GalleryView({ session, reel, stills }: { session: SessionDetailResponse
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <p className="mono-label text-muted-foreground">A glimpse of your day</p>
           {venueSlug && (
-            <button type="button" onClick={() => setLocation(`/preview/${venueSlug}`)} className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="gallery-restart">
+            <button type="button" onClick={() => setLocation(`/preview/${venueSlug}`)} className="inline-flex min-h-10 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="gallery-restart">
               Make another gallery at {venueName}
             </button>
           )}

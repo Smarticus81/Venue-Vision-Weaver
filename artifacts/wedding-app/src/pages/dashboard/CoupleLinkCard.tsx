@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, Download, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -78,32 +79,26 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
             : "Add a venue photo below and this link opens for couples."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
+          <Button
             type="button"
+            variant="rose"
             onClick={async () => setCopied(await copyText(url))}
-            className={cn(
-              "inline-flex h-10 items-center gap-2 px-4 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              copied ? "bg-emerald-400/15 text-emerald-300" : "bg-rose text-rose-foreground hover:bg-rose-hover",
-            )}
+            className={cn("h-10 px-4", copied && "border-emerald-400/30 bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/15")}
             data-testid="couple-link-copy"
           >
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? "Copied" : "Copy link"}
-          </button>
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-10 items-center gap-2 border border-border px-4 text-sm text-foreground transition-colors hover:border-foreground/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            data-testid="couple-link-open"
-          >
-            <ExternalLink className="h-4 w-4" /> Open
-          </a>
+          </Button>
+          <Button asChild variant="outline" className="h-10 px-4" data-testid="couple-link-open">
+            <a href={url} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-4 w-4" /> Open
+            </a>
+          </Button>
           {png && (
             <a
               href={png}
               download="glimpse-couple-qr.png"
-              className="inline-flex h-10 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Download className="h-4 w-4" /> QR as PNG
             </a>

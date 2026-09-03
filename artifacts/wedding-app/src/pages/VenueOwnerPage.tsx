@@ -17,11 +17,13 @@ import {
   type ErrorType,
   type VenueMediaCoverage,
 } from "@workspace/api-client-react";
-import { useClerk, useUser } from "@clerk/clerk-react";
+import { useClerk } from "@clerk/clerk-react";
 import { useUpload } from "@workspace/object-storage-web";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
+import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
 import { clerkConfigured } from "@/lib/clerk";
 import { Button } from "@/components/ui/button";
@@ -55,13 +57,12 @@ function DashboardInner() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useUser();
   const { signOut } = useClerk();
   const [selectedSlug, setSelectedSlug] = useState<string>("");
 
   // The organization is the tenant: billing (plan + shared credits) and the
   // venues the member can manage.
-  const orgQuery = useGetOrganization({ query: { queryKey: getGetOrganizationQueryKey() } });
+  const orgQuery = useGetOrganization({ query: { queryKey: getGetOrganizationQueryKey(), retry: 1 } });
   const organization = orgQuery.data?.organization;
   const orgVenues = orgQuery.data?.venues ?? [];
 
@@ -185,6 +186,7 @@ function DashboardInner() {
 
   // ——— Galleries ———
   const [sendingSessionId, setSendingSessionId] = useState<number | null>(null);
+  const [sentSessionId, setSentSessionId] = useState<number | null>(null);
   const handleSendGallery = async (sessionId: number, coupleEmail?: string | null) => {
     if (!coupleEmail) {
       toast({ title: "No email on this gallery", description: "Add the couple's email to send it.", variant: "destructive" });
@@ -200,6 +202,8 @@ function DashboardInner() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Could not send gallery.");
       toast({ title: "Gallery emailed", description: `Sent to ${coupleEmail}.` });
+      setSentSessionId(sessionId);
+      window.setTimeout(() => setSentSessionId((id) => (id === sessionId ? null : id)), 4000);
     } catch (err) {
       toast({ title: "Email failed", description: err instanceof Error ? err.message : "Try again.", variant: "destructive" });
     } finally {
@@ -382,11 +386,7 @@ function DashboardInner() {
   }
 
   if (orgQuery.isLoading || !selectedSlug || dashboard.isLoading || mediaQuery.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background" aria-busy="true" aria-label="Loading dashboard">
-        <Loader2 className="h-10 w-10 animate-spin text-rose" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -400,13 +400,12 @@ function DashboardInner() {
           await signOut();
           setLocation("/login");
         }}
-        userEmail={user?.primaryEmailAddress?.emailAddress}
       />
 
       <main className="mx-auto max-w-6xl space-y-14 px-4 pb-24 pt-8 sm:px-6 lg:pt-12">
         {/* Overview: who you are, where you stand, and the link that starts everything. */}
-        <section aria-labelledby="venue-title" className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:items-start">
-          <div>
+        <section aria-labelledby="venue-title" className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:items-stretch">
+          <div className="flex flex-col justify-between">
             <p className="mono-label mb-3 text-rose">Venue</p>
             <h1 id="venue-title" className="font-display text-4xl font-medium tracking-tight md:text-5xl">
               {venue?.name ?? "Your venue"}
@@ -416,7 +415,7 @@ function DashboardInner() {
               {venueReady ? "Open for couples" : "Add a venue photo to open"}
             </p>
 
-            <dl className="mt-8 grid max-w-xl grid-cols-3 gap-4 border-t border-border pt-4">
+            <dl className="mt-8 grid max-w-xl grid-cols-3 gap-4 border-t border-border pt-4 lg:mt-10">
               <Metric label="Credits" value={creditsBalance} warn={creditsBalance <= 0} action={creditsBalance <= 2 ? { label: "Buy more", onClick: goToBilling } : undefined} />
               <Metric label="Ready" value={readyCount} />
               <Metric label="Developing" value={developingCount} />
@@ -442,6 +441,7 @@ function DashboardInner() {
           venueReady={venueReady}
           creditsBalance={creditsBalance}
           sendingSessionId={sendingSessionId}
+          sentSessionId={sentSessionId}
           deletingSessionId={deleteSession.isPending ? (deleteSession.variables?.id ?? null) : null}
           onSend={handleSendGallery}
           onDelete={handleDeleteSession}
@@ -484,6 +484,53 @@ function DashboardInner() {
           />
         </div>
       </main>
+    </div>
+  );
+}
+
+/** Mirrors the real layout so the page doesn't jump when data lands. */
+function DashboardSkeleton() {
+  return (
+    <div className="min-h-screen bg-background text-foreground" aria-busy="true" aria-label="Loading dashboard">
+      <div className="sticky top-0 z-40 border-b border-border bg-background/95">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
+          <GlimpseLogo href="/dashboard" className="text-[1.1rem] sm:text-[1.2rem]" />
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+      <div className="mx-auto max-w-6xl space-y-14 px-4 pt-8 sm:px-6 lg:pt-12">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
+          <div>
+            <Skeleton className="h-3 w-14 rounded-none" />
+            <Skeleton className="mt-5 h-12 w-72 rounded-none" />
+            <Skeleton className="mt-5 h-3 w-32 rounded-none" />
+            <div className="mt-10 grid max-w-xl grid-cols-3 gap-4 border-t border-border pt-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i}>
+                  <Skeleton className="h-3 w-16 rounded-none" />
+                  <Skeleton className="mt-3 h-10 w-12 rounded-none" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <Skeleton className="h-52 w-full rounded-none" />
+        </div>
+        <div className="border-t border-border pt-6">
+          <Skeleton className="h-3 w-20 rounded-none" />
+          <Skeleton className="mt-4 h-8 w-56 rounded-none" />
+          <div className="mt-8 divide-y divide-border border-y border-border">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-4 py-4">
+                <Skeleton className="h-16 w-16 rounded-none" />
+                <div className="flex-1">
+                  <Skeleton className="h-5 w-40 rounded-none" />
+                  <Skeleton className="mt-2 h-3 w-64 rounded-none" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

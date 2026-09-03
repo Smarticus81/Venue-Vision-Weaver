@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { SessionSummary } from "@workspace/api-client-react";
 import {
   AlertCircle,
+  Check,
   ExternalLink,
   Image as ImageIcon,
   ImageUp,
@@ -38,6 +39,7 @@ type Props = {
   venueReady: boolean;
   creditsBalance: number;
   sendingSessionId: number | null;
+  sentSessionId: number | null;
   deletingSessionId: number | null;
   onSend: (sessionId: number, coupleEmail?: string | null) => void;
   onDelete: (sessionId: number) => void;
@@ -106,8 +108,7 @@ export function GalleriesSection(props: Props) {
           <div className="border border-dashed border-border px-6 py-12 text-center">
             <p className="font-display text-xl">Your first gallery arrives with your first couple.</p>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-              Hand a couple your link after the tour, or start one here with their photos.
-              Each finished gallery lands in this list for you to review and email.
+              Hand them your link after the tour, or start one here with their photos.
             </p>
           </div>
         ) : (
@@ -117,6 +118,7 @@ export function GalleriesSection(props: Props) {
                 key={session.id}
                 session={session}
                 sending={props.sendingSessionId === session.id}
+                sent={props.sentSessionId === session.id}
                 deleting={props.deletingSessionId === session.id}
                 onOpen={() => props.onOpen(session.shareToken)}
                 onSend={() => props.onSend(session.id, session.coupleEmail)}
@@ -169,6 +171,7 @@ export function GalleriesSection(props: Props) {
 function GalleryRow({
   session,
   sending,
+  sent,
   deleting,
   onOpen,
   onSend,
@@ -176,6 +179,7 @@ function GalleryRow({
 }: {
   session: SessionSummary;
   sending: boolean;
+  sent: boolean;
   deleting: boolean;
   onOpen: () => void;
   onSend: () => void;
@@ -238,13 +242,13 @@ function GalleryRow({
             type="button"
             variant="outline"
             size="sm"
-            disabled={sending}
+            disabled={sending || sent}
             onClick={onSend}
-            className="h-9"
+            className={cn("h-9", sent && "border-emerald-400/30 text-emerald-300 disabled:opacity-100")}
             data-testid={`send-gallery-${session.id}`}
           >
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-            Email couple
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : sent ? <Check className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+            {sent ? "Sent" : "Email couple"}
           </Button>
         )}
         {canOpen && (

@@ -50,7 +50,7 @@ export function GlimpseLogo({ variant = "full", className, href = "/" }: Glimpse
 
   if (!href) return logo;
   return (
-    <Link href={href} className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+    <Link href={href} className="inline-flex min-h-10 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       {logo}
     </Link>
   );

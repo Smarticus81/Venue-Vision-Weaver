@@ -18,7 +18,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Loader2,
   Camera,
-  Heart,
   X,
   Images,
   Check,
@@ -26,6 +25,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
 
 function venueMediaUrl(objectKey: string | undefined, venueSlug: string): string {
   if (!objectKey) return "";
@@ -60,7 +60,12 @@ export default function CouplePage() {
   const [coupleEmail, setCoupleEmail] = useState("");
 
   const venueQuery = useGetVenue(slug!, {
-    query: { enabled: !!slug, queryKey: getGetVenueQueryKey(slug!) },
+    query: {
+      enabled: !!slug,
+      queryKey: getGetVenueQueryKey(slug!),
+      // A wrong code is a 404: show "not found" now instead of retrying for seconds.
+      retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1,
+    },
   });
   const stylesQuery = useListGalleryStyles();
 
@@ -228,23 +233,18 @@ export default function CouplePage() {
 
   if (venueQuery.isError || !venueQuery.data) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
-        <Heart className="h-12 w-12 text-muted-foreground/40 mb-6" />
-        <p className="mono-label text-rose mb-4">Venue code</p>
-        <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">We couldn't find that venue</h1>
-        <p className="text-lg text-muted-foreground mb-8 max-w-md font-light">
-          No venue answers to the code "{slug}". Double-check the code from
-          your venue and try again.
-        </p>
-        <Button
-          onClick={() => setLocation("/couple")}
-          variant="rose"
-          className="px-8 py-6 text-base font-medium"
-          data-testid="venue-notfound-home"
-        >
-          Enter another code
-        </Button>
-      </div>
+      <CoupleStatePage
+        eyebrow="Venue code"
+        title="We couldn't find that venue"
+        actions={
+          <Button onClick={() => setLocation("/couple")} variant="rose" className="h-12 px-8 text-base" data-testid="venue-notfound-home">
+            Enter another code
+          </Button>
+        }
+      >
+        No venue answers to the code <span className="font-mono text-foreground">{slug}</span>. Check the
+        code on your venue's card or email and try again.
+      </CoupleStatePage>
     );
   }
 
@@ -256,39 +256,26 @@ export default function CouplePage() {
   // straight into the experience.
   if (!venue.isReady) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center font-sans">
-        <Heart className="h-12 w-12 text-rose/40 mb-6" />
-        <p className="mono-label text-rose mb-4">Opening soon</p>
-        <h1 className="font-display text-3xl md:text-4xl font-medium mb-4 text-foreground">
-          {venue.name} is putting on the finishing touches
-        </h1>
-        <p className="text-lg text-muted-foreground mb-10 max-w-md font-light">
-          Your interactive preview isn't open quite yet — please check back
-          shortly. We can't wait to show you your day here.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-          <Button
-            onClick={() => venueQuery.refetch()}
-            variant="rose"
-            className="px-8 py-6 text-base font-medium"
-            data-testid="venue-not-ready-refresh"
-          >
-            Check again
-          </Button>
-          {(venue.websiteUrl || venue.bookingUrl) && (
-            <Button
-              asChild
-              variant="ghost"
-              className="px-8 py-6 text-base font-medium text-muted-foreground hover:text-foreground"
-              data-testid="venue-not-ready-site"
-            >
-              <a href={venue.websiteUrl ?? venue.bookingUrl ?? "#"} target="_blank" rel="noreferrer">
-                Visit {venue.name}
-              </a>
+      <CoupleStatePage
+        eyebrow="Opening soon"
+        title={`${venue.name} is putting on the finishing touches`}
+        actions={
+          <>
+            <Button onClick={() => venueQuery.refetch()} variant="rose" className="h-12 px-8 text-base" data-testid="venue-not-ready-refresh">
+              Check again
             </Button>
-          )}
-        </div>
-      </div>
+            {(venue.websiteUrl || venue.bookingUrl) && (
+              <Button asChild variant="ghost" className="h-12 px-6 text-base text-muted-foreground hover:text-foreground" data-testid="venue-not-ready-site">
+                <a href={venue.websiteUrl ?? venue.bookingUrl ?? "#"} target="_blank" rel="noreferrer">
+                  Visit {venue.name}
+                </a>
+              </Button>
+            )}
+          </>
+        }
+      >
+        Your preview isn't open quite yet. Check back shortly — we can't wait to show you your day here.
+      </CoupleStatePage>
     );
   }
 
@@ -327,6 +314,32 @@ export default function CouplePage() {
         )}
         {step === 4 && <SubmittingStep key="step4" />}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function CoupleStatePage({
+  eyebrow,
+  title,
+  children,
+  actions,
+}: {
+  eyebrow: string;
+  title: string;
+  children: React.ReactNode;
+  actions: React.ReactNode;
+}) {
+  return (
+    <div className="grain relative flex min-h-screen flex-col bg-background text-foreground">
+      <header className="flex h-16 items-center px-5 md:h-20 md:px-10">
+        <GlimpseLogo href="/couple" />
+      </header>
+      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-24 text-center">
+        <p className="mono-label mb-4 text-rose">{eyebrow}</p>
+        <h1 className="max-w-2xl font-display text-3xl font-medium tracking-tight md:text-4xl">{title}</h1>
+        <div className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">{children}</div>
+        <div className="mt-8 flex w-full max-w-sm flex-col gap-3 sm:flex-row sm:justify-center">{actions}</div>
+      </main>
     </div>
   );
 }
@@ -535,7 +548,12 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
           return (
             <li key={role} className="min-w-0">
               {src ? (
-                <div className="group relative aspect-[3/4] overflow-hidden border border-rose/60 bg-card">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  className="group relative aspect-[3/4] overflow-hidden border border-rose/60 bg-card"
+                >
                   <img src={src} alt={`${role} photo`} className="h-full w-full object-cover" />
                   <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />
                   <p className="mono-label absolute bottom-2.5 left-3 text-white">{role}</p>
@@ -549,7 +567,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
                   >
                     <X className="h-4 w-4" />
                   </button>
-                </div>
+                </motion.div>
               ) : (
                 <button
                   type="button"
@@ -616,7 +634,7 @@ interface StyleStepProps {
 function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, onChangeCoupleName, coupleEmail, onChangeCoupleEmail, onSubmit, onBack, isSubmitting }: StyleStepProps) {
   const [, setLocation] = useLocation();
   const inputClass =
-    "h-12 w-full border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-rose focus:outline-none focus:ring-2 focus:ring-ring/50 disabled:opacity-50";
+    "h-12 w-full rounded-md border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-rose focus:outline-none focus:ring-2 focus:ring-ring/50 disabled:opacity-50";
   const canSubmit = Boolean(selectedStyleId) && coupleEmail.trim().length > 0 && !isSubmitting;
 
   return (
@@ -759,13 +777,14 @@ function SubmittingStep() {
 
 function CoupleSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 flex flex-col">
-      <Skeleton className="h-24 w-full mb-12 rounded-lg" />
-      <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full">
-        <Skeleton className="h-12 w-64 mb-6 rounded-md" />
-        <Skeleton className="h-6 w-96 mb-16 rounded-md" />
-        <Skeleton className="h-80 w-full rounded-lg" />
-      </div>
+    <div className="flex min-h-screen flex-col bg-background text-foreground" aria-busy="true" aria-label="Opening the venue">
+      <header className="flex h-16 items-center px-5 md:h-20 md:px-10">
+        <GlimpseLogo href="/couple" />
+      </header>
+      <main className="flex flex-1 flex-col items-center justify-center gap-5 pb-24">
+        <Loader2 className="h-8 w-8 animate-spin text-rose" />
+        <p className="mono-label text-muted-foreground">Opening the venue…</p>
+      </main>
     </div>
   );
 }

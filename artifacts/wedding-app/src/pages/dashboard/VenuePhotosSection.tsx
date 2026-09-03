@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { VenueMediaCoverage, VenueMediaItem } from "@workspace/api-client-react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { COVERAGE_OPTIONS, venueReferenceUrl } from "./types";
 
@@ -53,20 +54,21 @@ export function VenuePhotosSection({
                 : `${5 - missing.length} of 5 views covered`}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Galleries are rendered in these rooms. One photo opens the link; all five views let
-            every portrait land in the right space with the right light.
+            Portraits are rendered in these rooms. One photo opens your link; five views place every
+            portrait in the right space.
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={() => pick(missing[0]?.value ?? "detail")}
           disabled={isUploading}
-          className="inline-flex h-10 items-center gap-2 border border-border px-4 text-sm text-foreground transition-colors hover:border-foreground/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          className="h-10 px-4"
           data-testid="venue-add-photo"
         >
           {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           {isUploading ? `Uploading ${uploadProgress}%` : "Add photo"}
-        </button>
+        </Button>
       </div>
 
       <input
@@ -100,7 +102,7 @@ export function VenuePhotosSection({
               disabled={deletingId === item.id}
               aria-label={`Remove ${labelFor(item.coverage)} photo`}
               className={cn(
-                "absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-opacity",
+                "absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-opacity",
                 "opacity-0 hover:bg-red-500 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 [@media(hover:none)]:opacity-100",
               )}
             >
