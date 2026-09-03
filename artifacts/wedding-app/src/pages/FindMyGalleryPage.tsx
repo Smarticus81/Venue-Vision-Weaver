@@ -119,7 +119,7 @@ export default function FindMyGalleryPage() {
                     {loading ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
-                      "Send Me My Links"
+                      "Email me my gallery"
                     )}
                   </Button>
                 </form>

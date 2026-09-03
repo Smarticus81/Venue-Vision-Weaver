@@ -33,7 +33,7 @@ export default function OwnerLoginPage() {
           <SignedOut>
             <div className="text-center">
               <p className="mono-label mb-3 text-rose">Venue teams</p>
-              <h1 className="font-display text-3xl font-medium">Sign in to your profile</h1>
+              <h1 className="font-display text-3xl font-medium">Welcome back</h1>
             </div>
             <SignIn
               appearance={darkroomAppearance}
