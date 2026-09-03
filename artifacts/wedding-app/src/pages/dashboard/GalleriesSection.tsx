@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/ui/status-pill";
+import { FrameTicks } from "@/components/motion";
 import { formatRelativeDay } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 import { MAX_COUPLE_PHOTOS, MIN_COUPLE_PHOTOS, ownerAssetUrl } from "./types";
@@ -369,6 +370,7 @@ function NewGalleryPanel({
               return preview ? (
                 <div key={slot} className="group relative aspect-square overflow-hidden border border-rose/60 bg-background">
                   <img src={preview} alt={`${label} photo`} className="h-full w-full object-cover" />
+                  <FrameTicks size={12} className="text-white/70" />
                   <button
                     type="button"
                     onClick={() => onRemoveFile(slot)}

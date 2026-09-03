@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FrameTicks } from "@/components/motion";
 import { copyText } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         role="img"
         aria-label={`QR code for ${url}`}
       >
+        <FrameTicks size={12} className="text-foreground/50" />
         {svg ? (
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
         ) : (

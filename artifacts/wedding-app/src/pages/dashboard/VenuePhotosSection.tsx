@@ -2,6 +2,7 @@ import { useRef } from "react";
 import type { VenueMediaCoverage, VenueMediaItem } from "@workspace/api-client-react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FrameTicks } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { COVERAGE_OPTIONS, venueReferenceUrl } from "./types";
 
@@ -94,6 +95,7 @@ export function VenuePhotosSection({
               }}
               className="h-full w-full object-cover"
             />
+            <FrameTicks size={14} className="text-white/70" />
             <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />
             <span className="mono-label absolute bottom-2.5 left-3 text-white">{labelFor(item.coverage)}</span>
             <button

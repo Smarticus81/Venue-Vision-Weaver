@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { FrameTicks } from "@/components/motion";
 
 function venueMediaUrl(objectKey: string | undefined, venueSlug: string): string {
   if (!objectKey) return "";
@@ -391,17 +392,17 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
 
       <div className="absolute inset-0 z-10 bg-gradient-to-t from-background/90 via-background/30 to-background/40" />
 
-      <div className="absolute top-6 left-6 z-30 flex gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
+      <header className="absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between px-5 md:h-20 md:px-10">
+        <GlimpseLogo href="/couple" className="[text-shadow:0_1px_10px_rgba(0,0,0,0.5)]" />
+        <button
+          type="button"
           onClick={() => setLocation("/couple")}
-          className="text-foreground/80 hover:text-foreground hover:bg-foreground/10 backdrop-blur px-5 py-2 font-medium"
+          className="mono-label inline-flex min-h-10 items-center gap-2 text-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring [text-shadow:0_1px_10px_rgba(0,0,0,0.5)]"
           data-testid="venueshow-home"
         >
-          <Home className="mr-2 h-4 w-4" /> Home
-        </Button>
-      </div>
+          <Home className="h-3.5 w-3.5" /> Another venue
+        </button>
+      </header>
 
       <div className="absolute inset-0 z-20 flex flex-col items-center justify-end pb-24 md:pb-32 px-6 text-center">
         <motion.div
@@ -410,7 +411,7 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
           transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
           className="max-w-4xl"
         >
-          <p className="mono-label mb-6 text-rose drop-shadow-md">Interactive preview</p>
+          <p className="mono-label mb-6 text-rose drop-shadow-md">A glimpse of your day at</p>
 
           <h1 className="font-display text-5xl md:text-7xl font-medium mb-6 text-foreground tracking-[-0.02em] drop-shadow-2xl">
             {venue.name}
@@ -555,6 +556,7 @@ function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onCont
                   className="group relative aspect-[3/4] overflow-hidden border border-rose/60 bg-card"
                 >
                   <img src={src} alt={`${role} photo`} className="h-full w-full object-cover" />
+                  <FrameTicks size={14} className="text-white/70" />
                   <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />
                   <p className="mono-label absolute bottom-2.5 left-3 text-white">{role}</p>
                   <button
