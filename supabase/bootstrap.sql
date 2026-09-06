@@ -174,3 +174,128 @@ ALTER TABLE credit_transactions
 CREATE UNIQUE INDEX IF NOT EXISTS credit_transactions_stripe_event_id_unique
   ON credit_transactions (stripe_event_id)
   WHERE stripe_event_id IS NOT NULL;
+
+-- ————— Autonomous Business Control Plane —————
+-- A multi-agent operating system (growth, support, product, finance,
+-- experiments, sales, activation, governance) runs the business; these tables
+-- persist agent scheduling state, runs, tasks, governed actions, experiments,
+-- KPI snapshots, the audit trail, and governance policies.
+
+CREATE TABLE IF NOT EXISTS control_agents (
+  id SERIAL PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  interval_minutes INTEGER NOT NULL DEFAULT 360,
+  last_run_at TIMESTAMP,
+  last_run_status TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id SERIAL PRIMARY KEY,
+  agent_key TEXT NOT NULL,
+  "trigger" TEXT NOT NULL DEFAULT 'schedule',
+  status TEXT NOT NULL DEFAULT 'running',
+  model TEXT,
+  summary TEXT,
+  error TEXT,
+  transcript JSONB,
+  tool_call_count INTEGER NOT NULL DEFAULT 0,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  finished_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS agent_runs_agent_key_idx
+  ON agent_runs (agent_key, started_at);
+
+CREATE TABLE IF NOT EXISTS agent_tasks (
+  id SERIAL PRIMARY KEY,
+  agent_key TEXT NOT NULL,
+  run_id INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  category TEXT,
+  priority TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'open',
+  payload JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS agent_tasks_status_idx
+  ON agent_tasks (status, created_at);
+
+CREATE TABLE IF NOT EXISTS agent_actions (
+  id SERIAL PRIMARY KEY,
+  agent_key TEXT NOT NULL,
+  run_id INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
+  action_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  reasoning TEXT,
+  params JSONB NOT NULL,
+  risk_level TEXT NOT NULL DEFAULT 'medium',
+  requires_approval BOOLEAN NOT NULL DEFAULT TRUE,
+  status TEXT NOT NULL DEFAULT 'pending',
+  decided_by TEXT,
+  decision_note TEXT,
+  decided_at TIMESTAMP,
+  executed_at TIMESTAMP,
+  result JSONB,
+  error TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS agent_actions_status_idx
+  ON agent_actions (status, created_at);
+
+CREATE TABLE IF NOT EXISTS control_experiments (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  hypothesis TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  variants JSONB,
+  status TEXT NOT NULL DEFAULT 'proposed',
+  result TEXT,
+  created_by_agent TEXT,
+  started_at TIMESTAMP,
+  ended_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS control_metrics_snapshots (
+  id SERIAL PRIMARY KEY,
+  metrics JSONB NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS control_audit_events (
+  id SERIAL PRIMARY KEY,
+  actor_type TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  subject_type TEXT,
+  subject_id TEXT,
+  detail JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS control_audit_events_created_idx
+  ON control_audit_events (created_at);
+
+CREATE TABLE IF NOT EXISTS control_policies (
+  id SERIAL PRIMARY KEY,
+  key TEXT NOT NULL,
+  value JSONB NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS control_policies_key_unique
+  ON control_policies (key);
