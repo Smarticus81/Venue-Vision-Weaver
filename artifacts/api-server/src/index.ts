@@ -12,6 +12,7 @@ import {
 import { and, asc, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { refundCreditsForSession } from "./lib/credits.js";
 import { startSessionWorker } from "./lib/sessionWorker.js";
+import { startControlPlaneWorker } from "./control-plane/scheduler.js";
 import { getAppBaseUrl } from "./lib/appUrl.js";
 import { assertProductionEnvironment } from "./lib/envValidation.js";
 import {
@@ -192,4 +193,5 @@ app.listen(port, (err) => {
   void cleanupExpiredUploadIntents();
   void cleanupExpiredOwnerAuth();
   startSessionWorker();
+  startControlPlaneWorker();
 });

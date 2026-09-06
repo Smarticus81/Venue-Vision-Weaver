@@ -503,6 +503,387 @@ export interface UploadUrlResponse {
   metadata?: UploadUrlRequest;
 }
 
+export type BusinessMetricsOrganizationsByPlan = { [key: string]: number };
+
+export type BusinessMetricsOrganizations = {
+  total: number;
+  byPlan: BusinessMetricsOrganizationsByPlan;
+  totalCreditsBalance: number;
+  lowCreditCount: number;
+  paidCount: number;
+};
+
+export type BusinessMetricsVenues = {
+  total: number;
+  new7d: number;
+  new30d: number;
+  withMedia: number;
+  withSessions: number;
+  unadoptedLegacy: number;
+  /** Percentage of venues with at least one session. */
+  activationRate: number;
+};
+
+export type BusinessMetricsSessionsByStatus = { [key: string]: number };
+
+export type BusinessMetricsSessions = {
+  total: number;
+  byStatus: BusinessMetricsSessionsByStatus;
+  created7d: number;
+  created30d: number;
+  ready7d: number;
+  failed7d: number;
+  failureRate7d: number;
+  avgCompletionMinutes7d?: number | null;
+};
+
+export type BusinessMetricsCreditsGrantsByReason30d = { [key: string]: number };
+
+export type BusinessMetricsCredits = {
+  granted30d: number;
+  consumed30d: number;
+  refunded30d: number;
+  purchased30d: number;
+  grantsByReason30d: BusinessMetricsCreditsGrantsByReason30d;
+};
+
+export type BusinessMetricsAssets = {
+  generated7d: number;
+};
+
+/**
+ * Live business KPIs computed from production tables.
+ */
+export interface BusinessMetrics {
+  capturedAt: string;
+  organizations: BusinessMetricsOrganizations;
+  venues: BusinessMetricsVenues;
+  sessions: BusinessMetricsSessions;
+  credits: BusinessMetricsCredits;
+  assets: BusinessMetricsAssets;
+}
+
+export type ControlAgentDomain =
+  (typeof ControlAgentDomain)[keyof typeof ControlAgentDomain];
+
+export const ControlAgentDomain = {
+  growth: "growth",
+  support: "support",
+  product: "product",
+  finance: "finance",
+  experiments: "experiments",
+  sales: "sales",
+  activation: "activation",
+  governance: "governance",
+} as const;
+
+export type ControlAgentStatus =
+  (typeof ControlAgentStatus)[keyof typeof ControlAgentStatus];
+
+export const ControlAgentStatus = {
+  active: "active",
+  paused: "paused",
+} as const;
+
+export interface ControlAgent {
+  key: string;
+  name: string;
+  domain: ControlAgentDomain;
+  description: string;
+  status: ControlAgentStatus;
+  intervalMinutes: number;
+  lastRunAt?: string | null;
+  lastRunStatus?: string | null;
+}
+
+export type ControlOverviewResponseCounts = {
+  pendingActions: number;
+  openTasks: number;
+  runningExperiments: number;
+  runs24h: number;
+};
+
+export interface ControlOverviewResponse {
+  operatorEmail: string;
+  aiConfigured: boolean;
+  model: string;
+  metrics: BusinessMetrics;
+  agents: ControlAgent[];
+  counts: ControlOverviewResponseCounts;
+}
+
+export type ControlAgentStatusBodyStatus =
+  (typeof ControlAgentStatusBodyStatus)[keyof typeof ControlAgentStatusBodyStatus];
+
+export const ControlAgentStatusBodyStatus = {
+  active: "active",
+  paused: "paused",
+} as const;
+
+export interface ControlAgentStatusBody {
+  status: ControlAgentStatusBodyStatus;
+}
+
+export interface ControlAgentResponse {
+  agent: ControlAgent;
+}
+
+export type ControlRunTrigger =
+  (typeof ControlRunTrigger)[keyof typeof ControlRunTrigger];
+
+export const ControlRunTrigger = {
+  schedule: "schedule",
+  manual: "manual",
+} as const;
+
+export type ControlRunStatus =
+  (typeof ControlRunStatus)[keyof typeof ControlRunStatus];
+
+export const ControlRunStatus = {
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+} as const;
+
+export interface ControlRun {
+  id: number;
+  agentKey: string;
+  trigger: ControlRunTrigger;
+  status: ControlRunStatus;
+  model?: string | null;
+  summary?: string | null;
+  error?: string | null;
+  toolCallCount: number;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  startedAt: string;
+  finishedAt?: string | null;
+}
+
+export interface ControlRunStartedResponse {
+  run: ControlRun;
+}
+
+export interface ControlRunsResponse {
+  runs: ControlRun[];
+}
+
+export type ControlRunDetailTranscriptItem = { [key: string]: unknown };
+
+export type ControlRunDetail = ControlRun & {
+  transcript?: ControlRunDetailTranscriptItem[] | null;
+};
+
+export interface ControlRunDetailResponse {
+  run: ControlRunDetail;
+}
+
+export type ControlActionParams = { [key: string]: unknown };
+
+export type ControlActionRiskLevel =
+  (typeof ControlActionRiskLevel)[keyof typeof ControlActionRiskLevel];
+
+export const ControlActionRiskLevel = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type ControlActionStatus =
+  (typeof ControlActionStatus)[keyof typeof ControlActionStatus];
+
+export const ControlActionStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+  executed: "executed",
+  failed: "failed",
+} as const;
+
+export type ControlActionResult = { [key: string]: unknown } | null;
+
+export interface ControlAction {
+  id: number;
+  agentKey: string;
+  runId?: number | null;
+  actionType: string;
+  title: string;
+  reasoning?: string | null;
+  params: ControlActionParams;
+  riskLevel: ControlActionRiskLevel;
+  requiresApproval: boolean;
+  status: ControlActionStatus;
+  decidedBy?: string | null;
+  decisionNote?: string | null;
+  decidedAt?: string | null;
+  executedAt?: string | null;
+  result?: ControlActionResult;
+  error?: string | null;
+  createdAt: string;
+}
+
+export interface ControlActionsResponse {
+  actions: ControlAction[];
+}
+
+export type ControlActionDecisionBodyDecision =
+  (typeof ControlActionDecisionBodyDecision)[keyof typeof ControlActionDecisionBodyDecision];
+
+export const ControlActionDecisionBodyDecision = {
+  approve: "approve",
+  reject: "reject",
+} as const;
+
+export interface ControlActionDecisionBody {
+  decision: ControlActionDecisionBodyDecision;
+  /** @maxLength 500 */
+  note?: string;
+}
+
+export interface ControlActionResponse {
+  action: ControlAction;
+}
+
+export type ControlTaskPriority =
+  (typeof ControlTaskPriority)[keyof typeof ControlTaskPriority];
+
+export const ControlTaskPriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+export type ControlTaskStatus =
+  (typeof ControlTaskStatus)[keyof typeof ControlTaskStatus];
+
+export const ControlTaskStatus = {
+  open: "open",
+  in_progress: "in_progress",
+  done: "done",
+  dismissed: "dismissed",
+} as const;
+
+export type ControlTaskPayload = { [key: string]: unknown } | null;
+
+export interface ControlTask {
+  id: number;
+  agentKey: string;
+  runId?: number | null;
+  title: string;
+  detail?: string | null;
+  category?: string | null;
+  priority: ControlTaskPriority;
+  status: ControlTaskStatus;
+  payload?: ControlTaskPayload;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlTasksResponse {
+  tasks: ControlTask[];
+}
+
+export type ControlTaskStatusBodyStatus =
+  (typeof ControlTaskStatusBodyStatus)[keyof typeof ControlTaskStatusBodyStatus];
+
+export const ControlTaskStatusBodyStatus = {
+  open: "open",
+  in_progress: "in_progress",
+  done: "done",
+  dismissed: "dismissed",
+} as const;
+
+export interface ControlTaskStatusBody {
+  status: ControlTaskStatusBodyStatus;
+}
+
+export interface ControlTaskResponse {
+  task: ControlTask;
+}
+
+export type ControlExperimentVariants = { [key: string]: unknown } | null;
+
+export type ControlExperimentStatus =
+  (typeof ControlExperimentStatus)[keyof typeof ControlExperimentStatus];
+
+export const ControlExperimentStatus = {
+  proposed: "proposed",
+  running: "running",
+  completed: "completed",
+  aborted: "aborted",
+} as const;
+
+export interface ControlExperiment {
+  id: number;
+  name: string;
+  hypothesis: string;
+  metric: string;
+  variants?: ControlExperimentVariants;
+  status: ControlExperimentStatus;
+  result?: string | null;
+  createdByAgent?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlExperimentsResponse {
+  experiments: ControlExperiment[];
+}
+
+export type ControlAuditEventActorType =
+  (typeof ControlAuditEventActorType)[keyof typeof ControlAuditEventActorType];
+
+export const ControlAuditEventActorType = {
+  agent: "agent",
+  operator: "operator",
+  system: "system",
+} as const;
+
+export type ControlAuditEventDetail = { [key: string]: unknown } | null;
+
+export interface ControlAuditEvent {
+  id: number;
+  actorType: ControlAuditEventActorType;
+  actor: string;
+  eventType: string;
+  subjectType?: string | null;
+  subjectId?: string | null;
+  detail?: ControlAuditEventDetail;
+  createdAt: string;
+}
+
+export interface ControlAuditResponse {
+  events: ControlAuditEvent[];
+}
+
+export type ControlPolicyValue = { [key: string]: unknown };
+
+export interface ControlPolicy {
+  id: number;
+  key: string;
+  value: ControlPolicyValue;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlPoliciesResponse {
+  policies: ControlPolicy[];
+}
+
+export interface ControlMetricsSnapshot {
+  id: number;
+  metrics: BusinessMetrics;
+  createdAt: string;
+}
+
+export interface ControlMetricsHistoryResponse {
+  snapshots: ControlMetricsSnapshot[];
+}
+
 export type GetStorageObjectParams = {
   /**
    * Required to read generated gallery assets from a public share page.
@@ -512,4 +893,52 @@ export type GetStorageObjectParams = {
    * Required to read venue media from the public couple preview for that venue.
    */
   venueSlug?: string;
+};
+
+export type ListControlRunsParams = {
+  agentKey?: string;
+  limit?: number;
+};
+
+export type ListControlActionsParams = {
+  status?: ListControlActionsStatus;
+  limit?: number;
+};
+
+export type ListControlActionsStatus =
+  (typeof ListControlActionsStatus)[keyof typeof ListControlActionsStatus];
+
+export const ListControlActionsStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+  executed: "executed",
+  failed: "failed",
+} as const;
+
+export type ListControlTasksParams = {
+  status?: ListControlTasksStatus;
+  limit?: number;
+};
+
+export type ListControlTasksStatus =
+  (typeof ListControlTasksStatus)[keyof typeof ListControlTasksStatus];
+
+export const ListControlTasksStatus = {
+  open: "open",
+  in_progress: "in_progress",
+  done: "done",
+  dismissed: "dismissed",
+} as const;
+
+export type ListControlExperimentsParams = {
+  limit?: number;
+};
+
+export type GetControlAuditParams = {
+  limit?: number;
+};
+
+export type GetControlMetricsHistoryParams = {
+  limit?: number;
 };
