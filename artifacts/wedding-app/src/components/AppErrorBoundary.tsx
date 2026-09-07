@@ -36,9 +36,9 @@ export class AppErrorBoundary extends Component<Props, State> {
           alignItems: "center",
           justifyContent: "center",
           padding: "1.5rem",
-          background: "hsl(20 9% 6%)",
-          color: "hsl(40 23% 92%)",
-          fontFamily: "'Instrument Sans', system-ui, sans-serif",
+          background: "#faf9f6",
+          color: "#23392c",
+          fontFamily: "'DM Sans', system-ui, sans-serif",
           textAlign: "center",
         }}
       >
@@ -46,7 +46,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <h1 style={{ fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.75rem" }}>
             Something went wrong
           </h1>
-          <p style={{ fontSize: "0.875rem", lineHeight: 1.6, color: "hsl(33 9% 64%)", marginBottom: "1.5rem" }}>
+          <p style={{ fontSize: "0.875rem", lineHeight: 1.6, color: "#58655c", marginBottom: "1.5rem" }}>
             The page failed to load. This is usually temporary — reloading picks
             up the latest version of the site.
           </p>
@@ -55,8 +55,8 @@ export class AppErrorBoundary extends Component<Props, State> {
             onClick={() => window.location.reload()}
             style={{
               padding: "0.75rem 1.5rem",
-              background: "hsl(355 58% 71%)",
-              color: "hsl(20 10% 8%)",
+              background: "#285b42",
+              color: "#ffffff",
               border: "none",
               borderRadius: "0.25rem",
               fontSize: "0.875rem",

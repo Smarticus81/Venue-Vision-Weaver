@@ -1,5 +1,12 @@
+import { MotionConfig } from "framer-motion";
 import { Suspense, lazy, type ComponentType } from "react";
-import { Switch, Route, Router as WouterRouter, Redirect, useParams } from "wouter";
+import {
+  Switch,
+  Route,
+  Router as WouterRouter,
+  Redirect,
+  useParams,
+} from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -66,22 +73,28 @@ function Router() {
         {/* Legacy magic-link path; Clerk owns sign-in now */}
         <Route path="/owner/login">{() => <Redirect to="/login" />}</Route>
         <Route path="/find-my-gallery">{() => <FindMyGalleryPage />}</Route>
-        <Route path="/find-my-videos">{() => <Redirect to="/find-my-gallery" />}</Route>
+        <Route path="/find-my-videos">
+          {() => <Redirect to="/find-my-gallery" />}
+        </Route>
 
         {/* Venue creation */}
         <Route path="/create-venue">{() => <CreateVenuePage />}</Route>
-        <Route path="/venue/new">
-          {() => <Redirect to="/create-venue" />}
-        </Route>
+        <Route path="/venue/new">{() => <Redirect to="/create-venue" />}</Route>
 
         {/* Platform operators - Autonomous Business Control Plane */}
         <Route path="/control">{() => <ControlPlanePage />}</Route>
 
         {/* Owner profile/dashboard */}
         <Route path="/dashboard">{() => <VenueOwnerPage />}</Route>
-        <Route path="/dashboard/:slug">{() => <Redirect to="/dashboard" />}</Route>
-        <Route path="/profile/:slug">{() => <Redirect to="/dashboard" />}</Route>
-        <Route path="/venue/:slug/owner">{() => <Redirect to="/dashboard" />}</Route>
+        <Route path="/dashboard/:slug">
+          {() => <Redirect to="/dashboard" />}
+        </Route>
+        <Route path="/profile/:slug">
+          {() => <Redirect to="/dashboard" />}
+        </Route>
+        <Route path="/venue/:slug/owner">
+          {() => <Redirect to="/dashboard" />}
+        </Route>
 
         {/* Couple venue experience */}
         <Route path="/preview/:slug">{() => <CouplePage />}</Route>
@@ -103,19 +116,23 @@ function Router() {
 function RouteLoading() {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-      <div className="h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+      <p role="status" className="eyebrow text-primary">
+        Opening glimpse…
+      </p>
     </div>
   );
 }
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
-        <Router />
-      </WouterRouter>
-      <Toaster />
-    </QueryClientProvider>
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
+          <Router />
+        </WouterRouter>
+        <Toaster />
+      </QueryClientProvider>
+    </MotionConfig>
   );
 }
 

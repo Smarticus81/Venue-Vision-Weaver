@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Accessible dialog on Radix: focus trap, Escape to close, aria-labelledby
- * wired through DialogTitle. Styled to the darkroom system — near-black
- * surface, hairline border, no drop-shadow theatre.
+ * wired through DialogTitle. Styled with the shared surface and border tokens.
  */
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;

@@ -8,7 +8,7 @@ import {
   CLERK_PUBLISHABLE_KEY,
   clerkExpectedDomain,
   clerkStatus,
-  darkroomAppearance,
+  gardenAppearance,
 } from "./lib/clerk";
 
 clearLegacySavedSessions();
@@ -20,7 +20,7 @@ if (CLERK_PUBLISHABLE_KEY) {
     <AppErrorBoundary>
       <ClerkProvider
         publishableKey={CLERK_PUBLISHABLE_KEY}
-        appearance={darkroomAppearance}
+        appearance={gardenAppearance}
         afterSignOutUrl="/"
       >
         <App />

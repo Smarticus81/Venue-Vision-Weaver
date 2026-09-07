@@ -1,3 +1,8 @@
+import {
+  SiteHeader,
+  SiteFooter,
+  FormLayout,
+} from "@/components/layout/SiteChrome";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
@@ -20,15 +25,18 @@ import {
   Camera,
   X,
   Images,
+  Clock,
   Check,
   Home,
+  Mail,
   ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
-import { FrameTicks } from "@/components/motion";
 
-function venueMediaUrl(objectKey: string | undefined, venueSlug: string): string {
+function venueMediaUrl(
+  objectKey: string | undefined,
+  venueSlug: string,
+): string {
   if (!objectKey) return "";
   return `/api/storage${objectKey}?venueSlug=${encodeURIComponent(venueSlug)}`;
 }
@@ -37,7 +45,11 @@ const MAX_COUPLE_PHOTOS = 3;
 const MIN_COUPLE_PHOTOS = 1;
 const MIN_COUPLE_PHOTO_EDGE = 256;
 const MAX_COUPLE_PHOTO_BYTES = 50 * 1024 * 1024;
-const ALLOWED_COUPLE_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_COUPLE_PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 const COUPLE_REFERENCE_ROLES = ["Together", "Partner A", "Partner B"] as const;
 const COUPLE_REFERENCE_GUIDANCE = [
   "Both faces visible",
@@ -52,6 +64,13 @@ export default function CouplePage() {
   const { toast } = useToast();
 
   const [step, setStep] = useState(1);
+  const flowRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (step > 1) {
+      flowRef.current?.focus({ preventScroll: true });
+      flowRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+    }
+  }, [step]);
   // Successful uploads keyed by File so a retry after a failure never re-uploads them.
   const uploadedKeysRef = useRef(new Map<File, string>());
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -61,12 +80,7 @@ export default function CouplePage() {
   const [coupleEmail, setCoupleEmail] = useState("");
 
   const venueQuery = useGetVenue(slug!, {
-    query: {
-      enabled: !!slug,
-      queryKey: getGetVenueQueryKey(slug!),
-      // A wrong code is a 404: show "not found" now instead of retrying for seconds.
-      retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1,
-    },
+    query: { enabled: !!slug, queryKey: getGetVenueQueryKey(slug!), retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1 },
   });
   const stylesQuery = useListGalleryStyles();
 
@@ -84,7 +98,10 @@ export default function CouplePage() {
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        resolve(img.width >= MIN_COUPLE_PHOTO_EDGE && img.height >= MIN_COUPLE_PHOTO_EDGE);
+        resolve(
+          img.width >= MIN_COUPLE_PHOTO_EDGE &&
+            img.height >= MIN_COUPLE_PHOTO_EDGE,
+        );
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
@@ -135,7 +152,8 @@ export default function CouplePage() {
       if (!ok) {
         toast({
           title: "Photo too small",
-          description: "Use clear photos at least 256px wide and tall, with both faces visible and well lit.",
+          description:
+            "Use clear photos at least 256px wide and tall, with both faces visible and well lit.",
           variant: "destructive",
         });
         continue;
@@ -167,11 +185,13 @@ export default function CouplePage() {
 
   const handleSubmit = async () => {
     const email = coupleEmail.trim().toLowerCase();
-    if (selectedFiles.length < MIN_COUPLE_PHOTOS || !selectedStyleId || !email) return;
+    if (selectedFiles.length < MIN_COUPLE_PHOTOS || !selectedStyleId || !email)
+      return;
     if (!EMAIL_PATTERN.test(email)) {
       toast({
         title: "Check your email address",
-        description: "We need a valid email so you can find your gallery again.",
+        description:
+          "We need a valid email so you can find your gallery again.",
         variant: "destructive",
       });
       return;
@@ -187,7 +207,7 @@ export default function CouplePage() {
           if (!result) throw new Error("upload-failed");
           uploadedKeysRef.current.set(file, result.objectPath);
           return result.objectPath;
-        })
+        }),
       );
 
       createSession.mutate(
@@ -209,7 +229,10 @@ export default function CouplePage() {
             setStep(3);
             const msg = err.data?.error ?? "We couldn't start your session";
             toast({
-              title: err.status === 402 ? "The studio is paused" : "We couldn't begin",
+              title:
+                err.status === 402
+                  ? "The studio is paused"
+                  : "We couldn't begin",
               description:
                 err.status === 402
                   ? "This venue is temporarily unavailable for new galleries. Please check with the venue team."
@@ -217,7 +240,7 @@ export default function CouplePage() {
               variant: "destructive",
             });
           },
-        }
+        },
       );
     } catch {
       setStep(3);
@@ -232,115 +255,114 @@ export default function CouplePage() {
 
   if (venueQuery.isLoading) return <CoupleSkeleton />;
 
-  if (venueQuery.isError || !venueQuery.data) {
+  if (venueQuery.isError || !venueQuery.data)
     return (
-      <CoupleStatePage
-        eyebrow="Venue code"
-        title="We couldn't find that venue"
-        actions={
-          <Button onClick={() => setLocation("/couple")} variant="rose" className="h-12 px-8 text-base" data-testid="venue-notfound-home">
-            Enter another code
-          </Button>
-        }
+      <FormLayout
+        label="Your venue invitation"
+        title="Let’s find your place."
+        description="Your venue’s link opens the door to a wedding vision made for you."
       >
-        No venue answers to the code <span className="font-mono text-foreground">{slug}</span>. Check the
-        code on your venue's card or email and try again.
-      </CoupleStatePage>
+        <h2>We couldn’t open this venue</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Check the code “{slug}” and your connection, then try again.
+        </p>
+        <Button className="mt-6" onClick={() => void venueQuery.refetch()}>
+          Try again
+        </Button>
+        <Button
+          variant="ghost"
+          className="mt-3"
+          onClick={() => setLocation("/couple")}
+          data-testid="venue-notfound-home"
+        >
+          Enter another code
+        </Button>
+      </FormLayout>
     );
-  }
-
   const venue = venueQuery.data;
-
-  // Readiness comes from the API (isReady: the venue has reference
-  // photography). Mirrors the server's own session-create guard, so a couple
-  // who passes here never hits a readiness error later. Any ready venue goes
-  // straight into the experience.
-  if (!venue.isReady) {
+  if (!venue.isReady)
     return (
-      <CoupleStatePage
-        eyebrow="Opening soon"
-        title={`${venue.name} is putting on the finishing touches`}
-        actions={
-          <>
-            <Button onClick={() => venueQuery.refetch()} variant="rose" className="h-12 px-8 text-base" data-testid="venue-not-ready-refresh">
-              Check again
-            </Button>
-            {(venue.websiteUrl || venue.bookingUrl) && (
-              <Button asChild variant="ghost" className="h-12 px-6 text-base text-muted-foreground hover:text-foreground" data-testid="venue-not-ready-site">
-                <a href={venue.websiteUrl ?? venue.bookingUrl ?? "#"} target="_blank" rel="noreferrer">
-                  Visit {venue.name}
-                </a>
-              </Button>
-            )}
-          </>
+      <FormLayout
+        label="An invitation is on its way"
+        title="A little more preparation."
+        description={
+          venue.name + " is getting ready to welcome your wedding vision."
         }
       >
-        Your preview isn't open quite yet. Check back shortly — we can't wait to show you your day here.
-      </CoupleStatePage>
+        <h2>This venue isn’t ready yet</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          The venue team is finishing your preview. Please
+          check back after they finish setting up.
+        </p>
+        <Button className="mt-6" onClick={() => void venueQuery.refetch()}>
+          Check again
+        </Button>
+        <Button
+          variant="ghost"
+          className="mt-3"
+          onClick={() => setLocation("/couple")}
+          data-testid="venue-not-ready-browse"
+        >
+          Try another venue code
+        </Button>
+      </FormLayout>
     );
-  }
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans relative flex flex-col overflow-x-hidden">
-      <AnimatePresence mode="wait">
-        {step === 1 && (
-          <VenueShowcase key="step1" venue={venue} onNext={() => setStep(2)} />
-        )}
-        {step === 2 && (
-          <UploadStep
-            key="step2"
-            previews={previews}
-            isUploading={isUploading || createSession.isPending}
-            onFileChange={handleFileChange}
-            onRemovePhoto={handleRemovePhoto}
-            onContinue={() => setStep(3)}
-            onBack={() => setStep(1)}
-          />
-        )}
-        {step === 3 && (
-          <StyleStep
-            key="step3"
-            styles={stylesQuery.data?.styles ?? []}
-            isLoading={stylesQuery.isLoading}
-            selectedStyleId={selectedStyleId}
-            onSelect={setSelectedStyleId}
-            coupleName={coupleName}
-            onChangeCoupleName={setCoupleName}
-            coupleEmail={coupleEmail}
-            onChangeCoupleEmail={setCoupleEmail}
-            onSubmit={handleSubmit}
-            onBack={() => setStep(2)}
-            isSubmitting={isUploading || createSession.isPending}
-          />
-        )}
-        {step === 4 && <SubmittingStep key="step4" />}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function CoupleStatePage({
-  eyebrow,
-  title,
-  children,
-  actions,
-}: {
-  eyebrow: string;
-  title: string;
-  children: React.ReactNode;
-  actions: React.ReactNode;
-}) {
-  return (
-    <div className="grain relative flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex h-16 items-center px-5 md:h-20 md:px-10">
-        <GlimpseLogo href="/couple" />
-      </header>
-      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-24 text-center">
-        <p className="mono-label mb-4 text-rose">{eyebrow}</p>
-        <h1 className="max-w-2xl font-display text-3xl font-medium tracking-tight md:text-4xl">{title}</h1>
-        <div className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">{children}</div>
-        <div className="mt-8 flex w-full max-w-sm flex-col gap-3 sm:flex-row sm:justify-center">{actions}</div>
+      <SiteHeader />
+      <main id="main-content" ref={flowRef} tabIndex={-1}>
+        <ol
+          className="creation-progress"
+          aria-label="Gallery creation progress"
+        >
+          {["Your venue", "Your photos", "Style & delivery"].map((label, i) => (
+            <li key={label} aria-current={step === i + 1 ? "step" : undefined}>
+              {i + 1}. {label}
+            </li>
+          ))}
+        </ol>
+        <AnimatePresence mode="wait">
+          {step === 1 && (
+            <VenueShowcase
+              key="step1"
+              venue={venue}
+              onNext={() => setStep(2)}
+            />
+          )}
+          {step === 2 && (
+            <UploadStep
+              key="step2"
+              previews={previews}
+              isUploading={isUploading || createSession.isPending}
+              onFileChange={handleFileChange}
+              onRemovePhoto={handleRemovePhoto}
+              onContinue={() => setStep(3)}
+              onBack={() => setStep(1)}
+            />
+          )}
+          {step === 3 && (
+            <StyleStep
+              key="step3"
+              styles={stylesQuery.data?.styles ?? []}
+              isLoading={stylesQuery.isLoading}
+              hasError={stylesQuery.isError}
+              onRetry={()=>void stylesQuery.refetch()}
+              selectedStyleId={selectedStyleId}
+              onSelect={setSelectedStyleId}
+              coupleName={coupleName}
+              onChangeCoupleName={setCoupleName}
+              coupleEmail={coupleEmail}
+              onChangeCoupleEmail={setCoupleEmail}
+              onSubmit={handleSubmit}
+              onBack={() => setStep(2)}
+              isSubmitting={isUploading || createSession.isPending}
+            />
+          )}
+          {step === 4 && <SubmittingStep key="step4" />}
+        </AnimatePresence>
       </main>
+      <SiteFooter />
     </div>
   );
 }
@@ -351,97 +373,51 @@ interface VenueShowcaseProps {
 }
 
 function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
-  const [, setLocation] = useLocation();
   const [currentPhoto, setCurrentPhoto] = useState(0);
-
-  const hasMedia = venue.media.length > 0;
-
-  useEffect(() => {
-    if (venue.media.length <= 1) return undefined;
-    const t = setTimeout(
-      () => setCurrentPhoto((p) => (p + 1) % venue.media.length),
-      4000
-    );
-    return () => clearTimeout(t);
-  }, [currentPhoto, venue.media.length]);
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-0 overflow-hidden bg-background"
-    >
-      <div className="absolute inset-0 z-0">
-        {hasMedia ? (
-          <AnimatePresence mode="wait">
-            <motion.img
-              key={currentPhoto}
-              src={venueMediaUrl(venue.media[currentPhoto]?.objectKey, venue.slug)}
-              initial={{ opacity: 0, scale: 1.05 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
-              className="w-full h-full object-cover"
-            />
-          </AnimatePresence>
-        ) : (
-          <div className="w-full h-full bg-card" />
-        )}
+    <section className="venue-welcome page-width">
+      <div>
+        <img
+          src={venueMediaUrl(venue.media[currentPhoto]?.objectKey, venue.slug)}
+          alt={venue.name + " venue photo " + (currentPhoto + 1)}
+        />
+        <div className="photo-selector" aria-label="Venue photographs">
+          {venue.media.map((_, index) => (
+            <button
+              key={index}
+              aria-label={"View venue photo " + (index + 1)}
+              aria-pressed={currentPhoto === index}
+              onClick={() => setCurrentPhoto(index)}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
       </div>
-
-      <div className="absolute inset-0 z-10 bg-gradient-to-t from-background/90 via-background/30 to-background/40" />
-
-      <header className="absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between px-5 md:h-20 md:px-10">
-        <GlimpseLogo href="/couple" className="[text-shadow:0_1px_10px_rgba(0,0,0,0.5)]" />
-        <button
-          type="button"
-          onClick={() => setLocation("/couple")}
-          className="mono-label inline-flex min-h-10 items-center gap-2 text-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring [text-shadow:0_1px_10px_rgba(0,0,0,0.5)]"
-          data-testid="venueshow-home"
-        >
-          <Home className="h-3.5 w-3.5" /> Another venue
-        </button>
-      </header>
-
-      <div className="absolute inset-0 z-20 flex flex-col items-center justify-end pb-24 md:pb-32 px-6 text-center">
-        <motion.div
-          initial={{ y: 30, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.4, duration: 0.8, ease: "easeOut" }}
-          className="max-w-4xl"
-        >
-          <p className="mono-label mb-6 text-rose drop-shadow-md">A glimpse of your day at</p>
-
-          <h1 className="font-display text-5xl md:text-7xl font-medium mb-6 text-foreground tracking-[-0.02em] drop-shadow-2xl">
-            {venue.name}
-          </h1>
-          
-          {venue.tagline && (
-            <p className="text-xl md:text-2xl text-rose mb-8 font-light drop-shadow-lg italic font-display">
-              {venue.tagline}
-            </p>
-          )}
-          
-          {venue.description && (
-            <p className="text-lg md:text-xl text-foreground/90 mb-12 max-w-2xl mx-auto drop-shadow-lg leading-relaxed font-light">
-              {venue.description}
-            </p>
-          )}
-          
-          <Button
-            size="lg"
-            variant="rose"
-            onClick={onNext}
-            className="px-10 py-7 text-lg font-medium group"
-            data-testid="visualize-cta"
-          >
-            Step inside your wedding day
-            <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-          </Button>
-        </motion.div>
+      <div>
+        <p className="eyebrow text-primary">An invitation to imagine</p>
+        <h1>
+          Your day at
+          <br />
+          {venue.name}.
+        </h1>
+        <p className="text-muted-foreground">
+          {venue.description ||
+            venue.tagline ||
+            "See the two of you, in the place where it could all begin."}
+        </p>
+        <p className="text-sm">
+          Add your photos, choose a style, and receive four AI portraits plus a
+          motion reel.
+        </p>
+        <Button onClick={onNext} data-testid="visualize-cta">
+          Create our wedding vision <ArrowRight />
+        </Button>
+        <p className="caption">
+          An imagined wedding day, created from your photos.
+        </p>
       </div>
-    </motion.div>
+    </section>
   );
 }
 
@@ -454,172 +430,175 @@ interface UploadStepProps {
   onBack: () => void;
 }
 
-/** Shared header for the two form steps: where you are, and a way out. */
-function StepFrame({
-  step,
-  title,
-  lede,
-  onExit,
-  exitDisabled,
-  children,
-  wide = false,
-}: {
-  step: 1 | 2;
-  title: string;
-  lede: string;
-  onExit: () => void;
-  exitDisabled?: boolean;
-  children: React.ReactNode;
-  wide?: boolean;
-}) {
+function UploadStep({
+  previews,
+  isUploading,
+  onFileChange,
+  onRemovePhoto,
+  onContinue,
+  onBack,
+}: UploadStepProps) {
+  const [, setLocation] = useLocation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasEnoughReferences = previews.length >= MIN_COUPLE_PHOTOS;
+  const canAddMoreReferences = previews.length < MAX_COUPLE_PHOTOS;
+  const remainingReferences = Math.max(MIN_COUPLE_PHOTOS - previews.length, 0);
+  const uploadStatus = hasEnoughReferences
+    ? `${previews.length}/${MAX_COUPLE_PHOTOS} reference photos added`
+    : `${remainingReferences} more clear photo${remainingReferences === 1 ? "" : "s"} needed`;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="flex flex-1 flex-col"
+      exit={{ opacity: 0, y: -20 }}
+      className="creation-step"
     >
-      <header className="flex h-16 items-center justify-between px-5 md:h-20 md:px-10">
-        <button
-          type="button"
-          onClick={onExit}
-          disabled={exitDisabled}
-          className="mono-label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          data-testid={step === 1 ? "upload-home" : "style-home"}
+      <div className="absolute top-6 left-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLocation("/couple")}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent font-medium"
+          data-testid="upload-home"
         >
-          <Home className="h-3.5 w-3.5" /> Start over
-        </button>
-        <ol className="flex items-center gap-2" aria-label="Progress">
-          {[1, 2, 3].map((n) => (
-            <li
-              key={n}
-              aria-current={n === step ? "step" : undefined}
-              className={`h-1 w-8 rounded-full ${n < step ? "bg-rose/50" : n === step ? "bg-rose" : "bg-border"}`}
-            >
-              <span className="sr-only">{n < step ? `Step ${n}, done` : n === step ? `Step ${n}, current` : `Step ${n}`}</span>
-            </li>
-          ))}
-        </ol>
-      </header>
+          <Home className="mr-2 h-4 w-4" /> Home
+        </Button>
+      </div>
 
-      <div className={`mx-auto w-full flex-1 px-5 pb-16 pt-6 md:px-10 md:pt-10 ${wide ? "max-w-5xl" : "max-w-3xl"}`}>
-        <p className="mono-label mb-3 text-rose">Step {step} of 3</p>
-        <h2 className="font-display text-3xl font-medium tracking-tight md:text-4xl">{title}</h2>
-        <p className="mt-3 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">{lede}</p>
-        {children}
+      <div className="step-heading">
+        <p className="eyebrow text-brand mb-4">Your photos</p>
+        <h1 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">
+          You and your partner
+        </h1>
+        <p className="text-muted-foreground font-light text-lg max-w-lg mx-auto">
+          Upload clear, well-lit photos in this order: together, Partner A, then
+          Partner B.
+        </p>
+      </div>
+
+      <div className="photo-guidance">
+        {COUPLE_REFERENCE_ROLES.map((role, index) => {
+          const isFilled = previews.length > index;
+          return (
+            <div
+              key={role}
+              className={`rounded-lg border p-6 transition-colors duration-300 ${
+                isFilled ? "border-brand bg-card" : "border-border bg-card/50"
+              }`}
+            >
+              <p
+                className={`eyebrow mb-2 ${isFilled ? "text-brand" : "text-muted-foreground"}`}
+              >
+                0{index + 1} — {role}
+              </p>
+              <p
+                className={`font-light text-sm ${isFilled ? "text-muted-foreground" : "text-muted-foreground"}`}
+              >
+                {COUPLE_REFERENCE_GUIDANCE[index]}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        className="w-full rounded-lg border border-dashed border-border bg-card/50 hover:border-brand/50 hover:bg-card active:border-brand transition-colors cursor-pointer flex flex-col items-center justify-center py-8 md:py-10 px-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-card/50"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={!canAddMoreReferences || isUploading}
+        aria-label="Add photos"
+      >
+        <input
+          type="file"
+          multiple
+          hidden
+          ref={fileInputRef}
+          onChange={onFileChange}
+          disabled={!canAddMoreReferences || isUploading}
+          accept="image/jpeg,image/png,image/webp"
+          data-testid="couple-photo-input"
+        />
+        <div className="relative w-16 h-16 bg-card flex items-center justify-center mb-6 border border-border text-brand">
+          <Camera className="h-7 w-7" />
+        </div>
+        <p className="font-display text-xl font-medium text-foreground mb-3">
+          Tap to add photographs
+        </p>
+        <p className="text-base text-muted-foreground font-light max-w-md mx-auto">
+          One to three JPG, PNG, or WebP photos under 50MB — distinct angles or
+          expressions, at least 256px wide.
+        </p>
+        <p
+          className="eyebrow mt-6 text-brand"
+          data-testid="couple-photo-status"
+        >
+          {uploadStatus}
+        </p>
+      </button>
+
+      {previews.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-8 w-full">
+          {previews.map((src, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="relative group aspect-square overflow-hidden border border-border"
+            >
+              <img
+                src={src}
+                className="w-full h-full object-cover"
+                alt={`${COUPLE_REFERENCE_ROLES[i] ?? "Reference"} preview`}
+              />
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <p className="absolute left-4 bottom-4 eyebrow text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                {COUPLE_REFERENCE_ROLES[i] ?? `Reference ${i + 1}`}
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemovePhoto(i);
+                }}
+                disabled={isUploading}
+                aria-label={`Remove photo ${i + 1}`}
+                data-testid={`remove-couple-photo-${i}`}
+                className="absolute top-4 right-4 h-11 w-11 bg-black/60 text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive backdrop-blur-sm"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-lg mx-auto">
+        <Button
+          variant="ghost"
+          onClick={onBack}
+          className="w-full sm:w-1/3 py-6 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          Back
+        </Button>
+        <Button
+          variant="brand"
+          onClick={onContinue}
+          disabled={!hasEnoughReferences || isUploading}
+          className="w-full sm:w-2/3 py-6 text-base font-medium"
+          data-testid="choose-style-button"
+        >
+          Continue to styles
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
       </div>
     </motion.div>
   );
 }
 
-/**
- * Three named slots are the upload targets. Guidance, action, and preview
- * share one tile each, so the page never repeats itself.
- */
-function UploadStep({ previews, isUploading, onFileChange, onRemovePhoto, onContinue, onBack }: UploadStepProps) {
-  const [, setLocation] = useLocation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const hasEnoughReferences = previews.length >= MIN_COUPLE_PHOTOS;
-  const canAddMoreReferences = previews.length < MAX_COUPLE_PHOTOS;
-  const remaining = Math.max(MIN_COUPLE_PHOTOS - previews.length, 0);
-
-  return (
-    <StepFrame
-      step={1}
-      title="Two faces we can trust"
-      lede="One photo of you together is enough. Add one of each of you for the closest likeness."
-      onExit={() => setLocation("/couple")}
-    >
-      <input
-        type="file"
-        multiple
-        hidden
-        ref={fileInputRef}
-        onChange={onFileChange}
-        disabled={!canAddMoreReferences || isUploading}
-        accept="image/jpeg,image/png,image/webp"
-        data-testid="couple-photo-input"
-      />
-
-      <ul className="mt-8 grid grid-cols-3 gap-3 md:gap-4" aria-label="Your photos">
-        {COUPLE_REFERENCE_ROLES.map((role, index) => {
-          const src = previews[index];
-          const required = index === 0;
-          return (
-            <li key={role} className="min-w-0">
-              {src ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                  className="group relative aspect-[3/4] overflow-hidden border border-rose/60 bg-card"
-                >
-                  <img src={src} alt={`${role} photo`} className="h-full w-full object-cover" />
-                  <FrameTicks size={14} className="text-white/70" />
-                  <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/70 to-transparent" />
-                  <p className="mono-label absolute bottom-2.5 left-3 text-white">{role}</p>
-                  <button
-                    type="button"
-                    onClick={() => onRemovePhoto(index)}
-                    disabled={isUploading}
-                    aria-label={`Remove ${role} photo`}
-                    data-testid={`remove-couple-photo-${index}`}
-                    className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </motion.div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!canAddMoreReferences || isUploading}
-                  aria-label={`Add ${role} photo`}
-                  data-testid={`couple-slot-${index}`}
-                  className={`flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 border border-dashed px-2 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 ${
-                    required && previews.length === 0
-                      ? "border-rose/70 bg-card text-rose hover:bg-accent/40"
-                      : "border-border bg-card/50 text-muted-foreground hover:border-rose/60 hover:text-foreground"
-                  }`}
-                >
-                  <Camera className="h-6 w-6" />
-                  <span className="mono-label">{role}</span>
-                  <span className="text-xs leading-snug">{COUPLE_REFERENCE_GUIDANCE[index]}</span>
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      <p className="mono-label mt-5 text-muted-foreground" data-testid="couple-photo-status" aria-live="polite">
-        {hasEnoughReferences
-          ? `${previews.length} of ${MAX_COUPLE_PHOTOS} added`
-          : `${remaining} photo${remaining === 1 ? "" : "s"} needed to continue`}
-        <span className="normal-case tracking-normal"> · JPG, PNG or WebP · well lit, faces clear</span>
-      </p>
-
-      <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="ghost" onClick={onBack} className="h-12 px-4 text-base text-muted-foreground hover:text-foreground sm:w-auto">
-          Back
-        </Button>
-        <Button
-          variant="rose"
-          onClick={onContinue}
-          disabled={!hasEnoughReferences || isUploading}
-          className="h-12 px-8 text-base"
-          data-testid="choose-style-button"
-        >
-          Choose a style
-          <ArrowRight className="ml-1 h-4 w-4" />
-        </Button>
-      </div>
-    </StepFrame>
-  );
-}
-
 interface StyleStepProps {
+  hasError: boolean;
+  onRetry: () => void;
   styles: GalleryStyleSummary[];
   isLoading: boolean;
   selectedStyleId: string | null;
@@ -633,79 +612,129 @@ interface StyleStepProps {
   isSubmitting: boolean;
 }
 
-function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, onChangeCoupleName, coupleEmail, onChangeCoupleEmail, onSubmit, onBack, isSubmitting }: StyleStepProps) {
+function StyleStep({
+  hasError,
+  onRetry,
+  styles,
+  isLoading,
+  selectedStyleId,
+  onSelect,
+  coupleName,
+  onChangeCoupleName,
+  coupleEmail,
+  onChangeCoupleEmail,
+  onSubmit,
+  onBack,
+  isSubmitting,
+}: StyleStepProps) {
   const [, setLocation] = useLocation();
-  const inputClass =
-    "h-12 w-full rounded-md border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:border-rose focus:outline-none focus:ring-2 focus:ring-ring/50 disabled:opacity-50";
-  const canSubmit = Boolean(selectedStyleId) && coupleEmail.trim().length > 0 && !isSubmitting;
-
   return (
-    <StepFrame
-      step={2}
-      title="Set the scene"
-      lede="Pick the light your day should have. Your four portraits and the reel follow it."
-      onExit={() => setLocation("/couple")}
-      exitDisabled={isSubmitting}
-      wide
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="creation-step"
     >
+      <div className="absolute top-6 left-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLocation("/couple")}
+          disabled={isSubmitting}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent font-medium"
+          data-testid="style-home"
+        >
+          <Home className="mr-2 h-4 w-4" /> Home
+        </Button>
+      </div>
+
+      <div className="step-heading">
+        <p className="eyebrow text-brand mb-4">Style & delivery</p>
+        <h1 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">
+          Set the scene
+        </h1>
+        <p className="text-muted-foreground font-light text-lg max-w-xl mx-auto">
+          Choose the editorial direction for your venue-branded glimpse gallery.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-32 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
+          {styles.length === 0 && (
+            <div role="status"><p className="text-sm text-muted-foreground">{hasError ? "Styles couldn’t be loaded. Your photos are still here." : "No styles are available at the moment."}</p><Button variant="outline" onClick={onRetry} className="mt-3">Reload styles</Button></div>
+          )}
+          {styles.map((style, index) => {
+            const isSelected = selectedStyleId === style.id;
+            return (
+              <button
+                key={style.id}
+                type="button"
+                onClick={() => onSelect(style.id)}
+                disabled={isSubmitting}
+                data-testid={`style-option-${style.id}`}
+                aria-pressed={isSelected}
+                className={`relative text-left rounded-lg p-6 md:p-8 border transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isSelected
+                    ? "border-brand bg-card"
+                    : "border-border bg-card hover:border-brand/40 hover:bg-accent/40"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`eyebrow mb-2 ${isSelected ? "text-brand" : "text-muted-foreground"}`}
+                    >
+                      Style {String(index + 1).padStart(2, "0")}
+                    </p>
+                    <h3 className="font-display font-medium text-xl md:text-2xl mb-2 tracking-tight text-foreground">
+                      {style.name}
+                    </h3>
+                    <p className="text-sm md:text-base text-muted-foreground font-light leading-relaxed">
+                      {style.description}
+                    </p>
+                  </div>
+                  <div
+                    aria-hidden
+                    className={`shrink-0 h-6 w-6 border flex items-center justify-center transition-colors mt-1 ${
+                      isSelected
+                        ? "bg-brand border-brand text-brand-foreground"
+                        : "border-border text-transparent"
+                    }`}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <form
+        className="w-full flex flex-col items-center"
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit();
         }}
       >
-        <fieldset className="mt-8" disabled={isSubmitting}>
-          <legend className="sr-only">Gallery style</legend>
-          {isLoading ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-28 w-full rounded-none" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {styles.map((style) => {
-                const isSelected = selectedStyleId === style.id;
-                return (
-                  <label
-                    key={style.id}
-                    className={`relative flex cursor-pointer items-start gap-4 border p-5 text-left transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring md:p-6 ${
-                      isSelected ? "border-rose bg-card" : "border-border bg-card/60 hover:border-rose/40 hover:bg-card"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="gallery-style"
-                      value={style.id}
-                      checked={isSelected}
-                      onChange={() => onSelect(style.id)}
-                      className="sr-only"
-                      data-testid={`style-option-${style.id}`}
-                    />
-                    <span
-                      aria-hidden
-                      className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center border transition-colors ${
-                        isSelected ? "border-rose bg-rose text-rose-foreground" : "border-border"
-                      }`}
-                    >
-                      {isSelected && <Check className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block font-display text-xl font-medium leading-tight tracking-tight md:text-2xl">{style.name}</span>
-                      <span className="mt-1.5 block text-sm leading-relaxed text-muted-foreground">{style.description}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </fieldset>
-
-        <div className="mt-10 grid gap-5 border-t border-border pt-8 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <label htmlFor="couple-email" className="mono-label block text-muted-foreground">
-              Your email
+        <div className="delivery-fields">
+          <div className="delivery-field">
+            <label
+              htmlFor="couple-email"
+              className="eyebrow text-brand flex items-center gap-2 mb-2"
+            >
+              <Mail className="h-4 w-4" /> Your email
             </label>
+            <p className="text-sm text-muted-foreground font-light mb-4">
+              Required so we can send your gallery link and you can find it
+              again later.
+            </p>
             <input
               id="couple-email"
               type="email"
@@ -715,46 +744,75 @@ function StyleStep({ styles, isLoading, selectedStyleId, onSelect, coupleName, o
               onChange={(e) => onChangeCoupleEmail(e.target.value)}
               disabled={isSubmitting}
               autoComplete="email"
-              inputMode="email"
               data-testid="style-couple-email"
-              className={inputClass}
+              className="w-full bg-background border border-input rounded-md px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
             />
-            <p className="text-xs text-muted-foreground">We send your gallery link here, so you can always find it.</p>
           </div>
-          <div className="space-y-1.5">
-            <label htmlFor="couple-name-optional" className="mono-label block text-muted-foreground">
-              Your names <span className="normal-case tracking-normal">(optional)</span>
+
+          <div className="delivery-field">
+            <label
+              htmlFor="couple-name-optional"
+              className="eyebrow text-brand mb-4 block"
+            >
+              Your names (optional)
             </label>
             <input
               id="couple-name-optional"
               type="text"
-              placeholder="Avery & Jordan"
+              placeholder="Jane & John"
               value={coupleName}
               onChange={(e) => onChangeCoupleName(e.target.value)}
               disabled={isSubmitting}
-              autoComplete="off"
+              autoComplete="name"
               maxLength={80}
               data-testid="style-couple-name"
-              className={inputClass}
+              className="w-full bg-background border border-input rounded-md px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
             />
-            <p className="text-xs text-muted-foreground">Headlines your gallery.</p>
+          </div>
+
+          <div className="delivery-summary">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="h-5 w-5 text-brand" />
+              <p className="eyebrow text-brand">Gallery Delivery</p>
+            </div>
+            <div className="font-display text-xl md:text-2xl font-medium text-foreground mb-2">
+              4 portraits + motion reel
+            </div>
+            <div className="text-base text-muted-foreground font-light leading-relaxed">
+              Editorial portraits anchored to this venue, compiled into a gentle
+              branded reel. Usually ready in a few minutes.
+            </div>
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Button type="button" variant="ghost" onClick={onBack} disabled={isSubmitting} className="h-12 px-4 text-base text-muted-foreground hover:text-foreground sm:w-auto" data-testid="style-back-button">
+        <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-lg mx-auto">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onBack}
+            disabled={isSubmitting}
+            className="w-full sm:w-1/3 py-6 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            data-testid="style-back-button"
+          >
             Back
           </Button>
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <Button type="submit" variant="rose" disabled={!canSubmit} className="h-12 px-8 text-base" data-testid="generate-button">
-              {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Images className="h-5 w-5" />}
-              Create my gallery
-            </Button>
-            <p className="text-xs text-muted-foreground sm:text-right">Four portraits and a reel, usually ready in a few minutes.</p>
-          </div>
+          <Button
+            type="submit"
+            variant="brand"
+            disabled={!selectedStyleId || !coupleEmail.trim() || isSubmitting}
+            className="w-full sm:w-2/3 py-6 text-base font-medium"
+            data-testid="generate-button"
+          >
+            {isSubmitting ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <Images className="mr-2 h-5 w-5" />
+            )}
+            Compose my gallery
+          </Button>
         </div>
       </form>
-    </StepFrame>
+    </motion.div>
   );
 }
 
@@ -764,14 +822,18 @@ function SubmittingStep() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex flex-1 flex-col items-center justify-center px-6 text-center"
-      aria-busy="true"
+      className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto"
     >
-      <Loader2 className="mb-8 h-8 w-8 animate-spin text-rose" />
-      <p className="mono-label mb-4 text-rose">Sending your photos</p>
-      <h2 className="font-display text-3xl font-medium tracking-tight md:text-4xl">One moment.</h2>
-      <p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
-        Your gallery page opens next and keeps developing there, even if you close this tab.
+      <div className="relative w-20 h-20 bg-card border border-border flex items-center justify-center mb-8">
+        <Loader2 className="h-8 w-8 animate-spin text-brand" />
+      </div>
+      <p className="eyebrow text-brand mb-4">Developing…</p>
+      <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-6">
+        Sending your photographs...
+      </h2>
+      <p className="text-lg text-muted-foreground font-light leading-relaxed">
+        Keep this page open. We are preparing to place you inside your venue for
+        review.
       </p>
     </motion.div>
   );
@@ -779,14 +841,13 @@ function SubmittingStep() {
 
 function CoupleSkeleton() {
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground" aria-busy="true" aria-label="Opening the venue">
-      <header className="flex h-16 items-center px-5 md:h-20 md:px-10">
-        <GlimpseLogo href="/couple" />
-      </header>
-      <main className="flex flex-1 flex-col items-center justify-center gap-5 pb-24">
-        <Loader2 className="h-8 w-8 animate-spin text-rose" />
-        <p className="mono-label text-muted-foreground">Opening the venue…</p>
-      </main>
+    <div className="min-h-screen bg-background p-6 flex flex-col">
+      <Skeleton className="h-24 w-full mb-12 rounded-lg" />
+      <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full">
+        <Skeleton className="h-12 w-64 mb-6 rounded-md" />
+        <Skeleton className="h-6 w-full max-w-96 mb-16 rounded-md" />
+        <Skeleton className="h-80 w-full rounded-lg" />
+      </div>
     </div>
   );
 }

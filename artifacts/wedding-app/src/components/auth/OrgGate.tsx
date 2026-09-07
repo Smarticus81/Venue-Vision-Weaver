@@ -10,74 +10,25 @@ import {
 } from "@clerk/clerk-react";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
-import { FrameTicks } from "@/components/motion";
+import { FormLayout } from "@/components/layout/SiteChrome";
 import {
   clerkConfigured,
   clerkExpectedDomain,
   clerkStatus,
-  darkroomAppearance,
+  gardenAppearance,
 } from "@/lib/clerk";
 
 export function ClerkSetupNotice() {
-  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-  return (
-    <div className="grain relative min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-      <div className="relative w-full max-w-md bg-card p-8">
-        <FrameTicks size={16} className="text-foreground/40" />
-        <p className="mono-label mb-4 text-rose">Setup required</p>
-        {clerkStatus === "domain-mismatch" ? (
-          <>
-            <h1 className="font-display text-2xl font-medium mb-3">
-              Sign-in lives on {clerkExpectedDomain}
-            </h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              This page is open at <span className="font-mono">{hostname}</span>, but the
-              configured Clerk production key only works on{" "}
-              <span className="font-mono">{clerkExpectedDomain}</span> and its subdomains.
-            </p>
-            <a
-              href={`https://${clerkExpectedDomain}${typeof window !== "undefined" ? window.location.pathname : ""}`}
-              className="mt-6 inline-flex h-11 items-center justify-center bg-rose px-6 text-sm font-medium text-rose-foreground transition-colors hover:bg-rose-hover"
-            >
-              Continue on {clerkExpectedDomain}
-            </a>
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              To sign in from this address instead, use a development{" "}
-              <span className="font-mono">pk_test_…</span> key for this environment.
-            </p>
-          </>
-        ) : clerkStatus === "invalid-key" ? (
-          <>
-            <h1 className="font-display text-2xl font-medium mb-3">Sign-in key is malformed</h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              The configured Clerk publishable key doesn't look like a valid{" "}
-              <span className="font-mono">pk_test_…</span> or{" "}
-              <span className="font-mono">pk_live_…</span> key. Check{" "}
-              <span className="font-mono">CLERK_PUBLISHABLE_KEY</span> /{" "}
-              <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> in the server
-              environment, then redeploy.
-            </p>
-          </>
-        ) : (
-          <>
-            <h1 className="font-display text-2xl font-medium mb-3">Sign-in isn't configured yet</h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Set <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> and{" "}
-              <span className="font-mono">CLERK_SECRET_KEY</span> in the server environment,
-              then redeploy. See <span className="font-mono">.env.example</span>.
-            </p>
-          </>
-        )}
-      </div>
-    </div>
-  );
+  const mismatch = clerkStatus === "domain-mismatch";
+  return <FormLayout label="Venue sign-in" title={mismatch ? "Continue to your workspace." : "Sign-in is temporarily unavailable."} description={mismatch ? "Your venue workspace is available at the address below." : "We're getting your workspace ready. Please try again shortly."}>
+    {mismatch ? <a className="nav-cta" href={`https://${clerkExpectedDomain}${window.location.pathname}`}>Continue on {clerkExpectedDomain}</a> : <p role="status" className="text-muted-foreground">Please contact your venue support team if this continues.</p>}
+  </FormLayout>;
 }
 
 function ClerkConnectionFailed() {
   return (
     <div className="relative w-full max-w-md bg-card p-8 text-center">
-      <FrameTicks size={16} className="text-foreground/40" />
-      <p className="mono-label mb-4 text-rose">Connection issue</p>
+      <p className="eyebrow mb-4 text-brand">Connection issue</p>
       <h2 className="font-display text-xl font-medium mb-3">Sign-in couldn't load</h2>
       <p className="text-sm leading-relaxed text-muted-foreground">
         We couldn't reach the sign-in service. Check your connection or any
@@ -86,7 +37,7 @@ function ClerkConnectionFailed() {
       <button
         type="button"
         onClick={() => window.location.reload()}
-        className="mt-6 inline-flex h-11 items-center justify-center bg-rose px-6 text-sm font-medium text-rose-foreground transition-colors hover:bg-rose-hover"
+        className="mt-6 inline-flex h-11 items-center justify-center bg-brand px-6 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-hover"
       >
         Reload
       </button>
@@ -102,7 +53,7 @@ function ClerkWidgetSpinner() {
   }, []);
   return (
     <div className="flex flex-col items-center gap-4 py-10">
-      <Loader2 className="h-8 w-8 animate-spin text-rose" />
+      <Loader2 className="h-8 w-8 animate-spin text-brand" />
       {slow && (
         <p className="max-w-xs text-center text-sm text-muted-foreground">
           Still connecting to the sign-in service… if this persists, check your
@@ -136,7 +87,7 @@ export function ClerkWidgetFrame({ children }: { children: ReactNode }) {
 function CenteredSpinner() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <Loader2 className="h-10 w-10 animate-spin text-rose" />
+      <Loader2 className="h-10 w-10 animate-spin text-brand" />
     </div>
   );
 }
@@ -177,7 +128,7 @@ export function OrgGate({ children }: { children: ReactNode }) {
     return (
       <>
         <ClerkFailed>
-          <div className="grain relative min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+          <div className="relative min-h-screen bg-background text-foreground flex items-center justify-center px-6">
             <ClerkConnectionFailed />
           </div>
         </ClerkFailed>
@@ -196,9 +147,9 @@ export function OrgGate({ children }: { children: ReactNode }) {
     const hasMembership = (userMemberships?.data?.length ?? 0) > 0;
     if (hasMembership) return <CenteredSpinner />;
     return (
-      <div className="grain relative min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-8 px-6 py-16">
+      <div className="relative min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-8 px-6 py-16">
         <div className="text-center max-w-md">
-          <p className="mono-label mb-4 text-rose">One last step</p>
+          <p className="eyebrow mb-4 text-brand">One last step</p>
           <h1 className="font-display text-3xl font-medium mb-3">Name your organization</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Your organization owns billing and credits for every venue you add.
@@ -206,7 +157,7 @@ export function OrgGate({ children }: { children: ReactNode }) {
           </p>
         </div>
         <CreateOrganization
-          appearance={darkroomAppearance}
+          appearance={gardenAppearance}
           skipInvitationScreen
           hideSlug
         />

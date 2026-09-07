@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FrameTicks } from "@/components/motion";
 import { copyText } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -21,9 +20,9 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
       const [markup, dataUrl] = await Promise.all([
         QRCode.toString(url, {
           type: "svg",
-          margin: 0,
+          margin: 4,
           errorCorrectionLevel: "M",
-          color: { dark: "#f1ece4", light: "#00000000" },
+          color: { dark: "#23392c", light: "#ffffff" },
         }),
         QRCode.toDataURL(url, {
           width: 1024,
@@ -36,7 +35,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         setSvg(markup);
         setPng(dataUrl);
       }
-    });
+    }).catch(() => { if (!cancelled) { setSvg(null); setPng(null); } });
     return () => {
       cancelled = true;
     };
@@ -60,7 +59,6 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         role="img"
         aria-label={`QR code for ${url}`}
       >
-        <FrameTicks size={12} className="text-foreground/50" />
         {svg ? (
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
         ) : (
@@ -69,7 +67,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="mono-label text-rose" id="couple-link-title">
+        <p className="eyebrow text-brand" id="couple-link-title">
           Your couple link
         </p>
         <p className="mt-2 font-mono text-sm text-foreground [overflow-wrap:anywhere]" data-testid="couple-link-url">
@@ -78,14 +76,14 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {venueReady
             ? "Print the code for tour cards, or paste the link into your follow-up email."
-            : "Add a venue photo below and this link opens for couples."}
+            : "Add a venue photo and this link opens for couples."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="rose"
+            variant="brand"
             onClick={async () => setCopied(await copyText(url))}
-            className={cn("h-10 px-4", copied && "border-emerald-400/30 bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/15")}
+            className={cn("h-10 px-4", copied && "border-emerald-400/30 bg-emerald-400/15 text-emerald-700 hover:bg-emerald-400/15")}
             data-testid="couple-link-copy"
           >
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
