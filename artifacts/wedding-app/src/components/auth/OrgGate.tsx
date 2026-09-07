@@ -1,3 +1,5 @@
+import { FormLayout } from "@/components/layout/SiteChrome";
+import { Link } from "wouter";
 import { useEffect, type ReactNode } from "react";
 import {
   CreateOrganization,
@@ -7,30 +9,31 @@ import {
 } from "@clerk/clerk-react";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
-import { FrameTicks } from "@/components/motion";
-import { clerkConfigured, darkroomAppearance } from "@/lib/clerk";
+import { clerkConfigured, gardenAppearance } from "@/lib/clerk";
 
 export function ClerkSetupNotice() {
   return (
-    <div className="grain relative min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-      <div className="relative w-full max-w-md bg-card p-8">
-        <FrameTicks size={16} className="text-foreground/40" />
-        <p className="mono-label mb-4 text-rose">Setup required</p>
-        <h1 className="font-display text-2xl font-medium mb-3">Sign-in isn't configured yet</h1>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Set <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> and{" "}
-          <span className="font-mono">CLERK_SECRET_KEY</span> in the server environment,
-          then redeploy. See <span className="font-mono">.env.example</span>.
-        </p>
-      </div>
-    </div>
+    <FormLayout
+      label="Venue workspace"
+      title="We’ll be right with you."
+      description="Explore what’s possible while we get this workspace ready."
+    >
+      <h2>Sign-in is unavailable</h2>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        This workspace is still being set up. Please return later or contact
+        your venue team.
+      </p>
+      <Link href="/" className="text-link">
+        Back to glimpse →
+      </Link>
+    </FormLayout>
   );
 }
 
 function CenteredSpinner() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <Loader2 className="h-10 w-10 animate-spin text-rose" />
+      <Loader2 className="h-10 w-10 animate-spin text-brand" />
     </div>
   );
 }
@@ -45,7 +48,11 @@ export function OrgGate({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const { isLoaded: userLoaded, isSignedIn } = useUser();
   const { organization, isLoaded: orgLoaded } = useOrganization();
-  const { isLoaded: listLoaded, userMemberships, setActive } = useOrganizationList({
+  const {
+    isLoaded: listLoaded,
+    userMemberships,
+    setActive,
+  } = useOrganizationList({
     userMemberships: { infinite: false },
   });
 
@@ -72,17 +79,19 @@ export function OrgGate({ children }: { children: ReactNode }) {
     const hasMembership = (userMemberships?.data?.length ?? 0) > 0;
     if (hasMembership) return <CenteredSpinner />;
     return (
-      <div className="grain relative min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-8 px-6 py-16">
+      <div className="relative min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-8 px-6 py-16">
         <div className="text-center max-w-md">
-          <p className="mono-label mb-4 text-rose">One last step</p>
-          <h1 className="font-display text-3xl font-medium mb-3">Name your organization</h1>
+          <p className="eyebrow mb-4 text-brand">One last step</p>
+          <h1 className="font-display text-3xl font-medium mb-3">
+            Name your organization
+          </h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Your organization owns billing and credits for every venue you add.
             Teammates you invite sign in with their own profiles under it.
           </p>
         </div>
         <CreateOrganization
-          appearance={darkroomAppearance}
+          appearance={gardenAppearance}
           skipInvitationScreen
           hideSlug
         />

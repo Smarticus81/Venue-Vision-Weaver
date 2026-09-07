@@ -1,17 +1,16 @@
+import { FormLayout } from "@/components/layout/SiteChrome";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { SignedIn, SignedOut, SignUp, useUser } from "@clerk/clerk-react";
-import { ArrowLeft, ArrowRight, Building2, Loader2 } from "lucide-react";
+import { ArrowRight, Building2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { toVenueSlug } from "@/lib/venueSlug";
-import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
-import { FrameTicks } from "@/components/motion";
 import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
-import { clerkConfigured, darkroomAppearance } from "@/lib/clerk";
+import { clerkConfigured, gardenAppearance } from "@/lib/clerk";
 
 /**
  * Onboarding: sign up (Clerk profile) → name the organization (billing
@@ -22,48 +21,38 @@ export default function CreateVenuePage() {
   if (!clerkConfigured) return <ClerkSetupNotice />;
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col">
-      <header className="absolute top-0 w-full p-6 sm:p-10 flex items-center justify-between z-10">
-        <GlimpseLogo href="/" />
-        <a
-          href="/"
-          className="mono-label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to site
-        </a>
-      </header>
-
-      <main className="grain flex-1 flex items-center justify-center p-6 relative py-20">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_50%_0%,hsl(var(--rose)/0.08),transparent_70%)] pointer-events-none" />
-
-        <SignedOut>
-          <div className="relative z-10 mt-10 flex flex-col items-center gap-6">
-            <div className="text-center max-w-md">
-              <p className="mono-label mb-3 text-rose">For venues</p>
-              <h1 className="font-display text-3xl font-medium tracking-tight">
-                Create your profile
-              </h1>
-              <p className="mt-2 text-muted-foreground font-light">
-                Then name your organization — it owns billing, credits, and every
-                venue you add.
-              </p>
-            </div>
-            <SignUp
-              appearance={darkroomAppearance}
-              routing="hash"
-              signInUrl="/login"
-              forceRedirectUrl="/create-venue"
-            />
+    <FormLayout
+      label="Make room for possibility"
+      title="Your venue. A new perspective."
+      description="Create your account, name your team, and add your first venue. Your team shares credits across all your spaces."
+    >
+      <SignedOut>
+        <div className="flex flex-col items-center gap-6">
+          <div className="text-center max-w-md">
+            <p className="eyebrow mb-3 text-brand">For venues</p>
+            <h2 className="font-display text-3xl font-medium tracking-tight">
+              Create your account
+            </h2>
+            <p className="mt-2 text-muted-foreground font-light">
+              Then name your organization — it owns billing, credits, and every
+              venue you add.
+            </p>
           </div>
-        </SignedOut>
+          <SignUp
+            appearance={gardenAppearance}
+            routing="hash"
+            signInUrl="/login"
+            forceRedirectUrl="/create-venue"
+          />
+        </div>
+      </SignedOut>
 
-        <SignedIn>
-          <OrgGate>
-            <VenueForm />
-          </OrgGate>
-        </SignedIn>
-      </main>
-    </div>
+      <SignedIn>
+        <OrgGate>
+          <VenueForm />
+        </OrgGate>
+      </SignedIn>
+    </FormLayout>
   );
 }
 
@@ -89,7 +78,10 @@ function VenueForm() {
       return;
     }
     if (!ownerEmail) {
-      toast({ title: "Your profile has no email address", variant: "destructive" });
+      toast({
+        title: "Your profile has no email address",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -104,7 +96,8 @@ function VenueForm() {
           ownerEmail,
           contactEmail: ownerEmail,
           bookingUrl: formData.bookingUrl.trim() || undefined,
-          tagline: "Photoreal preview galleries that help prospects visualize the day and inquire faster.",
+          tagline:
+            "Photoreal preview galleries that help prospects visualize the day and inquire faster.",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -130,16 +123,14 @@ function VenueForm() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="w-full max-w-md mt-10"
+      className="w-full"
     >
-      <div className="relative bg-card p-8">
-        <FrameTicks size={16} className="text-foreground/40" />
-
+      <div className="relative">
         <div className="mb-8">
-          <p className="mono-label mb-4 text-rose">For venues</p>
-          <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">
+          <p className="eyebrow mb-4 text-brand">For venues</p>
+          <h2 className="font-display text-3xl font-medium tracking-tight text-foreground">
             Add a venue
-          </h1>
+          </h2>
           <p className="mt-2 text-muted-foreground font-light">
             It joins your organization — billing and credits stay shared across
             all of your venues.
@@ -148,15 +139,22 @@ function VenueForm() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="venue-name" className="mono-label text-muted-foreground">Venue name</Label>
+            <Label
+              htmlFor="venue-name"
+              className="eyebrow text-muted-foreground"
+            >
+              Venue name
+            </Label>
             <div className="relative">
               <Building2 className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="venue-name"
                 required
                 value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                className="h-12 pl-11 rounded-none border-input bg-background focus-visible:ring-ring"
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, name: e.target.value }))
+                }
+                className="h-12 pl-11 rounded-md border-input bg-background focus-visible:ring-ring"
                 placeholder="The Willow House"
                 data-testid="venue-name-input"
                 autoComplete="organization"
@@ -165,33 +163,48 @@ function VenueForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="booking-url" className="mono-label text-muted-foreground">Tour booking link <span className="text-muted-foreground font-normal normal-case">(optional)</span></Label>
+            <Label
+              htmlFor="booking-url"
+              className="eyebrow text-muted-foreground"
+            >
+              Tour booking link{" "}
+              <span className="text-muted-foreground font-normal normal-case">
+                (optional)
+              </span>
+            </Label>
             <Input
               id="booking-url"
+              type="url"
               value={formData.bookingUrl}
-              onChange={(e) => setFormData((prev) => ({ ...prev, bookingUrl: e.target.value }))}
-              className="h-12 rounded-none border-input bg-background focus-visible:ring-ring"
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, bookingUrl: e.target.value }))
+              }
+              className="h-12 rounded-md border-input bg-background focus-visible:ring-ring"
               placeholder="https://yourvenue.com/tours"
               data-testid="venue-booking-url-input"
               autoComplete="url"
             />
           </div>
 
-          <div className="border-l-2 border-rose/40 pl-4 text-sm font-light leading-relaxed text-muted-foreground">
+          <div className="border-l-2 border-brand/40 pl-4 text-sm font-light leading-relaxed text-muted-foreground">
             Notifications and inquiry replies go to{" "}
-            <span className="text-foreground">{ownerEmail || "your profile email"}</span>.
-            You can change the public contact email later in the dashboard.
+            <span className="text-foreground">
+              {ownerEmail || "your profile email"}
+            </span>
+            . You can change the public contact email later in the dashboard.
           </div>
 
           <Button
             type="submit"
-            variant="rose"
+            variant="brand"
             disabled={isSubmitting}
-            className="w-full h-12 rounded-none font-medium mt-4"
+            className="w-full h-12 rounded-md font-medium mt-4"
             data-testid="create-venue-submit"
           >
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Enter dashboard <ArrowRight className="ml-2 h-4 w-4" />
+            {isSubmitting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Create venue <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </form>
 

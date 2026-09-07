@@ -1,15 +1,7 @@
-/**
- * Brand imagery generated in the Higgsfield studio, art-directed to the
- * editorial-darkroom token system (warm near-black, candlelight rose),
- * self-hosted under public/brand (fetched + committed by the
- * fetch-brand-assets workflow, then trimmed/optimized).
- *
- * To regenerate or re-fetch originals: scripts/fetch-brand-assets.mjs
- * (source job URLs live there).
- */
+/** Self-hosted AI sample imagery. Garden hero: Higgsfield job 9d6bf43d-32da-4f4d-8dd1-a92697e06169. */
 
 export const BRAND_ASSETS = {
-  heroAtmosphere: "/brand/hero-atmosphere.webp",
+  heroAtmosphere: "/brand/garden-venue.webp",
   frameCeremony: "/brand/frame-ceremony.webp",
   frameFirstDance: "/brand/frame-first-dance.webp",
   frameGoldenHour: "/brand/frame-golden-hour.webp",
