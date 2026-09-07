@@ -21,12 +21,34 @@ import type {
   BillingCheckoutBody,
   BillingCheckoutResponse,
   BillingPortalResponse,
+  ControlActionDecisionBody,
+  ControlActionResponse,
+  ControlActionsResponse,
+  ControlAgentResponse,
+  ControlAgentStatusBody,
+  ControlAuditResponse,
+  ControlExperimentsResponse,
+  ControlMetricsHistoryResponse,
+  ControlOverviewResponse,
+  ControlPoliciesResponse,
+  ControlRunDetailResponse,
+  ControlRunStartedResponse,
+  ControlRunsResponse,
+  ControlTaskResponse,
+  ControlTaskStatusBody,
+  ControlTasksResponse,
   CreateSessionBody,
   CreateVenueBody,
   DeleteSessionResponse,
   ErrorEnvelope,
+  GetControlAuditParams,
+  GetControlMetricsHistoryParams,
   GetStorageObjectParams,
   HealthStatus,
+  ListControlActionsParams,
+  ListControlExperimentsParams,
+  ListControlRunsParams,
+  ListControlTasksParams,
   ListGalleryStylesResponse,
   ListSessionsResponse,
   ListVenueMediaResponse,
@@ -2385,6 +2407,1178 @@ export function useGetStorageObject<
     params,
     options,
   );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Operator cockpit — live KPIs, agent fleet, and queue counts
+ */
+export const getGetControlOverviewUrl = () => {
+  return `/api/control/overview`;
+};
+
+export const getControlOverview = async (
+  options?: RequestInit,
+): Promise<ControlOverviewResponse> => {
+  return customFetch<ControlOverviewResponse>(getGetControlOverviewUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetControlOverviewQueryKey = () => {
+  return [`/api/control/overview`] as const;
+};
+
+export const getGetControlOverviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlOverview>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetControlOverviewQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlOverview>>
+  > = ({ signal }) => getControlOverview({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOverview>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlOverviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlOverview>>
+>;
+export type GetControlOverviewQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Operator cockpit — live KPIs, agent fleet, and queue counts
+ */
+
+export function useGetControlOverview<
+  TData = Awaited<ReturnType<typeof getControlOverview>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlOverviewQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trigger an agent run immediately
+ */
+export const getRunControlAgentUrl = (key: string) => {
+  return `/api/control/agents/${key}/run`;
+};
+
+export const runControlAgent = async (
+  key: string,
+  options?: RequestInit,
+): Promise<ControlRunStartedResponse> => {
+  return customFetch<ControlRunStartedResponse>(getRunControlAgentUrl(key), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunControlAgentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runControlAgent>>,
+    TError,
+    { key: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runControlAgent>>,
+  TError,
+  { key: string },
+  TContext
+> => {
+  const mutationKey = ["runControlAgent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runControlAgent>>,
+    { key: string }
+  > = (props) => {
+    const { key } = props ?? {};
+
+    return runControlAgent(key, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunControlAgentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runControlAgent>>
+>;
+
+export type RunControlAgentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Trigger an agent run immediately
+ */
+export const useRunControlAgent = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runControlAgent>>,
+    TError,
+    { key: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runControlAgent>>,
+  TError,
+  { key: string },
+  TContext
+> => {
+  return useMutation(getRunControlAgentMutationOptions(options));
+};
+
+/**
+ * @summary Pause or resume an agent
+ */
+export const getSetControlAgentStatusUrl = (key: string) => {
+  return `/api/control/agents/${key}/status`;
+};
+
+export const setControlAgentStatus = async (
+  key: string,
+  controlAgentStatusBody: ControlAgentStatusBody,
+  options?: RequestInit,
+): Promise<ControlAgentResponse> => {
+  return customFetch<ControlAgentResponse>(getSetControlAgentStatusUrl(key), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(controlAgentStatusBody),
+  });
+};
+
+export const getSetControlAgentStatusMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlAgentStatus>>,
+    TError,
+    { key: string; data: BodyType<ControlAgentStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setControlAgentStatus>>,
+  TError,
+  { key: string; data: BodyType<ControlAgentStatusBody> },
+  TContext
+> => {
+  const mutationKey = ["setControlAgentStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setControlAgentStatus>>,
+    { key: string; data: BodyType<ControlAgentStatusBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return setControlAgentStatus(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetControlAgentStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setControlAgentStatus>>
+>;
+export type SetControlAgentStatusMutationBody =
+  BodyType<ControlAgentStatusBody>;
+export type SetControlAgentStatusMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Pause or resume an agent
+ */
+export const useSetControlAgentStatus = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlAgentStatus>>,
+    TError,
+    { key: string; data: BodyType<ControlAgentStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setControlAgentStatus>>,
+  TError,
+  { key: string; data: BodyType<ControlAgentStatusBody> },
+  TContext
+> => {
+  return useMutation(getSetControlAgentStatusMutationOptions(options));
+};
+
+/**
+ * @summary Recent agent runs
+ */
+export const getListControlRunsUrl = (params?: ListControlRunsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/runs?${stringifiedParams}`
+    : `/api/control/runs`;
+};
+
+export const listControlRuns = async (
+  params?: ListControlRunsParams,
+  options?: RequestInit,
+): Promise<ControlRunsResponse> => {
+  return customFetch<ControlRunsResponse>(getListControlRunsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListControlRunsQueryKey = (params?: ListControlRunsParams) => {
+  return [`/api/control/runs`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlRuns>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListControlRunsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listControlRuns>>> = ({
+    signal,
+  }) => listControlRuns(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlRuns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlRuns>>
+>;
+export type ListControlRunsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Recent agent runs
+ */
+
+export function useListControlRuns<
+  TData = Awaited<ReturnType<typeof listControlRuns>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlRunsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Full run detail including the tool-call transcript
+ */
+export const getGetControlRunUrl = (id: number) => {
+  return `/api/control/runs/${id}`;
+};
+
+export const getControlRun = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ControlRunDetailResponse> => {
+  return customFetch<ControlRunDetailResponse>(getGetControlRunUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetControlRunQueryKey = (id: number) => {
+  return [`/api/control/runs/${id}`] as const;
+};
+
+export const getGetControlRunQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlRun>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlRun>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetControlRunQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getControlRun>>> = ({
+    signal,
+  }) => getControlRun(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlRun>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlRunQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlRun>>
+>;
+export type GetControlRunQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Full run detail including the tool-call transcript
+ */
+
+export function useGetControlRun<
+  TData = Awaited<ReturnType<typeof getControlRun>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlRun>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlRunQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Governed actions (approval queue and history)
+ */
+export const getListControlActionsUrl = (params?: ListControlActionsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/actions?${stringifiedParams}`
+    : `/api/control/actions`;
+};
+
+export const listControlActions = async (
+  params?: ListControlActionsParams,
+  options?: RequestInit,
+): Promise<ControlActionsResponse> => {
+  return customFetch<ControlActionsResponse>(getListControlActionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListControlActionsQueryKey = (
+  params?: ListControlActionsParams,
+) => {
+  return [`/api/control/actions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlActionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlActions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlActionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlActions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlActionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlActions>>
+  > = ({ signal }) => listControlActions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlActions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlActionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlActions>>
+>;
+export type ListControlActionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Governed actions (approval queue and history)
+ */
+
+export function useListControlActions<
+  TData = Awaited<ReturnType<typeof listControlActions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlActionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlActions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlActionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Approve (executes immediately) or reject a pending action
+ */
+export const getDecideControlActionUrl = (id: number) => {
+  return `/api/control/actions/${id}/decision`;
+};
+
+export const decideControlAction = async (
+  id: number,
+  controlActionDecisionBody: ControlActionDecisionBody,
+  options?: RequestInit,
+): Promise<ControlActionResponse> => {
+  return customFetch<ControlActionResponse>(getDecideControlActionUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(controlActionDecisionBody),
+  });
+};
+
+export const getDecideControlActionMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideControlAction>>,
+    TError,
+    { id: number; data: BodyType<ControlActionDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideControlAction>>,
+  TError,
+  { id: number; data: BodyType<ControlActionDecisionBody> },
+  TContext
+> => {
+  const mutationKey = ["decideControlAction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideControlAction>>,
+    { id: number; data: BodyType<ControlActionDecisionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return decideControlAction(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideControlActionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideControlAction>>
+>;
+export type DecideControlActionMutationBody =
+  BodyType<ControlActionDecisionBody>;
+export type DecideControlActionMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Approve (executes immediately) or reject a pending action
+ */
+export const useDecideControlAction = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideControlAction>>,
+    TError,
+    { id: number; data: BodyType<ControlActionDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideControlAction>>,
+  TError,
+  { id: number; data: BodyType<ControlActionDecisionBody> },
+  TContext
+> => {
+  return useMutation(getDecideControlActionMutationOptions(options));
+};
+
+/**
+ * @summary Agent-raised work items
+ */
+export const getListControlTasksUrl = (params?: ListControlTasksParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/tasks?${stringifiedParams}`
+    : `/api/control/tasks`;
+};
+
+export const listControlTasks = async (
+  params?: ListControlTasksParams,
+  options?: RequestInit,
+): Promise<ControlTasksResponse> => {
+  return customFetch<ControlTasksResponse>(getListControlTasksUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListControlTasksQueryKey = (
+  params?: ListControlTasksParams,
+) => {
+  return [`/api/control/tasks`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlTasksQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlTasks>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlTasksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlTasks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlTasksQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlTasks>>
+  > = ({ signal }) => listControlTasks(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlTasks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlTasksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlTasks>>
+>;
+export type ListControlTasksQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Agent-raised work items
+ */
+
+export function useListControlTasks<
+  TData = Awaited<ReturnType<typeof listControlTasks>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlTasksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlTasks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlTasksQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Move a task through its lifecycle
+ */
+export const getSetControlTaskStatusUrl = (id: number) => {
+  return `/api/control/tasks/${id}/status`;
+};
+
+export const setControlTaskStatus = async (
+  id: number,
+  controlTaskStatusBody: ControlTaskStatusBody,
+  options?: RequestInit,
+): Promise<ControlTaskResponse> => {
+  return customFetch<ControlTaskResponse>(getSetControlTaskStatusUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(controlTaskStatusBody),
+  });
+};
+
+export const getSetControlTaskStatusMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlTaskStatus>>,
+    TError,
+    { id: number; data: BodyType<ControlTaskStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setControlTaskStatus>>,
+  TError,
+  { id: number; data: BodyType<ControlTaskStatusBody> },
+  TContext
+> => {
+  const mutationKey = ["setControlTaskStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setControlTaskStatus>>,
+    { id: number; data: BodyType<ControlTaskStatusBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setControlTaskStatus(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetControlTaskStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setControlTaskStatus>>
+>;
+export type SetControlTaskStatusMutationBody = BodyType<ControlTaskStatusBody>;
+export type SetControlTaskStatusMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Move a task through its lifecycle
+ */
+export const useSetControlTaskStatus = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlTaskStatus>>,
+    TError,
+    { id: number; data: BodyType<ControlTaskStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setControlTaskStatus>>,
+  TError,
+  { id: number; data: BodyType<ControlTaskStatusBody> },
+  TContext
+> => {
+  return useMutation(getSetControlTaskStatusMutationOptions(options));
+};
+
+/**
+ * @summary Experiment portfolio
+ */
+export const getListControlExperimentsUrl = (
+  params?: ListControlExperimentsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/experiments?${stringifiedParams}`
+    : `/api/control/experiments`;
+};
+
+export const listControlExperiments = async (
+  params?: ListControlExperimentsParams,
+  options?: RequestInit,
+): Promise<ControlExperimentsResponse> => {
+  return customFetch<ControlExperimentsResponse>(
+    getListControlExperimentsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlExperimentsQueryKey = (
+  params?: ListControlExperimentsParams,
+) => {
+  return [`/api/control/experiments`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlExperimentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlExperiments>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlExperimentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlExperiments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlExperimentsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlExperiments>>
+  > = ({ signal }) =>
+    listControlExperiments(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlExperiments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlExperimentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlExperiments>>
+>;
+export type ListControlExperimentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Experiment portfolio
+ */
+
+export function useListControlExperiments<
+  TData = Awaited<ReturnType<typeof listControlExperiments>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlExperimentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlExperiments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlExperimentsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Immutable audit trail of agent, operator, and system events
+ */
+export const getGetControlAuditUrl = (params?: GetControlAuditParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/audit?${stringifiedParams}`
+    : `/api/control/audit`;
+};
+
+export const getControlAudit = async (
+  params?: GetControlAuditParams,
+  options?: RequestInit,
+): Promise<ControlAuditResponse> => {
+  return customFetch<ControlAuditResponse>(getGetControlAuditUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetControlAuditQueryKey = (params?: GetControlAuditParams) => {
+  return [`/api/control/audit`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetControlAuditQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlAudit>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetControlAuditParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetControlAuditQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getControlAudit>>> = ({
+    signal,
+  }) => getControlAudit(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlAudit>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlAuditQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlAudit>>
+>;
+export type GetControlAuditQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Immutable audit trail of agent, operator, and system events
+ */
+
+export function useGetControlAudit<
+  TData = Awaited<ReturnType<typeof getControlAudit>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetControlAuditParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlAuditQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Governance policy limits
+ */
+export const getListControlPoliciesUrl = () => {
+  return `/api/control/policies`;
+};
+
+export const listControlPolicies = async (
+  options?: RequestInit,
+): Promise<ControlPoliciesResponse> => {
+  return customFetch<ControlPoliciesResponse>(getListControlPoliciesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListControlPoliciesQueryKey = () => {
+  return [`/api/control/policies`] as const;
+};
+
+export const getListControlPoliciesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPolicies>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPolicies>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListControlPoliciesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPolicies>>
+  > = ({ signal }) => listControlPolicies({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPolicies>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPoliciesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPolicies>>
+>;
+export type ListControlPoliciesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Governance policy limits
+ */
+
+export function useListControlPolicies<
+  TData = Awaited<ReturnType<typeof listControlPolicies>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPolicies>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPoliciesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary KPI snapshot history for trends
+ */
+export const getGetControlMetricsHistoryUrl = (
+  params?: GetControlMetricsHistoryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/metrics/history?${stringifiedParams}`
+    : `/api/control/metrics/history`;
+};
+
+export const getControlMetricsHistory = async (
+  params?: GetControlMetricsHistoryParams,
+  options?: RequestInit,
+): Promise<ControlMetricsHistoryResponse> => {
+  return customFetch<ControlMetricsHistoryResponse>(
+    getGetControlMetricsHistoryUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetControlMetricsHistoryQueryKey = (
+  params?: GetControlMetricsHistoryParams,
+) => {
+  return [`/api/control/metrics/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetControlMetricsHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlMetricsHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetControlMetricsHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlMetricsHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetControlMetricsHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlMetricsHistory>>
+  > = ({ signal }) =>
+    getControlMetricsHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlMetricsHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlMetricsHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlMetricsHistory>>
+>;
+export type GetControlMetricsHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary KPI snapshot history for trends
+ */
+
+export function useGetControlMetricsHistory<
+  TData = Awaited<ReturnType<typeof getControlMetricsHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetControlMetricsHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlMetricsHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlMetricsHistoryQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

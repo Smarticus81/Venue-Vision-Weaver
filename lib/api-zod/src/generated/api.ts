@@ -905,3 +905,433 @@ export const GetStorageObjectQueryParams = zod.object({
       "Required to read venue media from the public couple preview for that venue.",
     ),
 });
+
+/**
+ * @summary Operator cockpit — live KPIs, agent fleet, and queue counts
+ */
+export const GetControlOverviewResponse = zod.object({
+  operatorEmail: zod.string(),
+  aiConfigured: zod.boolean(),
+  model: zod.string(),
+  metrics: zod
+    .object({
+      capturedAt: zod.coerce.date(),
+      organizations: zod.object({
+        total: zod.number(),
+        byPlan: zod.record(zod.string(), zod.number()),
+        totalCreditsBalance: zod.number(),
+        lowCreditCount: zod.number(),
+        paidCount: zod.number(),
+      }),
+      venues: zod.object({
+        total: zod.number(),
+        new7d: zod.number(),
+        new30d: zod.number(),
+        withMedia: zod.number(),
+        withSessions: zod.number(),
+        unadoptedLegacy: zod.number(),
+        activationRate: zod
+          .number()
+          .describe("Percentage of venues with at least one session."),
+      }),
+      sessions: zod.object({
+        total: zod.number(),
+        byStatus: zod.record(zod.string(), zod.number()),
+        created7d: zod.number(),
+        created30d: zod.number(),
+        ready7d: zod.number(),
+        failed7d: zod.number(),
+        failureRate7d: zod.number(),
+        avgCompletionMinutes7d: zod.number().nullish(),
+      }),
+      credits: zod.object({
+        granted30d: zod.number(),
+        consumed30d: zod.number(),
+        refunded30d: zod.number(),
+        purchased30d: zod.number(),
+        grantsByReason30d: zod.record(zod.string(), zod.number()),
+      }),
+      assets: zod.object({
+        generated7d: zod.number(),
+      }),
+    })
+    .describe("Live business KPIs computed from production tables."),
+  agents: zod.array(
+    zod.object({
+      key: zod.string(),
+      name: zod.string(),
+      domain: zod.enum([
+        "growth",
+        "support",
+        "product",
+        "finance",
+        "experiments",
+        "sales",
+        "activation",
+        "governance",
+      ]),
+      description: zod.string(),
+      status: zod.enum(["active", "paused"]),
+      intervalMinutes: zod.number(),
+      lastRunAt: zod.coerce.date().nullish(),
+      lastRunStatus: zod.string().nullish(),
+    }),
+  ),
+  counts: zod.object({
+    pendingActions: zod.number(),
+    openTasks: zod.number(),
+    runningExperiments: zod.number(),
+    runs24h: zod.number(),
+  }),
+});
+
+/**
+ * @summary Trigger an agent run immediately
+ */
+export const RunControlAgentParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+/**
+ * @summary Pause or resume an agent
+ */
+export const SetControlAgentStatusParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const SetControlAgentStatusBody = zod.object({
+  status: zod.enum(["active", "paused"]),
+});
+
+export const SetControlAgentStatusResponse = zod.object({
+  agent: zod.object({
+    key: zod.string(),
+    name: zod.string(),
+    domain: zod.enum([
+      "growth",
+      "support",
+      "product",
+      "finance",
+      "experiments",
+      "sales",
+      "activation",
+      "governance",
+    ]),
+    description: zod.string(),
+    status: zod.enum(["active", "paused"]),
+    intervalMinutes: zod.number(),
+    lastRunAt: zod.coerce.date().nullish(),
+    lastRunStatus: zod.string().nullish(),
+  }),
+});
+
+/**
+ * @summary Recent agent runs
+ */
+export const ListControlRunsQueryParams = zod.object({
+  agentKey: zod.coerce.string().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlRunsResponse = zod.object({
+  runs: zod.array(
+    zod.object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      trigger: zod.enum(["schedule", "manual"]),
+      status: zod.enum(["running", "succeeded", "failed"]),
+      model: zod.string().nullish(),
+      summary: zod.string().nullish(),
+      error: zod.string().nullish(),
+      toolCallCount: zod.number(),
+      promptTokens: zod.number().nullish(),
+      completionTokens: zod.number().nullish(),
+      startedAt: zod.coerce.date(),
+      finishedAt: zod.coerce.date().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Full run detail including the tool-call transcript
+ */
+export const GetControlRunParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetControlRunResponse = zod.object({
+  run: zod
+    .object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      trigger: zod.enum(["schedule", "manual"]),
+      status: zod.enum(["running", "succeeded", "failed"]),
+      model: zod.string().nullish(),
+      summary: zod.string().nullish(),
+      error: zod.string().nullish(),
+      toolCallCount: zod.number(),
+      promptTokens: zod.number().nullish(),
+      completionTokens: zod.number().nullish(),
+      startedAt: zod.coerce.date(),
+      finishedAt: zod.coerce.date().nullish(),
+    })
+    .and(
+      zod.object({
+        transcript: zod
+          .array(zod.record(zod.string(), zod.unknown()))
+          .nullish(),
+      }),
+    ),
+});
+
+/**
+ * @summary Governed actions (approval queue and history)
+ */
+export const ListControlActionsQueryParams = zod.object({
+  status: zod
+    .enum(["pending", "approved", "rejected", "executed", "failed"])
+    .optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlActionsResponse = zod.object({
+  actions: zod.array(
+    zod.object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      runId: zod.number().nullish(),
+      actionType: zod.string(),
+      title: zod.string(),
+      reasoning: zod.string().nullish(),
+      params: zod.record(zod.string(), zod.unknown()),
+      riskLevel: zod.enum(["low", "medium", "high"]),
+      requiresApproval: zod.boolean(),
+      status: zod.enum([
+        "pending",
+        "approved",
+        "rejected",
+        "executed",
+        "failed",
+      ]),
+      decidedBy: zod.string().nullish(),
+      decisionNote: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      executedAt: zod.coerce.date().nullish(),
+      result: zod.record(zod.string(), zod.unknown()).nullish(),
+      error: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Approve (executes immediately) or reject a pending action
+ */
+export const DecideControlActionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const decideControlActionBodyNoteMax = 500;
+
+export const DecideControlActionBody = zod.object({
+  decision: zod.enum(["approve", "reject"]),
+  note: zod.string().max(decideControlActionBodyNoteMax).optional(),
+});
+
+export const DecideControlActionResponse = zod.object({
+  action: zod.object({
+    id: zod.number(),
+    agentKey: zod.string(),
+    runId: zod.number().nullish(),
+    actionType: zod.string(),
+    title: zod.string(),
+    reasoning: zod.string().nullish(),
+    params: zod.record(zod.string(), zod.unknown()),
+    riskLevel: zod.enum(["low", "medium", "high"]),
+    requiresApproval: zod.boolean(),
+    status: zod.enum(["pending", "approved", "rejected", "executed", "failed"]),
+    decidedBy: zod.string().nullish(),
+    decisionNote: zod.string().nullish(),
+    decidedAt: zod.coerce.date().nullish(),
+    executedAt: zod.coerce.date().nullish(),
+    result: zod.record(zod.string(), zod.unknown()).nullish(),
+    error: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Agent-raised work items
+ */
+export const ListControlTasksQueryParams = zod.object({
+  status: zod.enum(["open", "in_progress", "done", "dismissed"]).optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlTasksResponse = zod.object({
+  tasks: zod.array(
+    zod.object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      runId: zod.number().nullish(),
+      title: zod.string(),
+      detail: zod.string().nullish(),
+      category: zod.string().nullish(),
+      priority: zod.enum(["low", "medium", "high", "critical"]),
+      status: zod.enum(["open", "in_progress", "done", "dismissed"]),
+      payload: zod.record(zod.string(), zod.unknown()).nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Move a task through its lifecycle
+ */
+export const SetControlTaskStatusParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SetControlTaskStatusBody = zod.object({
+  status: zod.enum(["open", "in_progress", "done", "dismissed"]),
+});
+
+export const SetControlTaskStatusResponse = zod.object({
+  task: zod.object({
+    id: zod.number(),
+    agentKey: zod.string(),
+    runId: zod.number().nullish(),
+    title: zod.string(),
+    detail: zod.string().nullish(),
+    category: zod.string().nullish(),
+    priority: zod.enum(["low", "medium", "high", "critical"]),
+    status: zod.enum(["open", "in_progress", "done", "dismissed"]),
+    payload: zod.record(zod.string(), zod.unknown()).nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Experiment portfolio
+ */
+export const ListControlExperimentsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlExperimentsResponse = zod.object({
+  experiments: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      hypothesis: zod.string(),
+      metric: zod.string(),
+      variants: zod.record(zod.string(), zod.unknown()).nullish(),
+      status: zod.enum(["proposed", "running", "completed", "aborted"]),
+      result: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      startedAt: zod.coerce.date().nullish(),
+      endedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Immutable audit trail of agent, operator, and system events
+ */
+export const GetControlAuditQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const GetControlAuditResponse = zod.object({
+  events: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorType: zod.enum(["agent", "operator", "system"]),
+      actor: zod.string(),
+      eventType: zod.string(),
+      subjectType: zod.string().nullish(),
+      subjectId: zod.string().nullish(),
+      detail: zod.record(zod.string(), zod.unknown()).nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Governance policy limits
+ */
+export const ListControlPoliciesResponse = zod.object({
+  policies: zod.array(
+    zod.object({
+      id: zod.number(),
+      key: zod.string(),
+      value: zod.record(zod.string(), zod.unknown()),
+      description: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary KPI snapshot history for trends
+ */
+export const GetControlMetricsHistoryQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const GetControlMetricsHistoryResponse = zod.object({
+  snapshots: zod.array(
+    zod.object({
+      id: zod.number(),
+      metrics: zod
+        .object({
+          capturedAt: zod.coerce.date(),
+          organizations: zod.object({
+            total: zod.number(),
+            byPlan: zod.record(zod.string(), zod.number()),
+            totalCreditsBalance: zod.number(),
+            lowCreditCount: zod.number(),
+            paidCount: zod.number(),
+          }),
+          venues: zod.object({
+            total: zod.number(),
+            new7d: zod.number(),
+            new30d: zod.number(),
+            withMedia: zod.number(),
+            withSessions: zod.number(),
+            unadoptedLegacy: zod.number(),
+            activationRate: zod
+              .number()
+              .describe("Percentage of venues with at least one session."),
+          }),
+          sessions: zod.object({
+            total: zod.number(),
+            byStatus: zod.record(zod.string(), zod.number()),
+            created7d: zod.number(),
+            created30d: zod.number(),
+            ready7d: zod.number(),
+            failed7d: zod.number(),
+            failureRate7d: zod.number(),
+            avgCompletionMinutes7d: zod.number().nullish(),
+          }),
+          credits: zod.object({
+            granted30d: zod.number(),
+            consumed30d: zod.number(),
+            refunded30d: zod.number(),
+            purchased30d: zod.number(),
+            grantsByReason30d: zod.record(zod.string(), zod.number()),
+          }),
+          assets: zod.object({
+            generated7d: zod.number(),
+          }),
+        })
+        .describe("Live business KPIs computed from production tables."),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});

@@ -53,6 +53,7 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 - **Credits**: Gallery session = 1 credit. Trial venues get 5 credits on create.
 - **Owner auth**: Venue owners sign in with email magic links and an httpOnly cookie session. Do not add PIN-based flows.
 - **Billing**: Stripe Checkout + webhooks in `artifacts/api-server/src/routes/billing.ts`.
+- **Autonomous Business Control Plane**: a multi-agent operating system in `artifacts/api-server/src/control-plane/` — eight Gemini-backed domain agents (growth, support, product repair, finance, experiments, sales, activation, governance) run on an in-process scheduler, read live business data through a restricted tool belt, and act only through a governed action catalog (low risk auto-executes; medium/high risk waits for operator approval). State lives in `lib/db` control-plane tables. Operators supervise it at `/control` (auth: Clerk session with email in `CONTROL_PLANE_OPERATOR_EMAILS`) via the `/api/control/*` routes.
 
 ### Required environment variables
 

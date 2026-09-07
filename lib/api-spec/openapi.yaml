@@ -21,6 +21,14 @@ tags:
       Organization-level account and billing. Auth is a Clerk session; billing
       is Stripe at the organization level (subscriptions + credit packs), with
       credits granted by the Stripe webhook. One organization owns many venues.
+  - name: control-plane
+    description: |
+      Autonomous Business Control Plane. A multi-agent operating system
+      (growth, support, product, finance, experiments, sales, activation,
+      governance) runs the business on a schedule; operators supervise it here:
+      trigger/pause agents, approve or reject governed actions, work agent
+      tasks, and audit everything. Auth is a Clerk session whose email is in
+      CONTROL_PLANE_OPERATOR_EMAILS.
 paths:
   /healthz:
     get:
@@ -838,6 +846,342 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
+  /control/overview:
+    get:
+      operationId: getControlOverview
+      tags: [control-plane]
+      summary: Operator cockpit — live KPIs, agent fleet, and queue counts
+      responses:
+        "200":
+          description: Overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOverviewResponse"
+        "401":
+          description: Sign in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Not a control-plane operator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/agents/{key}/run:
+    post:
+      operationId: runControlAgent
+      tags: [control-plane]
+      summary: Trigger an agent run immediately
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlRunStartedResponse"
+        "404":
+          description: Unknown agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Another run is already in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: AI is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/agents/{key}/status:
+    post:
+      operationId: setControlAgentStatus
+      tags: [control-plane]
+      summary: Pause or resume an agent
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlAgentStatusBody"
+      responses:
+        "200":
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlAgentResponse"
+        "400":
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Unknown agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/runs:
+    get:
+      operationId: listControlRuns
+      tags: [control-plane]
+      summary: Recent agent runs
+      parameters:
+        - name: agentKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlRunsResponse"
+
+  /control/runs/{id}:
+    get:
+      operationId: getControlRun
+      tags: [control-plane]
+      summary: Full run detail including the tool-call transcript
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlRunDetailResponse"
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/actions:
+    get:
+      operationId: listControlActions
+      tags: [control-plane]
+      summary: Governed actions (approval queue and history)
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected, executed, failed]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Actions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlActionsResponse"
+
+  /control/actions/{id}/decision:
+    post:
+      operationId: decideControlAction
+      tags: [control-plane]
+      summary: Approve (executes immediately) or reject a pending action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlActionDecisionBody"
+      responses:
+        "200":
+          description: Decision recorded (and executed when approved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlActionResponse"
+        "400":
+          description: Invalid decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Action is not pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/tasks:
+    get:
+      operationId: listControlTasks
+      tags: [control-plane]
+      summary: Agent-raised work items
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, in_progress, done, dismissed]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlTasksResponse"
+
+  /control/tasks/{id}/status:
+    post:
+      operationId: setControlTaskStatus
+      tags: [control-plane]
+      summary: Move a task through its lifecycle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlTaskStatusBody"
+      responses:
+        "200":
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlTaskResponse"
+        "404":
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/experiments:
+    get:
+      operationId: listControlExperiments
+      tags: [control-plane]
+      summary: Experiment portfolio
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Experiments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlExperimentsResponse"
+
+  /control/audit:
+    get:
+      operationId: getControlAudit
+      tags: [control-plane]
+      summary: Immutable audit trail of agent, operator, and system events
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlAuditResponse"
+
+  /control/policies:
+    get:
+      operationId: listControlPolicies
+      tags: [control-plane]
+      summary: Governance policy limits
+      responses:
+        "200":
+          description: Policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPoliciesResponse"
+
+  /control/metrics/history:
+    get:
+      operationId: getControlMetricsHistory
+      tags: [control-plane]
+      summary: KPI snapshot history for trends
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Snapshots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlMetricsHistoryResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -1562,4 +1906,514 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/UploadUrlRequest"
+
+    BusinessMetrics:
+      type: object
+      description: Live business KPIs computed from production tables.
+      required: [capturedAt, organizations, venues, sessions, credits, assets]
+      properties:
+        capturedAt:
+          type: string
+          format: date-time
+        organizations:
+          type: object
+          required: [total, byPlan, totalCreditsBalance, lowCreditCount, paidCount]
+          properties:
+            total:
+              type: integer
+            byPlan:
+              type: object
+              additionalProperties:
+                type: integer
+            totalCreditsBalance:
+              type: integer
+            lowCreditCount:
+              type: integer
+            paidCount:
+              type: integer
+        venues:
+          type: object
+          required: [total, new7d, new30d, withMedia, withSessions, unadoptedLegacy, activationRate]
+          properties:
+            total:
+              type: integer
+            new7d:
+              type: integer
+            new30d:
+              type: integer
+            withMedia:
+              type: integer
+            withSessions:
+              type: integer
+            unadoptedLegacy:
+              type: integer
+            activationRate:
+              type: number
+              description: Percentage of venues with at least one session.
+        sessions:
+          type: object
+          required: [total, byStatus, created7d, created30d, ready7d, failed7d, failureRate7d]
+          properties:
+            total:
+              type: integer
+            byStatus:
+              type: object
+              additionalProperties:
+                type: integer
+            created7d:
+              type: integer
+            created30d:
+              type: integer
+            ready7d:
+              type: integer
+            failed7d:
+              type: integer
+            failureRate7d:
+              type: number
+            avgCompletionMinutes7d:
+              type: number
+              nullable: true
+        credits:
+          type: object
+          required: [granted30d, consumed30d, refunded30d, purchased30d, grantsByReason30d]
+          properties:
+            granted30d:
+              type: integer
+            consumed30d:
+              type: integer
+            refunded30d:
+              type: integer
+            purchased30d:
+              type: integer
+            grantsByReason30d:
+              type: object
+              additionalProperties:
+                type: integer
+        assets:
+          type: object
+          required: [generated7d]
+          properties:
+            generated7d:
+              type: integer
+
+    ControlAgent:
+      type: object
+      required: [key, name, domain, description, status, intervalMinutes]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+          enum: [growth, support, product, finance, experiments, sales, activation, governance]
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, paused]
+        intervalMinutes:
+          type: integer
+        lastRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastRunStatus:
+          type: string
+          nullable: true
+
+    ControlOverviewResponse:
+      type: object
+      required: [operatorEmail, aiConfigured, model, metrics, agents, counts]
+      properties:
+        operatorEmail:
+          type: string
+        aiConfigured:
+          type: boolean
+        model:
+          type: string
+        metrics:
+          $ref: "#/components/schemas/BusinessMetrics"
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlAgent"
+        counts:
+          type: object
+          required: [pendingActions, openTasks, runningExperiments, runs24h]
+          properties:
+            pendingActions:
+              type: integer
+            openTasks:
+              type: integer
+            runningExperiments:
+              type: integer
+            runs24h:
+              type: integer
+
+    ControlAgentStatusBody:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, paused]
+
+    ControlAgentResponse:
+      type: object
+      required: [agent]
+      properties:
+        agent:
+          $ref: "#/components/schemas/ControlAgent"
+
+    ControlRun:
+      type: object
+      required: [id, agentKey, trigger, status, toolCallCount, startedAt]
+      properties:
+        id:
+          type: integer
+        agentKey:
+          type: string
+        trigger:
+          type: string
+          enum: [schedule, manual]
+        status:
+          type: string
+          enum: [running, succeeded, failed]
+        model:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        toolCallCount:
+          type: integer
+        promptTokens:
+          type: integer
+          nullable: true
+        completionTokens:
+          type: integer
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ControlRunStartedResponse:
+      type: object
+      required: [run]
+      properties:
+        run:
+          $ref: "#/components/schemas/ControlRun"
+
+    ControlRunsResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlRun"
+
+    ControlRunDetail:
+      allOf:
+        - $ref: "#/components/schemas/ControlRun"
+        - type: object
+          properties:
+            transcript:
+              type: array
+              nullable: true
+              items:
+                type: object
+                additionalProperties: true
+
+    ControlRunDetailResponse:
+      type: object
+      required: [run]
+      properties:
+        run:
+          $ref: "#/components/schemas/ControlRunDetail"
+
+    ControlAction:
+      type: object
+      required: [id, agentKey, actionType, title, params, riskLevel, requiresApproval, status, createdAt]
+      properties:
+        id:
+          type: integer
+        agentKey:
+          type: string
+        runId:
+          type: integer
+          nullable: true
+        actionType:
+          type: string
+        title:
+          type: string
+        reasoning:
+          type: string
+          nullable: true
+        params:
+          type: object
+          additionalProperties: true
+        riskLevel:
+          type: string
+          enum: [low, medium, high]
+        requiresApproval:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, approved, rejected, executed, failed]
+        decidedBy:
+          type: string
+          nullable: true
+        decisionNote:
+          type: string
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        executedAt:
+          type: string
+          format: date-time
+          nullable: true
+        result:
+          type: object
+          additionalProperties: true
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlActionsResponse:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlAction"
+
+    ControlActionDecisionBody:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        note:
+          type: string
+          maxLength: 500
+
+    ControlActionResponse:
+      type: object
+      required: [action]
+      properties:
+        action:
+          $ref: "#/components/schemas/ControlAction"
+
+    ControlTask:
+      type: object
+      required: [id, agentKey, title, priority, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        agentKey:
+          type: string
+        runId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        detail:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, in_progress, done, dismissed]
+        payload:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlTasksResponse:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlTask"
+
+    ControlTaskStatusBody:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, done, dismissed]
+
+    ControlTaskResponse:
+      type: object
+      required: [task]
+      properties:
+        task:
+          $ref: "#/components/schemas/ControlTask"
+
+    ControlExperiment:
+      type: object
+      required: [id, name, hypothesis, metric, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        hypothesis:
+          type: string
+        metric:
+          type: string
+        variants:
+          type: object
+          additionalProperties: true
+          nullable: true
+        status:
+          type: string
+          enum: [proposed, running, completed, aborted]
+        result:
+          type: string
+          nullable: true
+        createdByAgent:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlExperimentsResponse:
+      type: object
+      required: [experiments]
+      properties:
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlExperiment"
+
+    ControlAuditEvent:
+      type: object
+      required: [id, actorType, actor, eventType, createdAt]
+      properties:
+        id:
+          type: integer
+        actorType:
+          type: string
+          enum: [agent, operator, system]
+        actor:
+          type: string
+        eventType:
+          type: string
+        subjectType:
+          type: string
+          nullable: true
+        subjectId:
+          type: string
+          nullable: true
+        detail:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlAuditResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlAuditEvent"
+
+    ControlPolicy:
+      type: object
+      required: [id, key, value, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlPoliciesResponse:
+      type: object
+      required: [policies]
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPolicy"
+
+    ControlMetricsSnapshot:
+      type: object
+      required: [id, metrics, createdAt]
+      properties:
+        id:
+          type: integer
+        metrics:
+          $ref: "#/components/schemas/BusinessMetrics"
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlMetricsHistoryResponse:
+      type: object
+      required: [snapshots]
+      properties:
+        snapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlMetricsSnapshot"
 

@@ -25,7 +25,8 @@
     "resend": "^4.0.0",
     "sharp": "^0.35.2",
     "stripe": "^17.7.0",
-    "svix": "^1.96.1"
+    "svix": "^1.96.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

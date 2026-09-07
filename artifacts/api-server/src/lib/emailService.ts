@@ -86,6 +86,24 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
   }
 }
 
+/**
+ * Generic branded email used by the Autonomous Business Control Plane for
+ * governed venue outreach (activation nudges, low-credit reminders, support
+ * follow-ups). Body is plain-text paragraphs; everything is escaped.
+ */
+export async function sendControlPlaneEmail(
+  to: string,
+  subject: string,
+  paragraphs: string[],
+): Promise<boolean> {
+  const body = paragraphs
+    .filter((p) => p.trim().length > 0)
+    .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, "<br />")}</p>`)
+    .join("\n");
+  if (!body) return false;
+  return sendEmail(to, subject, emailLayout(subject, body));
+}
+
 export async function sendSessionCreatedNotification(
   ownerEmail: string | null | undefined,
   session: { id: number; coupleName?: string | null },
