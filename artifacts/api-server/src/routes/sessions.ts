@@ -710,8 +710,14 @@ router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
       .where(eq(coupleSessionsTable.id, session.id));
   }
 
-  const sent = await sendGalleryToCouple(recipient, session, venue);
-  res.json({ sent });
+  const result = await sendGalleryToCouple(recipient, session, venue);
+  if (!result.sent) {
+    // The owner can act on the real cause (missing key, unverified sender
+    // domain), so return it instead of a 200 that reads as success.
+    res.status(502).json({ error: `Email not sent: ${result.reason}` });
+    return;
+  }
+  res.json({ sent: true });
 });
 
 // POST /sessions/by-token/:shareToken/send-email  (couple-driven, no third-party override)
@@ -774,8 +780,17 @@ router.post("/sessions/by-token/:shareToken/send-email", async (req, res): Promi
     return;
   }
 
-  const sent = await sendGalleryToCouple(recipient, session, venue);
-  res.json({ sent });
+  const result = await sendGalleryToCouple(recipient, session, venue);
+  if (!result.sent) {
+    // Couple-facing: keep the response gentle; the actionable detail is in
+    // the server logs and the owner-side send flow.
+    res.status(502).json({
+      error:
+        "We couldn't send the email right now. Copy your gallery link to keep it, and try again soon.",
+    });
+    return;
+  }
+  res.json({ sent: true });
 });
 
 export default router;
