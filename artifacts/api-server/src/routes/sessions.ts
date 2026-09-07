@@ -43,6 +43,7 @@ import {
 import {
   assertReferenceImageQuality,
   hammingDistance,
+  MIN_REFERENCE_EDGE_PX,
   type ReferenceImageQuality,
 } from "../lib/referenceImageQuality.js";
 import {
@@ -56,7 +57,7 @@ const router: IRouter = Router();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_COUPLE_PHOTOS = 1;
 const MAX_COUPLE_PHOTOS = 3;
-const MIN_COUPLE_PHOTO_EDGE_PX = 256;
+const MIN_COUPLE_PHOTO_EDGE_PX = MIN_REFERENCE_EDGE_PX;
 const MAX_COUPLE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const DEFAULT_STYLE_ID = "cinematic-editorial";
 const objectStorageService = new ObjectStorageService();
@@ -287,9 +288,11 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
   const venueMediaCount = venueMediaForReadiness.length;
 
   if (!venueMediaCount || venueMediaCount < MIN_VENUE_PHOTOS) {
+    // Couple-facing copy: the couple sees this message, so it must not read
+    // like venue setup instructions.
     res.status(409).json({
       error:
-        `This venue isn't ready yet. The owner needs to upload at least ${MIN_VENUE_PHOTOS} venue photo${MIN_VENUE_PHOTOS === 1 ? "" : "s"} before couples can create a gallery.`,
+        "This venue's glimpse experience isn't open quite yet. Please check back shortly.",
     });
     return;
   }

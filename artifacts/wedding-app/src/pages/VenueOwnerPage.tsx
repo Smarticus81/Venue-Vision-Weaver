@@ -1,3 +1,5 @@
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CoupleLinkCard } from "./dashboard/CoupleLinkCard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useAddVenueMedia,
@@ -385,19 +387,22 @@ function DashboardInner() {
     }
   };
 
+  const [deleteTarget, setDeleteTarget] = useState<{id: number; name: string} | null>(null);
   const handleDeleteSession = (
     sessionId: number,
     coupleName?: string | null,
   ) => {
-    const confirmed = window.confirm(
-      `Delete ${coupleName || "this prospect gallery"}? This permanently removes the gallery, its photos, and its share link.`,
-    );
-    if (!confirmed) return;
+    setDeleteTarget({ id: sessionId, name: coupleName || "this gallery" });
+  };
+  const confirmDeleteSession = () => {
+    if (!deleteTarget) return;
+    const sessionId = deleteTarget.id;
     deleteSession.mutate(
       { id: sessionId },
       {
         onSuccess: () => {
           toast({ title: "Gallery deleted" });
+          setDeleteTarget(null);
           void queryClient.invalidateQueries({
             queryKey: getGetVenueDashboardQueryKey(selectedSlug),
           });
@@ -638,7 +643,7 @@ function DashboardInner() {
         </Button>
       </div>
     );
-  if (orgQuery.isLoading || dashboard.isLoading) {
+  if (orgQuery.isLoading || !selectedSlug || dashboard.isLoading || mediaQuery.isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-brand" />
@@ -648,6 +653,16 @@ function DashboardInner() {
 
   return (
     <div className="workspace">
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !deleteSession.isPending) setDeleteTarget(null); }}>
+        <DialogContent>
+          <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
+          <DialogDescription className="mt-3 text-muted-foreground">This permanently removes the gallery, its photos, and its share link.</DialogDescription>
+          <div className="mt-6 flex gap-3">
+            <Button variant="outline" disabled={deleteSession.isPending} onClick={() => setDeleteTarget(null)}>Keep gallery</Button>
+            <Button variant="destructive" disabled={deleteSession.isPending} onClick={confirmDeleteSession}>{deleteSession.isPending ? "Deleting…" : "Delete gallery"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <aside className="workspace-nav">
         <GlimpseLogo />
         <nav aria-label="Workspace">
@@ -779,6 +794,8 @@ function DashboardInner() {
               </div>
             </motion.div>
           </section>
+
+          {workspaceTab === "galleries" && <CoupleLinkCard url={`${window.location.origin}/preview/${selectedSlug}`} venueReady={venueReady} />}
 
           {workspaceTab === "settings" && (
             <section className="workspace-settings">

@@ -22,3 +22,7 @@ export const useOrganizationList = () => ({
 export const CreateOrganization = () => null;
 export const SignUp = () => null;
 export const SignIn = () => null;
+
+export const ClerkLoaded = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+export const ClerkLoading = () => null;
+export const ClerkFailed = () => null;

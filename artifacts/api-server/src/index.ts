@@ -159,6 +159,12 @@ async function cleanupExpiredOwnerAuth(): Promise<void> {
   }
 }
 
+// A stray rejected promise (background poller, webhook side effect, …) must
+// not take the whole site down; log it and keep serving.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
+
 const rawPort = process.env["PORT"];
 
 assertProductionEnvironment();

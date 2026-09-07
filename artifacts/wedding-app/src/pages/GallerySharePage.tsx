@@ -100,6 +100,7 @@ export default function GallerySharePage() {
     query: {
       queryKey: getGetSessionByTokenQueryKey(shareToken || ""),
       enabled: !!shareToken,
+retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1,
       refetchInterval: (query) => {
         const status = query.state.data?.status;
         return status === "pending" || status === "processing" ? 3000 : false;

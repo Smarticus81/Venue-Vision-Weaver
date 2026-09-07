@@ -29,7 +29,7 @@ samples/venue/
   05-natural-light-view.jpg
 ```
 
-Couple inputs must be 2-3 clear, well-lit images. For best likeness, use this order when possible: photo 1 both partners together, photo 2 Partner A face-forward, and photo 3 Partner B face-forward. Venue inputs must include at least 5 images covering exterior/facade, ceremony, reception, architectural detail, and natural-light views. The harness applies the same production reference validation as live sessions: JPG/PNG/WebP images must be at least 1024px on each side, sufficiently bright, sufficiently sharp, and couple references must not be near-duplicates. Live venue profiles store explicit coverage metadata for each uploaded photo; the local QA harness uses the filename/order convention above to mirror those coverage slots.
+Couple inputs must be 2-3 clear, well-lit images. For best likeness, use this order when possible: photo 1 both partners together, photo 2 Partner A face-forward, and photo 3 Partner B face-forward. Venue inputs must include at least 5 images covering exterior/facade, ceremony, reception, architectural detail, and natural-light views. The harness applies the same production reference validation as live sessions: JPG/PNG/WebP images must be at least 256px on each side, sufficiently bright, sufficiently sharp, and couple references must not be near-duplicates. Live venue profiles store explicit coverage metadata for each uploaded photo; the local QA harness uses the filename/order convention above to mirror those coverage slots.
 
 ## Command
 

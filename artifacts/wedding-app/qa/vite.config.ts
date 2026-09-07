@@ -2,7 +2,7 @@ import { defineConfig, mergeConfig } from "vite";
 import config from "../vite.config";
 import path from "node:path";
 import fs from "node:fs";
-const media = Array.from({ length: 5 }, (_, i) => ({
+const media = Array.from({ length: 1 }, (_, i) => ({
   id: i + 1,
   objectKey: "/demo" + i,
   coverage: ["exterior", "ceremony", "reception", "detail", "wide"][i],
@@ -16,6 +16,7 @@ const venue = {
   ownerEmail: "team@example.test",
   bookingUrl: "https://example.test/tours",
   media,
+  isReady: true,
 };
 const session = {
   id: 1,
@@ -35,7 +36,7 @@ const session = {
 const qaConfig = mergeConfig(config, {
   define: {
     "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY":
-      JSON.stringify("pk_test_fixture"),
+      JSON.stringify("pk_test_Zml4dHVyZS5jbGVyay5hY2NvdW50cy5kZXYk"),
   },
   resolve: {
     alias: {

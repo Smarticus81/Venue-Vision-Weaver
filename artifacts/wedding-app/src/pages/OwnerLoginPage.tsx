@@ -1,6 +1,6 @@
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import { Link, Redirect } from "wouter";
-import { ClerkSetupNotice } from "@/components/auth/OrgGate";
+import { ClerkWidgetFrame, ClerkSetupNotice } from "@/components/auth/OrgGate";
 import { clerkConfigured, gardenAppearance } from "@/lib/clerk";
 import { FormLayout } from "@/components/layout/SiteChrome";
 export default function OwnerLoginPage() {
@@ -11,7 +11,8 @@ export default function OwnerLoginPage() {
       title="Welcome back."
       description="Bring your venue to life. Your galleries, couples, and next possibilities are right here."
     >
-      <SignedOut>
+      <ClerkWidgetFrame>
+<SignedOut>
         <SignIn
           appearance={gardenAppearance}
           routing="hash"
@@ -25,6 +26,7 @@ export default function OwnerLoginPage() {
       <SignedIn>
         <Redirect to="/dashboard" />
       </SignedIn>
+</ClerkWidgetFrame>
     </FormLayout>
   );
 }

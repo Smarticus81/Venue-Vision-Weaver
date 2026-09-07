@@ -80,7 +80,7 @@ export default function CouplePage() {
   const [coupleEmail, setCoupleEmail] = useState("");
 
   const venueQuery = useGetVenue(slug!, {
-    query: { enabled: !!slug, queryKey: getGetVenueQueryKey(slug!) },
+    query: { enabled: !!slug, queryKey: getGetVenueQueryKey(slug!), retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1 },
   });
   const stylesQuery = useListGalleryStyles();
 
@@ -280,7 +280,7 @@ export default function CouplePage() {
       </FormLayout>
     );
   const venue = venueQuery.data;
-  if (!venue.media || venue.media.length < 5)
+  if (!venue.isReady)
     return (
       <FormLayout
         label="An invitation is on its way"
@@ -291,7 +291,7 @@ export default function CouplePage() {
       >
         <h2>This venue isn’t ready yet</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          The venue team needs to add at least five venue photographs. Please
+          The venue team is finishing your preview. Please
           check back after they finish setting up.
         </p>
         <Button className="mt-6" onClick={() => void venueQuery.refetch()}>

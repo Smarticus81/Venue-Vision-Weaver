@@ -43,11 +43,18 @@ async function tick(): Promise<void> {
   }
 }
 
+function safeTick(): void {
+  // A failed poll (e.g. a transient DB outage) must never become an
+  // unhandled rejection — that would crash the whole server. Log and let
+  // the next interval retry.
+  tick().catch((err) => {
+    logger.error({ err }, "Session worker poll failed");
+  });
+}
+
 export function startSessionWorker(): void {
   if (pollTimer) return;
   logger.info({ maxConcurrent: MAX_CONCURRENT }, "Session generation worker started");
-  void tick();
-  pollTimer = setInterval(() => {
-    void tick();
-  }, POLL_MS);
+  safeTick();
+  pollTimer = setInterval(safeTick, POLL_MS);
 }

@@ -3,6 +3,370 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-09-03 (fifteenth pass) — Product screens: dashboard, share page, couple flow
+
+Autonomous observe → diagnose → fix → render loop over the app surfaces
+(the landing pages were left as the owner set them). Everything was
+rendered headlessly at 390 / 820 / 1440 with a mock API and a Clerk stub;
+functional and accessibility checks ran as a Playwright script (dialog
+focus trap and return, radio arrow keys, lightbox keys, tab-stop focus
+rings, 36px+ touch targets, overflow measurement).
+
+**Dashboard (owner)** — the product's hand-off was missing: nothing on the
+dashboard showed the couple link. Now the top of the page is the venue
+name, readiness, three figures (credits / ready / developing) and a
+**couple-link card with a QR code** (Copy, Open, QR as PNG; `qrcode`
+loaded lazily). Sections reordered to the owner's real loop: galleries →
+venue photos → details + billing. The five-view coverage checklist and the
+photo library are one grid: missing views render as dashed upload targets
+pre-tagged with that coverage. "New gallery" opens the intake inline.
+Deletes confirm in a Radix dialog (focus handed back to the trash button
+on close, since it opens programmatically). Per-row actions are quiet
+outlines so the accent stays with the page's real CTAs; "Email couple"
+flips to a green "Sent" for a few seconds. Long names/emails wrap
+(`min-w-0`, `break-words`/`break-all`) — the old grid overflowed to 538px
+on a 390px phone. Loading is a layout-mirroring skeleton, not a spinner.
+Status vocabulary is one component (`StatusPill`: Ready / Developing /
+Queued / Failed).
+
+**Share page (couple + venue conversion)** — the fixed bottom share
+toolbar sat on top of the venue's "Book a tour" card at every width;
+killed. Order is now: reel hero with the names (brand `.drape` reveal) →
+the venue's ask (one rose CTA) → Copy / Share / Email as a quiet row →
+four stills → reel download. Stills open a lightbox (arrow keys, Escape,
+download, focus return) instead of duplicating the selected still below
+the grid. Landscape reels are cropped on phones (orientation read from
+`loadedmetadata`); portrait reels still letterbox. The small states
+(missing, failed, legacy, processing) share one layout with a logo header;
+processing shows a three-stage list instead of a spinning ornament.
+404s render immediately — React Query no longer retries a 404 for ~7s
+before showing "not found" (same fix on the couple venue page).
+
+**Couple flow** — the three photo roles are the upload targets (guidance,
+action and preview in one tile) instead of three info cards + a drop zone
++ a preview grid. Style picker uses native radios in labels (arrow keys
+work). Email and names sit in one form row; the delivery blurb is one line
+under the submit. Shared step header with a 3-segment progress bar.
+
+**Cross-page** — one radius for controls (the `Button` primitive's
+`rounded-md`; tiles and photos stay square), 404 / not-found / not-ready /
+failed pages on one centered layout with the logo, `GlimpseShell` deleted
+(unused), header email dropped, alert icons dropped from state pages.
+
+Killed: whole-page fade on the dashboard main (a paused animation left the
+page blank in capture — content must paint without JS), the processing
+page's spinning rings, "Interactive preview" / "Owner approval enabled"
+labels, the numbered 001–006 section eyebrows.
+
+## 2026-08-22 (fourteenth pass) — Stable looping hero, scrub killed
+
+Owner supplied the hero film again (byte-identical to the existing
+`/brand/hero.mp4`) with the direction: no scroll effect — just a nice
+stable looping background; remove the other video.
+
+- **`CinematicHero` deleted, `VideoHero` in its place:** one 100svh
+  section, `/brand/hero.mp4` autoplay/muted/loop/playsinline behind the
+  editorial lockup, poster = `/brand/hero-atmosphere.webp` so first
+  paint never waits on the video. No 450vh pin, no scroll→currentTime
+  timeline, no rAF scrub loop, no final "Make the tour unforgettable"
+  lockup, no scroll cue — the page scrolls normally past the hero.
+- Copy is the full opening lockup (headline, lede incl. the
+  portraits-and-reel sentence from the reduced-motion variant, CTA,
+  sign-in, credits line) with the same veil gradient and text-shadows.
+- **Reduced motion:** identical layout, poster still instead of the
+  playing video.
+- **Media removed:** all `/media/glimpse-venue-transformation*` files
+  (original + web mp4/webm derivatives + poster/final stills, ~19MB).
+- **Media added:** `/brand/hero.webm` (VP9 crf34, no audio, 2.0MB)
+  listed before the mp4 — Chromium builds without licensed H.264
+  (incl. the test sandbox) decode only VP9; mp4 stays the Safari path.
+- Verified in-browser: webm source selected, playing/looping (t=5.3s →
+  8.9s across a 10s loop), copy legible over the veil, scroll exits the
+  hero normally into the follow-up sections.
+
+## 2026-08-17 (thirteenth pass) — The transformation hero
+
+Owner supplied an 8s portrait film (couple tours the undecorated venue
+in day clothes → dissolve ~3.0–4.5s → full candlelit wedding with
+guests) and a detailed brief: this becomes the scroll-scrubbed
+cinematic hero; the mountain concept is abandoned entirely.
+
+- **Removed the whole mountain arc:** FlightBackdrop, DescentJourney,
+  journey.ts, MoodDial, moods.ts, and all descent-* media. The mood
+  system is gone with it — data-mood pinned to "candlelit" so the
+  accent tokens hold. Nav loses "The descent".
+- **New `CinematicHero`:** 450vh section, sticky 100svh viewport,
+  full-bleed cover video (portrait source, object-position 50% 42%).
+  Scroll drives a piecewise timeline with holds: 0–8% first frame,
+  8–42% the walk (→0.36), 42–74% the transformation dissolve
+  (→0.60, widest scroll band), 74–92% into the wedding, 92–100%
+  hold the finale. RAF loop (IO-gated) eases currentTime toward the
+  scroll target (0.12/frame); zero React re-renders during scrub
+  (MotionValue opacities for copy; one state flip at 0.86 for CTA
+  pointer-events).
+- **Copy choreography:** opening editorial lockup bottom-left ("Turn
+  tours into bookings." / "Let couples see themselves here." / CTA)
+  fades by 48%; final lockup ("Make the tour unforgettable." + "See
+  how glimpse works →") settles in from 86%; scroll cue dies at 6%.
+  Light text-shadows only — no panels, no heavy scrims; the veil is
+  the brief's 0.16/0.02/0.14 gradient.
+- **Media:** original kept at /media/glimpse-venue-transformation.mp4;
+  web derivatives per the brief's recipe (H.264 crf17 g12 faststart
+  7.9MB + VP9 crf30 g12 5.5MB for Chrome/Firefox — sandbox Chromium
+  decodes only VP9), poster + final-frame stills (webp q88).
+  Muted/playsinline/preload=auto, play-then-pause prime for iOS frame
+  rendering.
+- **Reduced motion:** no 450vh — a 100svh hero on the completed-wedding
+  still with all copy/CTAs present.
+- Verified in-browser: scrub lands 0.03s→1.84→3.81→4.52→6.68→7.91s at
+  the mapped scroll points, reverse scroll returns exactly, desktop +
+  mobile shots at every phase, later sections sit on the solid #0d0b09
+  base. Final lockup moved bottom-left after the centered version
+  covered the couple.
+
+## 2026-08-17 (twelfth pass) — Kill the low-poly ceremony
+
+Owner verdict on the WebGL ceremony at the threshold: "if that is here
+it's a failure" — the stylized low-poly world clashed with the
+photoreal footage. Removed entirely; the footage is the only scene.
+
+- `ceremonyScene.ts` deleted; `three` + `@types/three` dropped from the
+  package (the whole 3D chunk is gone from the bundle).
+- The descent no longer crossfades to a canvas at the threshold — the
+  film simply holds its final candlelit-altar frame. Chapters, the
+  elevation/cam HUD, the progress rail, and the scroll cue all remain.
+- With the 3D world gone, the Aisle/Altar/Aerial presets, orbit, and
+  the arrival control bar are gone too. The mood dial remains in the
+  hero only, as the accent-system control.
+- Reduced motion now shows a real still of the altar
+  (`descent-altar.webp`, extracted from the last frame) instead of the
+  3D panel.
+- Nav label "The ceremony" → "The descent" (same `#ceremony` anchor).
+
+## 2026-08-17 (eleventh pass) — The footage IS the page
+
+Owner directive: no remnants of the old backdrop anywhere; the flight
+video must be the true full-bleed background with the interface over
+it, photorealism untouched.
+
+- Killed the entire old background stack: `.lp-sky` mood gradients,
+  `.lp-vignette`, and the hero particle scene (`venueScene.ts` +
+  `SceneCanvas.tsx` deleted). The only remaining flat color is a
+  `#070b14` base that exists solely for the instant before the poster
+  paints.
+- New `FlightBackdrop`: `position:fixed; inset:0; object-fit:cover`
+  video behind everything (`z-0`, content `z-10`), scrubbed by GLOBAL
+  scroll — video time maps from page top to 90% through
+  `#descent-track`, so: hero = night sky, problem/gallery = ridge and
+  landscape drifting by, descent chapters = the approach, post-descent
+  sections = the held candlelit-altar frame. Poster =
+  `descent-flight-poster.webp` (real frame 0, 1280w). Reduced motion
+  renders that frame as a static full-bleed image.
+- The descent's WebGL ceremony now crossfades IN (progress 0.8→0.93)
+  above the footage instead of the footage fading out inside the
+  section — same arrival handoff, but the film is the page background
+  everywhere, edge to edge.
+- No scrims added: the footage is dark enough that porcelain type and
+  the existing ink-glass chapter cards carry legibility on their own.
+- Mood-dial scope note: with the gradients gone, moods now re-light the
+  ceremony scene + accent system only (the footage is fixed night —
+  matches the default candlelit read).
+
+## 2026-08-17 (tenth pass) — Real flight footage, scrubbed by scroll
+
+Owner supplied an 8s aerial video (night ridge → candlelit hilltop
+altar with string lights) that mirrors the descent narrative. It now
+carries the flight:
+
+- Encoded for scrubbing per the doctrine: all-keyframe (`-g 1`), muted,
+  1280w — `descent-flight.webm` (VP9, ~2.4MB) + `descent-flight.mp4`
+  (H.264, ~2.1MB) dual sources. Sandbox Chromium has no H.264 decoder
+  (canPlayType returned "" — how the missing-video bug was found), so
+  webm leads and mp4 covers Safari.
+- The video sits between the WebGL canvas and the HUD in the sticky
+  viewport; a rAF loop lerps `currentTime` toward scroll progress
+  (mapped over the first 90% of the journey) and only runs while the
+  section is on screen. Opacity dissolves 1→0 over progress 0.82–0.94,
+  so the film hands off to the live, re-lightable WebGL ceremony right
+  at the arrival unlock — "the film becomes live."
+- Reduced motion: video not mounted at all (static WebGL panel stands).
+- The WebGL world remains the arrival/explore surface and the moods
+  still re-light it; the footage is fixed night, which matches the
+  default candlelit approach.
+
+## 2026-08-17 (ninth pass) — The descent
+
+Owner supplied a second prototype ("The Mountain Threshold"): a
+scroll-driven aerial flight — fixed canvas, 500vh scroll, waypoint
+camera descending from 12,400 FT through clouds to the altar, chapter
+cards, elevation/cam HUD, progress rail. Integrated as the evolution of
+the `#ceremony` section.
+
+- The ceremony section is now a 480vh sticky journey: scroll flies the
+  camera through four smoothstep waypoints (aerial → mist → valley →
+  altar) with double-lerp smoothing. At `ARRIVAL_THRESHOLD` (0.94) the
+  scene hands off to explore mode — orbit, Aisle/Altar/Aerial presets,
+  and the compact mood dial fade in. Scrolling back up re-takes the
+  camera.
+- Scene additions: 18 drifting cloud clusters (mood-tinted + opacity
+  lerped), the mountain ring widened to 12 peaks on a 90–120u arc so
+  the aerial approach has scenery, ground plane 300u.
+- HUD: live-interpolated elevation readout (12,400→9,800 FT) and cam
+  state, rendered from MotionValues so scroll doesn't re-render React;
+  chapter cards crossfade at fixed progress ranges; accent progress
+  rail right.
+- `journey.ts` is three-free (page reads labels, scene builds vectors).
+  MoodDial extracted to its own module (hero + arrival bar share it).
+- Reduced motion: no tall scroll — static altar panel with presets,
+  dial, and the four chapters as a text grid.
+- Fixes found via screenshots: chapter card was shrink-to-fit (one word
+  per line) → explicit `w-[min(26rem,82vw)]`; final HUD stage never
+  read "Altar threshold" → last waypoint reached at the arrival
+  threshold.
+
+## 2026-08-17 (eighth pass) — The explorable ceremony
+
+Owner supplied a standalone three.js prototype (daylight mountain
+wedding ceremony: deck stage + aisle, folding chairs with blankets,
+autumn floral arc, pines/aspens, displaced-cone mountains, OrbitControls
++ camera preset buttons). Integrated it as a new `#ceremony` section
+("Stand where they'll stand.") between the gallery and how-it-works.
+
+- `venue-landing/ceremonyScene.ts`: the prototype's world, re-built to
+  the page's craft bar — florals instanced per material, plank seams
+  clamped to the semicircle stage, ACES tone mapping, shadows off +
+  DPR 1.5 on mobile.
+- Art-directed into the mood system: full lighting rig (bg/fog, ambient,
+  hemi, sun pos/color) lerps per mood, plus flickering candle sprites
+  along the aisle and arch (full in candlelit, off in golden, dim in
+  moonlit). A compact mood dial sits in the section header, wired to the
+  same page-level state as the hero dial.
+- Views: Aisle / Altar / Aerial with eased 1.1s camera flights. Altar
+  re-aimed vs the prototype (its numbers put the camera inside the
+  floral arc) — now stands at the arch looking back down the aisle.
+- UX discipline: three-per-section lazy import via IntersectionObserver
+  (rootMargin 260px), RAF paused when the panel scrolls away or the tab
+  hides, orbit is desktop-only (touch keeps one-finger page scroll;
+  presets drive the camera), autoRotate 0.25 until first drag,
+  reduced-motion renders static frames with jump-cut presets.
+- Lighting brightened ~1.4x over first pass after screenshots — night
+  moods were murky silhouettes at the prototype's intensities.
+
+## 2026-08-17 (seventh pass) — “The venue at dusk”: full WebGL rebuild
+
+Owner brief: a total transformation of `/` after a reference video on
+high-craft layered Three.js landing pages (procedural sky, multi-plane
+depth, particles, foreground lens bleed, live environment toggles,
+<1MB budgets, zero AI-slop defaults). Nothing from the old page survives
+except the four gallery frames.
+
+**Direction (one line):** the venue at dusk — one continuous procedural
+evening (indigo→ember sky, sagging string lights, candle bokeh, drifting
+petals) behind the whole page; the visitor re-lights it.
+
+**Signature — the mood dial.** Golden hour / Candlelit / Moonlit toggle
+in the hero re-lights the entire scene (sky shader, disc, bulbs, petals)
+AND the page accent — and the caption says the quiet part: this is
+literally what glimpse does for couples. The reference video's "theme /
+environment control bar" productized as the sales pitch.
+
+**Scene (`venue-landing/venueScene.ts`, vanilla three, lazy chunk):**
+fullscreen sky shader (3-stop gradient + sun/moon disc + hash grain, no
+banding) → 3 catenary strands of twinkling bulbs + wires → 130 candle
+bokeh points → ~100 instanced petals mid-field + 7 huge pre-blurred ones
+near the lens (fake DOF frame-bleed) → 3 drifting mist planes. All
+textures canvas-drawn at runtime; zero fetched assets; the 2.5MB
+hero.mp4 is gone from the page. Pointer parallax on the camera; page
+scroll dims the sky mid-page (sin curve) so the offer glows again at the
+end. Palette lerps ~1s on mood switch. DPR≤2 (1.75 mobile), counts
+halved on mobile, RAF paused on hidden tab, full dispose, static single
+frame under reduced motion, CSS `.lp-sky` gradient as the no-WebGL/no-JS
+fallback. three.js is a dynamically imported chunk (~132KB gz) that
+never blocks first paint — hero text is CSS-revealed (`.lp-rise`
+blur-up, no JS gate).
+
+**New token/type system (scoped `.theme-dusk[data-mood]`, app-wide
+darkroom tokens untouched):** Instrument Serif display + Schibsted
+Grotesk body (Fraunces/Instrument Sans/Geist Mono remain app-side
+only); per-mood accent (champagne / amber / moon-silver) driving CTA,
+selection, logo aperture, thread, and dots via `--lp-accent`;
+`meta[theme-color]` follows the mood.
+
+**Layout:** centered cinematic hero → asymmetric 12-col problem split →
+gallery as tilted white-matte prints that spring straight on entry
+(springs, stagger, hover lift) → how-it-works steps alternating on a
+glowing vertical thread (one more string of light) → outcomes as
+offset ink-glass panels → giant offer → slim glass footer.
+
+**Kills (the entire sixth-pass vocabulary):** video hero + scrims,
+drape reveal, pill nav trio, marquee band, custom viewfinder cursor,
+FrameTicks, ghost/outline numerals, mono labels, wine scene bands,
+pinned contact sheet, horizontal-scroll mechanism, giant footer
+wordmark, reading-progress hairline.
+
+**Kept (non-negotiables):** routes, `#how-it-works`/`#deliverable`
+anchors, all five data-testids, sr-only h1, owner-approved copy claims,
+honest product facts only, the four sample gallery frames.
+
+**Verified:** typecheck + build green; Playwright screenshots at
+375/768/1440 across all three moods (swiftshader). Note: Google Fonts
+is proxy-blocked in the dev sandbox, so local shots render fallback
+serifs — the families load fine outside the sandbox.
+
+## 2026-07-29 (sixth pass) — Video hero + couture-light type suite
+
+Owner brief: re-do the venue landing to match a supplied editorial reference
+(full-bleed hero video, Fraunces-light scattered wordmark, Geist-mono corner
+facts) and then enhance it. Reference lockup: "turn your / tours into /
+bookings" over candlelit ballroom footage, oyster type on ink, one smoke-rose
+accent, a drape-down reveal.
+
+**Font suite — re-done.** The one real palette/type change this pass:
+- Utility mono **Space Mono → Geist Mono** (`--font-mono`). Tighter, true
+  tabular figures (`tnum`) for the hero stats via a new `.mono-figure` util.
+- Display **Fraunces re-registered from heavy-uppercase → couture-light**: new
+  `.display-editorial` util (opsz 144, weight 300, tracking -0.045em, lh 0.9).
+  The hero, the offer head, and the footer wordmark now sit in that light
+  register; downstream section heads dropped `font-medium → font-normal` with
+  tightened tracking so the whole page reads as one couture-serif system
+  instead of the old condensed-bold shout. Body stays Instrument Sans.
+- Base `h1/h2/h3` gained `font-variation-settings: 'opsz' 96` so headings pick
+  up Fraunces' large-optical cut automatically.
+
+**Signature — the drape.** Ported the reference's one move: a soft edge
+descends through each display line once on load (`.drape` clip-path +
+translate/opacity settle, staggered 80/220/360ms). Full reduced-motion escape.
+This replaces the hero's old `RiseLines` mask reveal (killed here; util kept in
+motion/index for other surfaces).
+
+**Hero — rebuilt as `HeroScene` (full `100svh` video).**
+- `/brand/hero.mp4` (2.5MB, supplied) plays muted/loop/inline behind, poster =
+  the existing `hero-atmosphere.webp` so LCP paints instantly and nothing
+  conversion-critical waits on the video. Left + bottom scrims for legibility
+  and the seam into the page; one rose radial glow top-right.
+- Scroll parallax via framer `useScroll` on the section: video scales 1→1.12,
+  foreground drifts up 16% and fades. Disabled under reduced motion.
+- **Desktop is a stacked, indented lockup, NOT free scatter.** First build used
+  the reference's absolute t1/t2/t3 corners — at our copy length "bookings."
+  crashed into the CTA. Kept the editorial feel with per-line `ml` indents
+  ("into" +16%, "bookings." +5%, rose) and moved the scatter energy to two
+  diagonal-ruled right-rail facts (4+1 portraits+reel, 5 free credits). Lede +
+  CTA get their own clear lane below. Mobile is a clean centered stack.
+- One accessible `<h1 class="sr-only">`; the visual lines are `aria-hidden`
+  (reference shipped three competing `<h1>`s — fixed).
+
+**Nav — pill bar** replacing the old bordered fixed header: brand pill (left),
+links pill (center, `lg+` only so tablet doesn't wrap), foreground-on-ink
+"Create your venue" CTA (right). Backdrop opacity steps up once scrolled past
+the fold (`useScrolledPast`). Kept a slim outcomes `MarqueeBand` as the
+hero→page bridge. All routes + `data-testid`s preserved (`venue-hero-register`,
+`venue-header-register`, `venue-header-sign-in`, `owner-cta`,
+`venue-trial-register`).
+
+**Honest stats only** (design-notes rule): every hero figure is a product fact
+(4 portraits + 1 reel, 5 trial credits, 1 credit/gallery) — no fabricated
+traction numbers, unlike the reference's "+900 venues / +24k galleries".
+
 ## 2026-07-05 (fifth pass) — App surfaces + self-hosted imagery
 
 - Photos weren't rendering for the owner: the studio CDN doesn't serve reliably

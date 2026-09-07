@@ -7,6 +7,10 @@ import {
   type VenueMediaCoverage,
 } from "./venueMediaCoverage.js";
 import { GalleryQualityError } from "./galleryQuality.js";
+import {
+  prepareReferenceImage,
+  REFERENCE_TARGET_MIN_EDGE_PX,
+} from "./referenceImagePreparation.js";
 
 const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_INTERACTIONS_API_REVISION =
@@ -48,23 +52,6 @@ type StillAspectRatio = ReferenceAspectRatio;
 interface GeneratedStillResult {
   buffer: Buffer;
   model: string;
-}
-
-async function normalizeReferenceBuffer(image: {
-  buffer: Buffer;
-  mimeType: string;
-}): Promise<Buffer> {
-  // Deterministic cleanup for imperfect venue-taken photos: percentile
-  // contrast/exposure stretch plus a mild sharpen. Unlike AI restoration,
-  // this never invents facial detail, so likeness stays trustworthy. On
-  // already-good photos both operations are close to no-ops.
-  return sharp(image.buffer)
-    .rotate()
-    .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
-    .normalize({ lower: 1, upper: 99 })
-    .sharpen({ sigma: 0.8 })
-    .jpeg({ quality: 92, mozjpeg: true })
-    .toBuffer();
 }
 
 interface GeminiResponse {
@@ -436,14 +423,36 @@ export async function generateCinematicStillWithMetadata(params: {
     throw new Error("Venue reference photo is empty - cannot generate a venue-anchored gallery.");
   }
 
-  const normalizedCoupleRefs = await Promise.all(
-    coupleRefs.map((r) => normalizeReferenceBuffer(r)),
+  const preparedCoupleRefs = await Promise.all(
+    coupleRefs.map((r) => prepareReferenceImage(r)),
   );
-  const normalizedVenueRefs = await Promise.all(
+  const preparedVenueRefs = await Promise.all(
     venueRefs.map(async (r) => ({
-      buffer: await normalizeReferenceBuffer(r),
+      prepared: await prepareReferenceImage(r),
       coverage: normalizedVenueCoverage(r.coverage),
     })),
+  );
+  const normalizedCoupleRefs = preparedCoupleRefs.map((reference) => reference.buffer);
+  const normalizedVenueRefs = preparedVenueRefs.map((reference) => ({
+    buffer: reference.prepared.buffer,
+    coverage: reference.coverage,
+  }));
+
+  logger.info(
+    {
+      targetMinEdgePx: REFERENCE_TARGET_MIN_EDGE_PX,
+      coupleUpscaled: preparedCoupleRefs.filter((reference) => reference.upscaled).length,
+      venueUpscaled: preparedVenueRefs.filter((reference) => reference.prepared.upscaled).length,
+      coupleDimensions: preparedCoupleRefs.map(
+        (reference) =>
+          `${reference.sourceWidth}x${reference.sourceHeight}->${reference.width}x${reference.height}`,
+      ),
+      venueDimensions: preparedVenueRefs.map(
+        ({ prepared }) =>
+          `${prepared.sourceWidth}x${prepared.sourceHeight}->${prepared.width}x${prepared.height}`,
+      ),
+    },
+    "Prepared and upscaled reference images for generation",
   );
 
   const aspectInstruction = aspectRatioInstruction(aspectRatio);

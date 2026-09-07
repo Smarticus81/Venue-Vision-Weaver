@@ -55,8 +55,14 @@ Isolated sample-data UI: `pnpm --filter @workspace/wedding-app run dev:ui-fixtur
 
 ## Main files
 
-`src/index.css`, `src/components/layout/SiteChrome.tsx`, shared button/input/toast components, `src/lib/clerk.ts`, every primary page, `index.html`, and public brand assets, all inside `artifacts/wedding-app`. The API contracts, generated client, credit operations, storage paths, and authentication flow are preserved. No backend or database changes were made. The lockfile is unchanged.
+`src/index.css`, `src/components/layout/SiteChrome.tsx`, shared button/input/toast components, `src/lib/clerk.ts`, every primary page, `index.html`, and public brand assets, all inside `artifacts/wedding-app`. The API contracts, generated client, credit operations, storage paths, and authentication flow are preserved. The redesign itself does not alter backend or database behavior. The synchronization merge includes upstream backend fixes, generated readiness contracts, and its updated lockfile.
 
 ## Remaining verification
 
 A configured environment is needed for real Clerk sign-in and organization creation, uploads to storage, AI generation, successful email delivery, Stripe checkout/webhooks, and native reel playback with a real video. Those operations were not exercised against live services. The fixture is deliberately unable to send messages, buy credits, save records, or delete data. No deployment was performed.
+
+## GitHub synchronization
+
+Integrated origin/main at `00d3054`. Retained the garden layouts while carrying forward Clerk loading/failure and domain handling, stale-chunk recovery, immediate 404 handling, API-authoritative couple readiness, dashboard QR export, and an accessible gallery deletion dialog. Upstream image preparation and byte-range delivery changes are included unchanged. Superseded dark dashboard and video-hero components are omitted.
+
+Post-merge validation: frozen installation with pnpm 10.26.1; full build/typecheck; strict frontend unused-code checks; 4 byte-range tests and 3 reference-upscaler tests all passed. Browser fixtures verified mobile dashboard/QR export, accessible delete confirmation/cancel, and successful entry for a ready venue with one reference photo. Live integrations remain unverified as described above.

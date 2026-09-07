@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { toVenueSlug } from "@/lib/venueSlug";
-import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
+import { ClerkWidgetFrame, ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
 import { clerkConfigured, gardenAppearance } from "@/lib/clerk";
 
 /**
@@ -26,7 +26,8 @@ export default function CreateVenuePage() {
       title="Your venue. A new perspective."
       description="Create your account, name your team, and add your first venue. Your team shares credits across all your spaces."
     >
-      <SignedOut>
+      <ClerkWidgetFrame>
+<SignedOut>
         <div className="flex flex-col items-center gap-6">
           <div className="text-center max-w-md">
             <p className="eyebrow mb-3 text-brand">For venues</p>
@@ -52,6 +53,7 @@ export default function CreateVenuePage() {
           <VenueForm />
         </OrgGate>
       </SignedIn>
+</ClerkWidgetFrame>
     </FormLayout>
   );
 }
