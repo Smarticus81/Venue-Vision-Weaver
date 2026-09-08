@@ -16,6 +16,12 @@ tags:
     description: Couple photo sessions
   - name: storage
     description: Object storage upload and serving endpoints
+  - name: control-plane
+    description: |
+      The autonomous business control plane: the agent fleet, its decision
+      ledger, the guardrails it runs under, and the domain surfaces (support,
+      sales, experiments, product backlog) it operates on. Every route is
+      scoped to the caller's active Clerk organization.
   - name: organization
     description: |
       Organization-level account and billing. Auth is a Clerk session; billing
@@ -838,6 +844,660 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
+  /control-plane/overview:
+    get:
+      operationId: getControlPlaneOverview
+      tags: [control-plane]
+      summary: State of the business, fleet health, and the open decision queue
+      description: |
+        One call that backs the operator console: the chief-of-staff read of
+        the business, current guardrails, the fleet's live state, the most
+        recent agent runs, and the decisions waiting on a human.
+      responses:
+        "200":
+          description: Control plane overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneOverview"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: No active organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Control plane schema is not migrated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/agents:
+    get:
+      operationId: listControlPlaneAgents
+      tags: [control-plane]
+      summary: The registered agent fleet and the build's agent catalog
+      responses:
+        "200":
+          description: Agents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneAgentList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Control plane schema is not migrated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/agents/{agentKey}:
+    patch:
+      operationId: updateControlPlaneAgent
+      tags: [control-plane]
+      summary: Change an agent's autonomy, schedule, or budget
+      parameters:
+        - name: agentKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneAgentUpdateBody"
+      responses:
+        "200":
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneAgentResponse"
+        "400":
+          description: Invalid update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/agents/{agentKey}/run:
+    post:
+      operationId: runControlPlaneAgent
+      tags: [control-plane]
+      summary: Run one agent now, regardless of its schedule
+      parameters:
+        - name: agentKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tick result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneTickResult"
+        "404":
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/tick:
+    post:
+      operationId: runControlPlaneTick
+      tags: [control-plane]
+      summary: Run every agent that is currently due
+      responses:
+        "200":
+          description: Tick result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneTickResult"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/decisions:
+    get:
+      operationId: listControlPlaneDecisions
+      tags: [control-plane]
+      summary: The decision ledger
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: "open (default), all, or one specific status"
+          schema:
+            type: string
+        - name: agentKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Decisions, highest impact first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneDecisionList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/decisions/{id}/approve:
+    post:
+      operationId: approveControlPlaneDecision
+      tags: [control-plane]
+      summary: Approve a decision and execute its effect
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneDecisionNoteBody"
+      responses:
+        "200":
+          description: Decision executed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneDecisionOutcome"
+        "409":
+          description: Decision is not awaiting approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: Execution failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneDecisionOutcome"
+
+  /control-plane/decisions/{id}/reject:
+    post:
+      operationId: rejectControlPlaneDecision
+      tags: [control-plane]
+      summary: Reject a decision without executing it
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneDecisionNoteBody"
+      responses:
+        "200":
+          description: Decision rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneDecisionResponse"
+        "409":
+          description: Decision is not open
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/policy:
+    get:
+      operationId: getControlPlanePolicy
+      tags: [control-plane]
+      summary: Current guardrails
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlanePolicyResponse"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      operationId: updateControlPlanePolicy
+      tags: [control-plane]
+      summary: Change one or more guardrails
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlanePolicyBody"
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlanePolicyResponse"
+        "400":
+          description: Invalid policy value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/kill-switch:
+    post:
+      operationId: setControlPlaneKillSwitch
+      tags: [control-plane]
+      summary: Engage or release the master stop
+      description: |
+        While engaged nothing executes — not a scheduled decision, not one a
+        human approves. Agents keep observing and proposing so the queue
+        reflects reality when the switch is released.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneKillSwitchBody"
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlanePolicyResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/tickets:
+    get:
+      operationId: listControlPlaneTickets
+      tags: [control-plane]
+      summary: Support inbox
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tickets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneTicketList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: createControlPlaneTicket
+      tags: [control-plane]
+      summary: Open a support ticket from the console
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneTicketBody"
+      responses:
+        "201":
+          description: Ticket opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneTicketCreated"
+        "400":
+          description: Invalid ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/tickets/{id}:
+    patch:
+      operationId: updateControlPlaneTicket
+      tags: [control-plane]
+      summary: Update a ticket's status, priority, or resolution note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneTicketUpdateBody"
+      responses:
+        "200":
+          description: Updated ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneTicketResponse"
+        "404":
+          description: Ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/leads:
+    get:
+      operationId: listControlPlaneLeads
+      tags: [control-plane]
+      summary: Sales pipeline
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leads, highest score first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneLeadList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: createControlPlaneLead
+      tags: [control-plane]
+      summary: Add a lead to the pipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneLeadBody"
+      responses:
+        "201":
+          description: Lead created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneLeadResponse"
+        "409":
+          description: A lead with that contact email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/work-items:
+    get:
+      operationId: listControlPlaneWorkItems
+      tags: [control-plane]
+      summary: Product repair and upgrade backlog
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Work items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneWorkItemList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/work-items/{id}:
+    patch:
+      operationId: updateControlPlaneWorkItem
+      tags: [control-plane]
+      summary: Move a work item through its lifecycle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPlaneWorkItemUpdateBody"
+      responses:
+        "200":
+          description: Updated work item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneWorkItemResponse"
+        "404":
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/experiments:
+    get:
+      operationId: listControlPlaneExperiments
+      tags: [control-plane]
+      summary: Experiments with live variant results
+      responses:
+        "200":
+          description: Experiments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneExperimentList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/signals:
+    get:
+      operationId: listControlPlaneSignals
+      tags: [control-plane]
+      summary: Recent business signals the fleet reasons over
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Signals, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneSignalList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/runs:
+    get:
+      operationId: listControlPlaneRuns
+      tags: [control-plane]
+      summary: Agent run history
+      parameters:
+        - name: agentKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Runs, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneRunList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/audit:
+    get:
+      operationId: listControlPlaneAudit
+      tags: [control-plane]
+      summary: Append-only audit trail
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneAuditList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/memory:
+    get:
+      operationId: listControlPlaneMemory
+      tags: [control-plane]
+      summary: What the fleet has learned
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Memory notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneMemoryList"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control-plane/metrics:
+    get:
+      operationId: getControlPlaneMetrics
+      tags: [control-plane]
+      summary: Daily KPI series recorded by the fleet
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Metric series keyed by metric name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPlaneMetricSeries"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+
 components:
   schemas:
     HealthStatus:
@@ -857,7 +1517,19 @@ components:
           enum: [ok, degraded]
         checks:
           type: object
-          required: [env, database, storage, ai, billing, email, qualityGate, imageModel, ffmpeg]
+          required:
+            [
+              env,
+              database,
+              storage,
+              ai,
+              billing,
+              email,
+              qualityGate,
+              imageModel,
+              ffmpeg,
+              controlPlane,
+            ]
           additionalProperties: false
           properties:
             env:
@@ -877,6 +1549,8 @@ components:
             imageModel:
               $ref: "#/components/schemas/ReadinessCheckState"
             ffmpeg:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            controlPlane:
               $ref: "#/components/schemas/ReadinessCheckState"
 
     ReadinessCheckState:
@@ -1563,3 +2237,1051 @@ components:
         metadata:
           $ref: "#/components/schemas/UploadUrlRequest"
 
+    ControlPlaneJson:
+      type: object
+      additionalProperties: true
+
+    ControlPlaneSeverity:
+      type: string
+      enum: [info, warning, critical]
+
+    ControlPlaneAutonomy:
+      type: string
+      enum: [observe, recommend, supervised, autonomous]
+
+    ControlPlaneRiskLevel:
+      type: string
+      enum: [low, medium, high]
+
+    ControlPlaneObservation:
+      type: object
+      required: [key, label, value]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: "null"
+        goodDirection:
+          type: string
+          enum: [up, down, neutral]
+        delta:
+          type: [number, "null"]
+        severity:
+          $ref: "#/components/schemas/ControlPlaneSeverity"
+        detail:
+          type: string
+
+    ControlPlaneStateOfBusiness:
+      type: object
+      required: [headline, severity, highlights, concerns, narrative]
+      properties:
+        headline:
+          type: string
+        severity:
+          $ref: "#/components/schemas/ControlPlaneSeverity"
+        narrative:
+          type: string
+        highlights:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneObservation"
+        concerns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneObservation"
+
+    ControlPlanePolicy:
+      type: object
+      required:
+        - killSwitch
+        - autoExecuteEnabled
+        - maxAutoExecutionsPerDay
+        - confidenceFloor
+        - alwaysApprove
+        - outboundEmailEnabled
+        - maxCreditGrant
+        - reviewSlaHours
+        - decisionTtlHours
+      properties:
+        killSwitch:
+          type: boolean
+          description: Master stop. Nothing executes while engaged.
+        autoExecuteEnabled:
+          type: boolean
+        maxAutoExecutionsPerDay:
+          type: integer
+        confidenceFloor:
+          type: number
+        alwaysApprove:
+          type: array
+          items:
+            type: string
+        outboundEmailEnabled:
+          type: boolean
+          description: Whether agents may send email to venues, couples, or leads.
+        maxCreditGrant:
+          type: integer
+        reviewSlaHours:
+          type: integer
+        decisionTtlHours:
+          type: integer
+
+    ControlPlanePolicyResponse:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          $ref: "#/components/schemas/ControlPlanePolicy"
+        keys:
+          type: array
+          items:
+            type: string
+
+    ControlPlanePolicyBody:
+      type: object
+      additionalProperties: true
+      properties:
+        killSwitch:
+          type: boolean
+        autoExecuteEnabled:
+          type: boolean
+        maxAutoExecutionsPerDay:
+          type: integer
+        confidenceFloor:
+          type: number
+        outboundEmailEnabled:
+          type: boolean
+        maxCreditGrant:
+          type: integer
+        reviewSlaHours:
+          type: integer
+        decisionTtlHours:
+          type: integer
+
+    ControlPlaneKillSwitchBody:
+      type: object
+      required: [engaged]
+      properties:
+        engaged:
+          type: boolean
+
+    ControlPlaneAgent:
+      type: object
+      required:
+        - agentKey
+        - domain
+        - displayName
+        - enabled
+        - autonomy
+        - status
+        - healthScore
+        - actionsToday
+        - dailyActionBudget
+        - intervalMinutes
+      properties:
+        id:
+          type: integer
+        agentKey:
+          type: string
+        domain:
+          type: string
+        displayName:
+          type: string
+        charter:
+          type: [string, "null"]
+        enabled:
+          type: boolean
+        autonomy:
+          $ref: "#/components/schemas/ControlPlaneAutonomy"
+        status:
+          type: string
+        healthScore:
+          type: number
+        intervalMinutes:
+          type: integer
+        dailyActionBudget:
+          type: integer
+        actionsToday:
+          type: integer
+        lastRunAt:
+          type: [string, "null"]
+          format: date-time
+        nextRunAt:
+          type: [string, "null"]
+          format: date-time
+        minutesSinceLastRun:
+          type: [number, "null"]
+        lastError:
+          type: [string, "null"]
+        failedRuns24h:
+          type: integer
+        succeededRuns24h:
+          type: integer
+        registered:
+          type: boolean
+
+    ControlPlaneAgentResponse:
+      type: object
+      required: [agent]
+      properties:
+        agent:
+          $ref: "#/components/schemas/ControlPlaneAgent"
+
+    ControlPlaneAgentCatalogEntry:
+      type: object
+      required: [key, domain, displayName, charter, defaultAutonomy, defaultIntervalMinutes]
+      properties:
+        key:
+          type: string
+        domain:
+          type: string
+        displayName:
+          type: string
+        charter:
+          type: string
+        defaultAutonomy:
+          $ref: "#/components/schemas/ControlPlaneAutonomy"
+        defaultIntervalMinutes:
+          type: integer
+
+    ControlPlaneAgentList:
+      type: object
+      required: [agents, catalog]
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneAgent"
+        catalog:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneAgentCatalogEntry"
+
+    ControlPlaneAgentUpdateBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        autonomy:
+          $ref: "#/components/schemas/ControlPlaneAutonomy"
+        intervalMinutes:
+          type: integer
+        dailyActionBudget:
+          type: integer
+
+    ControlPlaneDecision:
+      type: object
+      required:
+        - id
+        - agentKey
+        - domain
+        - kind
+        - title
+        - rationale
+        - status
+        - riskLevel
+        - requiresApproval
+        - confidence
+        - impactScore
+        - dedupeKey
+        - createdAt
+      properties:
+        id:
+          type: integer
+        runId:
+          type: [integer, "null"]
+        agentKey:
+          type: string
+        domain:
+          type: string
+        kind:
+          type: string
+        title:
+          type: string
+        rationale:
+          type: string
+        evidence:
+          $ref: "#/components/schemas/ControlPlaneJson"
+        effect:
+          $ref: "#/components/schemas/ControlPlaneJson"
+        confidence:
+          type: number
+        impactScore:
+          type: number
+        riskLevel:
+          $ref: "#/components/schemas/ControlPlaneRiskLevel"
+        status:
+          type: string
+          enum: [proposed, approved, rejected, executed, failed, expired]
+        requiresApproval:
+          type: boolean
+        blockedReason:
+          type: [string, "null"]
+        decidedBy:
+          type: [string, "null"]
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+        decisionNote:
+          type: [string, "null"]
+        executedAt:
+          type: [string, "null"]
+          format: date-time
+        executionResult:
+          oneOf:
+            - $ref: "#/components/schemas/ControlPlaneJson"
+            - type: "null"
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+        dedupeKey:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlPlaneDecisionList:
+      type: object
+      required: [decisions]
+      properties:
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneDecision"
+
+    ControlPlaneDecisionResponse:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          $ref: "#/components/schemas/ControlPlaneDecision"
+
+    ControlPlaneDecisionOutcome:
+      type: object
+      required: [executed]
+      properties:
+        decision:
+          $ref: "#/components/schemas/ControlPlaneDecision"
+        executed:
+          type: boolean
+        error:
+          type: [string, "null"]
+
+    ControlPlaneDecisionNoteBody:
+      type: object
+      properties:
+        note:
+          type: string
+
+    ControlPlaneAgentTickResult:
+      type: object
+      required: [agentKey, status, summary, proposed, executed, held, rejected]
+      properties:
+        agentKey:
+          type: string
+        status:
+          type: string
+          enum: [succeeded, failed]
+        runId:
+          type: [integer, "null"]
+        summary:
+          type: string
+        proposed:
+          type: integer
+        executed:
+          type: integer
+        held:
+          type: integer
+        rejected:
+          type: integer
+        error:
+          type: [string, "null"]
+
+    ControlPlaneTickResult:
+      type: object
+      required: [organizationId, ran, skipped, headline, narrative, ready]
+      properties:
+        organizationId:
+          type: integer
+        ready:
+          type: boolean
+        headline:
+          type: string
+        narrative:
+          type: string
+        ran:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneAgentTickResult"
+        skipped:
+          type: array
+          items:
+            type: object
+            required: [agentKey, reason]
+            properties:
+              agentKey:
+                type: string
+              reason:
+                type: string
+
+    ControlPlaneRun:
+      type: object
+      required: [id, agentKey, status, startedAt]
+      properties:
+        id:
+          type: integer
+        agentKey:
+          type: string
+        domain:
+          type: string
+        trigger:
+          type: string
+        status:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: [string, "null"]
+          format: date-time
+        durationMs:
+          type: [integer, "null"]
+        summary:
+          type: [string, "null"]
+        narrative:
+          type: [string, "null"]
+        error:
+          type: [string, "null"]
+        proposedCount:
+          type: integer
+        executedCount:
+          type: integer
+        observations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneObservation"
+
+    ControlPlaneRunList:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneRun"
+
+    ControlPlaneFunnelWindow:
+      type: object
+      required: [started, ready, failed, processing]
+      properties:
+        started:
+          type: integer
+        ready:
+          type: integer
+        failed:
+          type: integer
+        processing:
+          type: integer
+        medianMinutesToReady:
+          type: [number, "null"]
+
+    ControlPlaneFinance:
+      type: object
+      required:
+        - creditsBalance
+        - creditsGranted30d
+        - creditsBurned30d
+        - creditsBurned7d
+        - estimatedCogsUsd30d
+        - estimatedRevenueUsd30d
+        - refunds30d
+        - planPriceUsd
+      properties:
+        creditsBalance:
+          type: integer
+        creditsGranted30d:
+          type: number
+        creditsBurned30d:
+          type: number
+        creditsBurned7d:
+          type: number
+        estimatedCogsUsd30d:
+          type: number
+        estimatedRevenueUsd30d:
+          type: number
+        runwayDays:
+          type: [number, "null"]
+        refunds30d:
+          type: number
+        planPriceUsd:
+          type: number
+
+    ControlPlaneVenue:
+      type: object
+      required: [id, name, slug, ready, mediaCount, coverageGaps, sessionsTotal]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        ownerEmail:
+          type: string
+        contactEmail:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        ageDays:
+          type: integer
+        mediaCount:
+          type: integer
+        coverageGaps:
+          type: array
+          items:
+            type: string
+        ready:
+          type: boolean
+        sessionsTotal:
+          type: integer
+        sessionsLast7d:
+          type: integer
+        sessionsPrev7d:
+          type: integer
+        sessionsLast30d:
+          type: integer
+        readyCount:
+          type: integer
+        failedCount:
+          type: integer
+        lastSessionAt:
+          type: [string, "null"]
+          format: date-time
+        daysSinceLastSession:
+          type: [integer, "null"]
+
+    ControlPlaneLedger:
+      type: object
+      required: [openCount, executed24h, approved7d, rejected7d, stale, byAgent]
+      properties:
+        openCount:
+          type: integer
+        executed24h:
+          type: integer
+        approved7d:
+          type: integer
+        rejected7d:
+          type: integer
+        stale:
+          type: array
+          items:
+            type: object
+            required: [id, agentKey, title, ageHours, riskLevel]
+            properties:
+              id:
+                type: integer
+              agentKey:
+                type: string
+              title:
+                type: string
+              ageHours:
+                type: number
+              riskLevel:
+                $ref: "#/components/schemas/ControlPlaneRiskLevel"
+        byAgent:
+          type: array
+          items:
+            type: object
+            required: [agentKey, open, executed7d, rejected7d]
+            properties:
+              agentKey:
+                type: string
+              open:
+                type: integer
+              executed7d:
+                type: integer
+              rejected7d:
+                type: integer
+
+    ControlPlaneMetricPoint:
+      type: object
+      required: [date, value]
+      properties:
+        date:
+          type: string
+        value:
+          type: number
+
+    ControlPlaneMetricSeries:
+      type: object
+      required: [series]
+      properties:
+        series:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ControlPlaneMetricPoint"
+
+    ControlPlaneWorkItem:
+      type: object
+      required: [id, type, title, severity, status, surface, dedupeKey]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        severity:
+          type: string
+        status:
+          type: string
+        surface:
+          type: string
+        dedupeKey:
+          type: string
+        evidence:
+          $ref: "#/components/schemas/ControlPlaneJson"
+        ageDays:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: [string, "null"]
+          format: date-time
+
+    ControlPlaneWorkItemList:
+      type: object
+      required: [workItems]
+      properties:
+        workItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneWorkItem"
+
+    ControlPlaneWorkItemResponse:
+      type: object
+      required: [workItem]
+      properties:
+        workItem:
+          $ref: "#/components/schemas/ControlPlaneWorkItem"
+
+    ControlPlaneWorkItemUpdateBody:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, blocked, done, cancelled]
+
+    ControlPlaneExperimentVariant:
+      type: object
+      required: [key, label, exposures, conversions, conversionRate]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        exposures:
+          type: integer
+        conversions:
+          type: integer
+        conversionRate:
+          type: number
+
+    ControlPlaneExperiment:
+      type: object
+      required: [id, key, hypothesis, surface, primaryMetric, status, minimumSampleSize, variants]
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        hypothesis:
+          type: string
+        surface:
+          type: string
+        primaryMetric:
+          type: string
+        status:
+          type: string
+        minimumSampleSize:
+          type: integer
+        ageDays:
+          type: [number, "null"]
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneExperimentVariant"
+
+    ControlPlaneExperimentList:
+      type: object
+      required: [experiments]
+      properties:
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneExperiment"
+
+    ControlPlaneTicket:
+      type: object
+      required: [id, subject, body, category, sentiment, priority, status, source, createdAt]
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: [integer, "null"]
+        sessionId:
+          type: [integer, "null"]
+        source:
+          type: string
+        requesterEmail:
+          type: [string, "null"]
+        requesterName:
+          type: [string, "null"]
+        subject:
+          type: string
+        body:
+          type: string
+        category:
+          type: string
+        sentiment:
+          type: string
+        priority:
+          type: string
+        status:
+          type: string
+        assignedTo:
+          type: [string, "null"]
+        aiDraft:
+          type: [string, "null"]
+        resolutionNote:
+          type: [string, "null"]
+        firstResponseAt:
+          type: [string, "null"]
+          format: date-time
+        resolvedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlPlaneTicketList:
+      type: object
+      required: [tickets]
+      properties:
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneTicket"
+
+    ControlPlaneTicketResponse:
+      type: object
+      required: [ticket]
+      properties:
+        ticket:
+          $ref: "#/components/schemas/ControlPlaneTicket"
+
+    ControlPlaneTicketBody:
+      type: object
+      required: [subject, body]
+      properties:
+        subject:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        requesterEmail:
+          type: string
+        venueId:
+          type: integer
+
+    ControlPlaneTicketCreated:
+      type: object
+      properties:
+        ticketId:
+          type: [integer, "null"]
+
+    ControlPlaneTicketUpdateBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, pending, resolved, closed]
+        priority:
+          type: string
+        resolutionNote:
+          type: string
+
+    ControlPlaneLead:
+      type: object
+      required: [id, companyName, source, stage, score, createdAt]
+      properties:
+        id:
+          type: integer
+        companyName:
+          type: string
+        contactName:
+          type: [string, "null"]
+        contactEmail:
+          type: [string, "null"]
+        source:
+          type: string
+        stage:
+          type: string
+        score:
+          type: integer
+        ownerAgent:
+          type: string
+        notes:
+          type: [string, "null"]
+        nextActionAt:
+          type: [string, "null"]
+          format: date-time
+        lastTouchAt:
+          type: [string, "null"]
+          format: date-time
+        metadata:
+          $ref: "#/components/schemas/ControlPlaneJson"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlPlaneLeadList:
+      type: object
+      required: [leads]
+      properties:
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneLead"
+
+    ControlPlaneLeadResponse:
+      type: object
+      required: [lead]
+      properties:
+        lead:
+          $ref: "#/components/schemas/ControlPlaneLead"
+
+    ControlPlaneLeadBody:
+      type: object
+      required: [companyName]
+      properties:
+        companyName:
+          type: string
+          minLength: 1
+        contactName:
+          type: string
+        contactEmail:
+          type: string
+        source:
+          type: string
+        stage:
+          type: string
+          enum: [new, qualified, contacted, demo, won, lost]
+
+    ControlPlaneSignal:
+      type: object
+      required: [id, kind, severity, source, title, occurredAt]
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: [integer, "null"]
+        kind:
+          type: string
+        severity:
+          $ref: "#/components/schemas/ControlPlaneSeverity"
+        source:
+          type: string
+        subjectType:
+          type: [string, "null"]
+        subjectId:
+          type: [string, "null"]
+        title:
+          type: string
+        payload:
+          $ref: "#/components/schemas/ControlPlaneJson"
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlPlaneSignalList:
+      type: object
+      required: [signals]
+      properties:
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneSignal"
+
+    ControlPlaneAuditEntry:
+      type: object
+      required: [id, actorType, actor, action, createdAt]
+      properties:
+        id:
+          type: integer
+        actorType:
+          type: string
+        actor:
+          type: string
+        action:
+          type: string
+        subjectType:
+          type: [string, "null"]
+        subjectId:
+          type: [string, "null"]
+        detail:
+          $ref: "#/components/schemas/ControlPlaneJson"
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlPlaneAuditList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneAuditEntry"
+
+    ControlPlaneMemoryNote:
+      type: object
+      required: [id, agentKey, kind, content, importance, createdAt]
+      properties:
+        id:
+          type: integer
+        agentKey:
+          type: string
+        kind:
+          type: string
+        content:
+          type: string
+        importance:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlPlaneMemoryList:
+      type: object
+      required: [notes]
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneMemoryNote"
+
+    ControlPlaneSnapshot:
+      type: object
+      required: [now, organization, funnel, finance, venues, ledger]
+      properties:
+        now:
+          type: string
+          format: date-time
+        organization:
+          type: object
+          required: [id, name, plan, creditsBalance]
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            plan:
+              type: string
+            creditsBalance:
+              type: integer
+            hasSubscription:
+              type: boolean
+            billingPeriodEnd:
+              type: [string, "null"]
+              format: date-time
+            createdAt:
+              type: string
+              format: date-time
+            ageDays:
+              type: integer
+        funnel:
+          type: object
+          required: [last7d, prev7d, last24h]
+          properties:
+            last7d:
+              $ref: "#/components/schemas/ControlPlaneFunnelWindow"
+            prev7d:
+              $ref: "#/components/schemas/ControlPlaneFunnelWindow"
+            last24h:
+              $ref: "#/components/schemas/ControlPlaneFunnelWindow"
+        finance:
+          $ref: "#/components/schemas/ControlPlaneFinance"
+        venues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneVenue"
+        ledger:
+          $ref: "#/components/schemas/ControlPlaneLedger"
+        workItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneWorkItem"
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneExperiment"
+        metrics:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ControlPlaneMetricPoint"
+
+    ControlPlaneOverview:
+      type: object
+      required: [state, policy, snapshot, fleet, recentRuns, openDecisions]
+      properties:
+        state:
+          $ref: "#/components/schemas/ControlPlaneStateOfBusiness"
+        policy:
+          $ref: "#/components/schemas/ControlPlanePolicy"
+        snapshot:
+          $ref: "#/components/schemas/ControlPlaneSnapshot"
+        fleet:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneAgent"
+        recentRuns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneRun"
+        openDecisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlPlaneDecision"

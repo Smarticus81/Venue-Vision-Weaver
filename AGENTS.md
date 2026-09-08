@@ -26,6 +26,9 @@ pnpm --filter @workspace/api-spec run codegen
 # Push DB schema changes
 pnpm --filter @workspace/db run push
 
+# Exercise the control plane agent fleet against hand-written snapshots
+pnpm run test:control-plane
+
 # Verify production env, build artifacts, ffmpeg, and optional live readiness
 pnpm run verify:production -- --url https://your-glimpse-host.example
 ```
@@ -36,15 +39,16 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 
 ### Artifacts (deployable apps)
 
-- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing, gallery styles). Credit-gated Gemini image generation with Stripe billing.
-- **`artifacts/wedding-app`** - React 19 SPA (Vite). Venue main site at `/`, signup at `/create-venue`, owner dashboard at `/dashboard/:slug`, couple flow at `/preview/:slug`, share links at `/v/:shareToken`.
+- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing, gallery styles, control plane). Credit-gated Gemini image generation with Stripe billing.
+- **`artifacts/wedding-app`** - React 19 SPA (Vite). Venue main site at `/`, signup at `/create-venue`, owner dashboard at `/dashboard/:slug`, couple flow at `/preview/:slug`, share links at `/v/:shareToken`, control plane console at `/ops`.
 
 ### Shared libraries (`lib/`)
 
 - **`lib/api-spec`** - OpenAPI 3.1 spec (`openapi.yaml`) + Orval config. Source of truth for the API contract.
 - **`lib/api-client-react`** - Auto-generated React Query hooks. Do not edit `src/generated/` manually.
 - **`lib/api-zod`** - Auto-generated Zod validation schemas. Do not edit `src/generated/` manually.
-- **`lib/db`** - Drizzle ORM schema (`venues`, `venue_media`, `couple_sessions`, `couple_media`, `generated_assets`, `credit_transactions`, owner auth tables).
+- **`lib/db`** - Drizzle ORM schema (`venues`, `venue_media`, `couple_sessions`, `couple_media`, `generated_assets`, `credit_transactions`, owner auth tables, `control_plane_*`).
+- **`lib/control-plane`** - The autonomous business control plane kernel: the eight domain agents, the guardrail/policy engine, and the orchestrator. Pure TypeScript — no database, network, or clock — so the whole fleet is testable against a hand-written snapshot.
 - **`lib/object-storage-web`** - Uppy-based file upload components.
 
 ### Key patterns
@@ -53,6 +57,8 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 - **Credits**: Gallery session = 1 credit. Trial venues get 5 credits on create.
 - **Owner auth**: Venue owners sign in with email magic links and an httpOnly cookie session. Do not add PIN-based flows.
 - **Billing**: Stripe Checkout + webhooks in `artifacts/api-server/src/routes/billing.ts`.
+
+- **Control plane**: an agent fleet (growth, support, product repair/upgrades, finance, experiments, sales, activation, governance) runs inside the API server, proposes decisions with evidence, and executes them only within org policy. High-risk effects always require a human; the kill switch stops everything. Operator console at `/ops`. See `docs/control-plane.md`.
 
 ### Required environment variables
 

@@ -7,6 +7,7 @@ import { isStripeConfigured } from "../lib/stripe.js";
 import { configuredImageModels } from "../lib/stillImageClient.js";
 import { checkFfmpegAvailable } from "../lib/motionReel.js";
 import { missingRequiredDatabaseSchema } from "../lib/databaseReadiness.js";
+import { controlPlaneMissingTables } from "../lib/controlPlane/schemaGuard.js";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,9 @@ router.get("/readyz", async (_req, res) => {
     qualityGate: (process.env.GALLERY_QUALITY_GATE ?? "on").toLowerCase() === "off" ? "degraded" : "ok",
     imageModel: productionImageModelChainReady() ? "ok" : "degraded",
     ffmpeg: "degraded",
+    // The autonomous control plane needs its own tables; without them the
+    // fleet cannot run, so the deploy is not fully ready.
+    controlPlane: "degraded",
   };
 
   try {
@@ -55,6 +59,7 @@ router.get("/readyz", async (_req, res) => {
   }
 
   checks.ffmpeg = await checkFfmpegAvailable() ? "ok" : "degraded";
+  checks.controlPlane = (await controlPlaneMissingTables(true)).length === 0 ? "ok" : "degraded";
 
   const status = Object.values(checks).every((check) => check === "ok") ? "ok" : "degraded";
   const data = ReadinessCheckResponse.parse({

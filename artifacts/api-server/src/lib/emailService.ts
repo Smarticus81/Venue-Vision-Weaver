@@ -189,3 +189,24 @@ export async function sendRecoveryEmail(
   );
 }
 
+
+/**
+ * Plain-text notification rendered into the standard glimpse layout. Used by
+ * the control plane for operator alerts and venue nudges, where the body is
+ * composed by an agent rather than by a fixed template.
+ */
+export async function sendPlainNotification(
+  to: string | null | undefined,
+  subject: string,
+  title: string,
+  bodyText: string,
+  cta?: { href: string; label: string },
+): Promise<boolean> {
+  if (!to?.trim()) return false;
+  const paragraphs = bodyText
+    .split(/\n{2,}/)
+    .map((block) => `<p style="white-space:pre-line;">${escapeHtml(block.trim())}</p>`)
+    .join("");
+  const body = paragraphs + (cta ? ctaButton(cta.href, cta.label) : "");
+  return sendEmail(to.trim(), subject, emailLayout(title, body));
+}

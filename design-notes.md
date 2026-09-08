@@ -3,6 +3,62 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-09-08 (sixteenth pass) — The control plane console (`/ops`)
+
+A new internal surface: the operator's view of the eight-agent fleet that runs
+the business. It is a working instrument, not a marketing page, so the
+darkroom palette is used at its most restrained — no display type above the one
+headline, no motion beyond the existing `.grain`, no imagery at all.
+
+**What the page is for.** The operator arrives to answer one question: *does
+anything need me?* So the page opens with the chief-of-staff read — a severity
+pill, one Fraunces headline stating the worst live condition, and a paragraph
+of plain prose — before any number. Tiles come second. The decision queue is
+third and is the only place the page asks for an action.
+
+**Decisions carry their reasoning.** Every card shows the rationale in prose,
+the impact and confidence, the effect type, and — behind one "Evidence"
+disclosure — the raw effect and evidence JSON. Approving is a rose button;
+rejecting is a ghost button. An operator who cannot see why should never be
+asked to approve, so the disclosure is never hidden behind a route change.
+
+**Severity has one vocabulary, everywhere.** `SeverityPill` (emerald / amber /
+red dot + mono label) and `RiskBadge` (outlined pill) are shared components,
+matching how `StatusPill` already unified gallery state. Delta colour follows
+*whether the change is good*, never whether the number went up — a falling
+failure rate is green.
+
+**Numbers are `mono-figure`** (tabular Geist Mono) so columns stay steady as
+the page refetches every 60s. Labels are `mono-label`, matching the dashboard.
+
+**The kill switch is designed to be found under pressure.** It sits at the top
+of Governance in its own card; when engaged the card turns red *and* a banner
+appears on every tab. Its copy states the consequence ("nothing will execute,
+including decisions you approve") rather than the mechanism.
+
+**Killed:**
+
+- A sidebar navigation. Eight tabs at 12px mono in a scrollable row costs one
+  line and no layout; a sidebar would have taken a third of a laptop width from
+  the content that matters.
+- Sparkline charts on the KPI tiles. The daily metric series exists, but with a
+  handful of points per org a sparkline is decoration that implies more data
+  than there is. Revisit once a metric has 30+ days.
+- A "confidence" progress ring per decision. The number in mono is legible at a
+  glance; the ring was a second encoding of one scalar.
+- Per-agent colour coding by domain. Eight hues turned the fleet grid into a
+  swatch chart. Domain is a mono label; only health carries colour.
+
+**Not done / next passes:**
+
+- The metric series are exposed at `/api/control-plane/metrics` but nothing
+  plots them yet. When an org has real history, the Overview deserves one
+  chart — starts and delivery rate over 30 days — not a dashboard of them.
+- Decision approval takes no note from the operator (the API accepts one).
+  A short "why" field on reject would feed the governance agent's rejection
+  analysis with reasons, not just counts.
+- Mobile is usable but not designed for: the console assumes a laptop.
+
 ## 2026-09-03 (fifteenth pass) — Product screens: dashboard, share page, couple flow
 
 Autonomous observe → diagnose → fix → render loop over the app surfaces

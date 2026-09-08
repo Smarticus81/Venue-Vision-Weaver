@@ -47,8 +47,8 @@ pnpm run verify:production -- --url https://your-glimpse-host.example
 ```
 
 The deployed `/api/readyz` endpoint must return `200` with every check set to
-`ok`: env, database, storage, AI, billing, email, quality gate, image model, and
-ffmpeg.
+`ok`: env, database, storage, AI, billing, email, quality gate, image model,
+ffmpeg, and control plane.
 
 When running the verifier on a workstation without ffmpeg, the local ffmpeg
 check can still pass if `railway.toml` deploys the Dockerfile and the Dockerfile
@@ -72,9 +72,23 @@ upload intent uniqueness, owner auth token/session uniqueness, and the partial
 unique `stripe_event_id` index that prevents billing webhook replay (Clerk svix message ids) from
 duplicating credits.
 
+The `controlPlane` readiness check reports whether the autonomous control
+plane's tables exist. They are created by the same schema push as everything
+else:
+
+```bash
+pnpm run db:push
+```
+
+Until that runs, the fleet does not tick, `/ops` shows a "not migrated" notice,
+and the control-plane API returns `503 control_plane_not_migrated`. Nothing
+else in the product is affected — the check is degraded, not the gallery
+pipeline. See `docs/control-plane.md` for what the fleet does once it is live,
+and how to stop it.
+
 Railway is configured to use `/api/readyz` as the deploy health check, so a
-deployment with missing DB/storage/Gemini/Stripe/Clerk/email/ffmpeg readiness should
-not be treated as healthy.
+deployment with missing DB/storage/Gemini/Stripe/Clerk/email/ffmpeg/control-plane
+readiness should not be treated as healthy.
 
 ## Gallery Quality Gate
 

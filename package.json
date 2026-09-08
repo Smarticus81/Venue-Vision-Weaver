@@ -12,6 +12,7 @@
     "gallery:qa": "node ./scripts/node_modules/tsx/dist/cli.mjs ./artifacts/api-server/src/tools/galleryQa.ts",
     "test:reference-upscaler": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/lib/referenceImagePreparation.test.ts",
     "test:mobile-reel": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/lib/byteRange.test.ts",
+    "test:control-plane": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./lib/control-plane/src/controlPlane.test.ts",
     "setup:db": "node scripts/setup-database.cjs",
     "setup:storage": "node scripts/setup-supabase-storage.cjs",
     "generate:secrets": "node scripts/generate-secrets.cjs",

@@ -17,6 +17,8 @@ import {
 } from "./scenePlan.js";
 import { rankVenueReferencesForScene } from "./venueReferenceSelector.js";
 import { sendGalleryReadyNotification } from "./emailService.js";
+import { signalSessionReady } from "./controlPlane/signals.js";
+import { recordConversion } from "./controlPlane/experiments.js";
 import {
   GalleryQualityError,
   acceptanceFloorFailures,
@@ -330,6 +332,16 @@ export async function processGallerySession(ctx: GalleryGenerationContext): Prom
   // the owner reviews it first and sends it from the dashboard.
   if (updatedSession && venue) {
     void sendGalleryReadyNotification(venue.ownerEmail, updatedSession, venue);
+    void signalSessionReady(
+      venue.id,
+      sessionId,
+      updatedSession.completedAt
+        ? (updatedSession.completedAt.getTime() - updatedSession.createdAt.getTime()) / 60_000
+        : null,
+    );
+    if (venue.organizationId !== null) {
+      void recordConversion(venue.organizationId, "gallery_delivered", `session:${sessionId}`);
+    }
   }
 
   logger.info(

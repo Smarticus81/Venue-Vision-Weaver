@@ -156,6 +156,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/control-plane':
+        specifier: workspace:*
+        version: link:../../lib/control-plane
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
@@ -326,6 +329,16 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+
+  lib/control-plane:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
 
   lib/db:
     dependencies:

@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { refundCreditsForSession } from "./credits.js";
+import { signalSessionFailed } from "./controlPlane/signals.js";
 import { processGallerySession, userMessageForStillError } from "./galleryGeneration.js";
 import { logger } from "./logger.js";
 import { ObjectStorageService, assertNormalizedUploadObjectPath } from "./objectStorage.js";
@@ -243,5 +244,18 @@ export async function processSession(sessionId: number): Promise<void> {
       .where(eq(coupleSessionsTable.id, sessionId));
 
     await refundCreditsForSession(sessionId);
+
+    // Tell the control plane so the product agent can classify the failure
+    // and, when it is transient, propose a retry.
+    const [failed] = await db
+      .select({
+        venueId: coupleSessionsTable.venueId,
+        errorMessage: coupleSessionsTable.errorMessage,
+      })
+      .from(coupleSessionsTable)
+      .where(eq(coupleSessionsTable.id, sessionId));
+    if (failed) {
+      void signalSessionFailed(failed.venueId, sessionId, failed.errorMessage);
+    }
   }
 }

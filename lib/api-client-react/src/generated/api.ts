@@ -21,12 +21,50 @@ import type {
   BillingCheckoutBody,
   BillingCheckoutResponse,
   BillingPortalResponse,
+  ControlPlaneAgentList,
+  ControlPlaneAgentResponse,
+  ControlPlaneAgentUpdateBody,
+  ControlPlaneAuditList,
+  ControlPlaneDecisionList,
+  ControlPlaneDecisionNoteBody,
+  ControlPlaneDecisionOutcome,
+  ControlPlaneDecisionResponse,
+  ControlPlaneExperimentList,
+  ControlPlaneKillSwitchBody,
+  ControlPlaneLeadBody,
+  ControlPlaneLeadList,
+  ControlPlaneLeadResponse,
+  ControlPlaneMemoryList,
+  ControlPlaneMetricSeries,
+  ControlPlaneOverview,
+  ControlPlanePolicyBody,
+  ControlPlanePolicyResponse,
+  ControlPlaneRunList,
+  ControlPlaneSignalList,
+  ControlPlaneTickResult,
+  ControlPlaneTicketBody,
+  ControlPlaneTicketCreated,
+  ControlPlaneTicketList,
+  ControlPlaneTicketResponse,
+  ControlPlaneTicketUpdateBody,
+  ControlPlaneWorkItemList,
+  ControlPlaneWorkItemResponse,
+  ControlPlaneWorkItemUpdateBody,
   CreateSessionBody,
   CreateVenueBody,
   DeleteSessionResponse,
   ErrorEnvelope,
+  GetControlPlaneMetricsParams,
   GetStorageObjectParams,
   HealthStatus,
+  ListControlPlaneAuditParams,
+  ListControlPlaneDecisionsParams,
+  ListControlPlaneLeadsParams,
+  ListControlPlaneMemoryParams,
+  ListControlPlaneRunsParams,
+  ListControlPlaneSignalsParams,
+  ListControlPlaneTicketsParams,
+  ListControlPlaneWorkItemsParams,
   ListGalleryStylesResponse,
   ListSessionsResponse,
   ListVenueMediaResponse,
@@ -2385,6 +2423,2238 @@ export function useGetStorageObject<
     params,
     options,
   );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * One call that backs the operator console: the chief-of-staff read of
+the business, current guardrails, the fleet's live state, the most
+recent agent runs, and the decisions waiting on a human.
+
+ * @summary State of the business, fleet health, and the open decision queue
+ */
+export const getGetControlPlaneOverviewUrl = () => {
+  return `/api/control-plane/overview`;
+};
+
+export const getControlPlaneOverview = async (
+  options?: RequestInit,
+): Promise<ControlPlaneOverview> => {
+  return customFetch<ControlPlaneOverview>(getGetControlPlaneOverviewUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetControlPlaneOverviewQueryKey = () => {
+  return [`/api/control-plane/overview`] as const;
+};
+
+export const getGetControlPlaneOverviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlPlaneOverview>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlaneOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetControlPlaneOverviewQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlPlaneOverview>>
+  > = ({ signal }) => getControlPlaneOverview({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlaneOverview>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlPlaneOverviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlPlaneOverview>>
+>;
+export type GetControlPlaneOverviewQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary State of the business, fleet health, and the open decision queue
+ */
+
+export function useGetControlPlaneOverview<
+  TData = Awaited<ReturnType<typeof getControlPlaneOverview>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlaneOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlPlaneOverviewQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary The registered agent fleet and the build's agent catalog
+ */
+export const getListControlPlaneAgentsUrl = () => {
+  return `/api/control-plane/agents`;
+};
+
+export const listControlPlaneAgents = async (
+  options?: RequestInit,
+): Promise<ControlPlaneAgentList> => {
+  return customFetch<ControlPlaneAgentList>(getListControlPlaneAgentsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListControlPlaneAgentsQueryKey = () => {
+  return [`/api/control-plane/agents`] as const;
+};
+
+export const getListControlPlaneAgentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneAgents>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneAgents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneAgentsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneAgents>>
+  > = ({ signal }) => listControlPlaneAgents({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneAgents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneAgentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneAgents>>
+>;
+export type ListControlPlaneAgentsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary The registered agent fleet and the build's agent catalog
+ */
+
+export function useListControlPlaneAgents<
+  TData = Awaited<ReturnType<typeof listControlPlaneAgents>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneAgents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneAgentsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Change an agent's autonomy, schedule, or budget
+ */
+export const getUpdateControlPlaneAgentUrl = (agentKey: string) => {
+  return `/api/control-plane/agents/${agentKey}`;
+};
+
+export const updateControlPlaneAgent = async (
+  agentKey: string,
+  controlPlaneAgentUpdateBody: ControlPlaneAgentUpdateBody,
+  options?: RequestInit,
+): Promise<ControlPlaneAgentResponse> => {
+  return customFetch<ControlPlaneAgentResponse>(
+    getUpdateControlPlaneAgentUrl(agentKey),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneAgentUpdateBody),
+    },
+  );
+};
+
+export const getUpdateControlPlaneAgentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlaneAgent>>,
+    TError,
+    { agentKey: string; data: BodyType<ControlPlaneAgentUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlPlaneAgent>>,
+  TError,
+  { agentKey: string; data: BodyType<ControlPlaneAgentUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlPlaneAgent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlPlaneAgent>>,
+    { agentKey: string; data: BodyType<ControlPlaneAgentUpdateBody> }
+  > = (props) => {
+    const { agentKey, data } = props ?? {};
+
+    return updateControlPlaneAgent(agentKey, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlPlaneAgentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlPlaneAgent>>
+>;
+export type UpdateControlPlaneAgentMutationBody =
+  BodyType<ControlPlaneAgentUpdateBody>;
+export type UpdateControlPlaneAgentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Change an agent's autonomy, schedule, or budget
+ */
+export const useUpdateControlPlaneAgent = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlaneAgent>>,
+    TError,
+    { agentKey: string; data: BodyType<ControlPlaneAgentUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlPlaneAgent>>,
+  TError,
+  { agentKey: string; data: BodyType<ControlPlaneAgentUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlPlaneAgentMutationOptions(options));
+};
+
+/**
+ * @summary Run one agent now, regardless of its schedule
+ */
+export const getRunControlPlaneAgentUrl = (agentKey: string) => {
+  return `/api/control-plane/agents/${agentKey}/run`;
+};
+
+export const runControlPlaneAgent = async (
+  agentKey: string,
+  options?: RequestInit,
+): Promise<ControlPlaneTickResult> => {
+  return customFetch<ControlPlaneTickResult>(
+    getRunControlPlaneAgentUrl(agentKey),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRunControlPlaneAgentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runControlPlaneAgent>>,
+    TError,
+    { agentKey: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runControlPlaneAgent>>,
+  TError,
+  { agentKey: string },
+  TContext
+> => {
+  const mutationKey = ["runControlPlaneAgent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runControlPlaneAgent>>,
+    { agentKey: string }
+  > = (props) => {
+    const { agentKey } = props ?? {};
+
+    return runControlPlaneAgent(agentKey, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunControlPlaneAgentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runControlPlaneAgent>>
+>;
+
+export type RunControlPlaneAgentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Run one agent now, regardless of its schedule
+ */
+export const useRunControlPlaneAgent = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runControlPlaneAgent>>,
+    TError,
+    { agentKey: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runControlPlaneAgent>>,
+  TError,
+  { agentKey: string },
+  TContext
+> => {
+  return useMutation(getRunControlPlaneAgentMutationOptions(options));
+};
+
+/**
+ * @summary Run every agent that is currently due
+ */
+export const getRunControlPlaneTickUrl = () => {
+  return `/api/control-plane/tick`;
+};
+
+export const runControlPlaneTick = async (
+  options?: RequestInit,
+): Promise<ControlPlaneTickResult> => {
+  return customFetch<ControlPlaneTickResult>(getRunControlPlaneTickUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunControlPlaneTickMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runControlPlaneTick>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runControlPlaneTick>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runControlPlaneTick"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runControlPlaneTick>>,
+    void
+  > = () => {
+    return runControlPlaneTick(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunControlPlaneTickMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runControlPlaneTick>>
+>;
+
+export type RunControlPlaneTickMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Run every agent that is currently due
+ */
+export const useRunControlPlaneTick = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runControlPlaneTick>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runControlPlaneTick>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunControlPlaneTickMutationOptions(options));
+};
+
+/**
+ * @summary The decision ledger
+ */
+export const getListControlPlaneDecisionsUrl = (
+  params?: ListControlPlaneDecisionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/decisions?${stringifiedParams}`
+    : `/api/control-plane/decisions`;
+};
+
+export const listControlPlaneDecisions = async (
+  params?: ListControlPlaneDecisionsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneDecisionList> => {
+  return customFetch<ControlPlaneDecisionList>(
+    getListControlPlaneDecisionsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneDecisionsQueryKey = (
+  params?: ListControlPlaneDecisionsParams,
+) => {
+  return [`/api/control-plane/decisions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneDecisionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneDecisions>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneDecisionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneDecisions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneDecisionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneDecisions>>
+  > = ({ signal }) =>
+    listControlPlaneDecisions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneDecisions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneDecisionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneDecisions>>
+>;
+export type ListControlPlaneDecisionsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary The decision ledger
+ */
+
+export function useListControlPlaneDecisions<
+  TData = Awaited<ReturnType<typeof listControlPlaneDecisions>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneDecisionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneDecisions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneDecisionsQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Approve a decision and execute its effect
+ */
+export const getApproveControlPlaneDecisionUrl = (id: number) => {
+  return `/api/control-plane/decisions/${id}/approve`;
+};
+
+export const approveControlPlaneDecision = async (
+  id: number,
+  controlPlaneDecisionNoteBody?: ControlPlaneDecisionNoteBody,
+  options?: RequestInit,
+): Promise<ControlPlaneDecisionOutcome> => {
+  return customFetch<ControlPlaneDecisionOutcome>(
+    getApproveControlPlaneDecisionUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneDecisionNoteBody),
+    },
+  );
+};
+
+export const getApproveControlPlaneDecisionMutationOptions = <
+  TError = ErrorType<ErrorEnvelope | ControlPlaneDecisionOutcome>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveControlPlaneDecision>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveControlPlaneDecision>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+  TContext
+> => {
+  const mutationKey = ["approveControlPlaneDecision"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveControlPlaneDecision>>,
+    { id: number; data: BodyType<ControlPlaneDecisionNoteBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return approveControlPlaneDecision(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveControlPlaneDecisionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveControlPlaneDecision>>
+>;
+export type ApproveControlPlaneDecisionMutationBody =
+  BodyType<ControlPlaneDecisionNoteBody>;
+export type ApproveControlPlaneDecisionMutationError = ErrorType<
+  ErrorEnvelope | ControlPlaneDecisionOutcome
+>;
+
+/**
+ * @summary Approve a decision and execute its effect
+ */
+export const useApproveControlPlaneDecision = <
+  TError = ErrorType<ErrorEnvelope | ControlPlaneDecisionOutcome>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveControlPlaneDecision>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveControlPlaneDecision>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+  TContext
+> => {
+  return useMutation(getApproveControlPlaneDecisionMutationOptions(options));
+};
+
+/**
+ * @summary Reject a decision without executing it
+ */
+export const getRejectControlPlaneDecisionUrl = (id: number) => {
+  return `/api/control-plane/decisions/${id}/reject`;
+};
+
+export const rejectControlPlaneDecision = async (
+  id: number,
+  controlPlaneDecisionNoteBody?: ControlPlaneDecisionNoteBody,
+  options?: RequestInit,
+): Promise<ControlPlaneDecisionResponse> => {
+  return customFetch<ControlPlaneDecisionResponse>(
+    getRejectControlPlaneDecisionUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneDecisionNoteBody),
+    },
+  );
+};
+
+export const getRejectControlPlaneDecisionMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectControlPlaneDecision>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rejectControlPlaneDecision>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+  TContext
+> => {
+  const mutationKey = ["rejectControlPlaneDecision"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rejectControlPlaneDecision>>,
+    { id: number; data: BodyType<ControlPlaneDecisionNoteBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return rejectControlPlaneDecision(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RejectControlPlaneDecisionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rejectControlPlaneDecision>>
+>;
+export type RejectControlPlaneDecisionMutationBody =
+  BodyType<ControlPlaneDecisionNoteBody>;
+export type RejectControlPlaneDecisionMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Reject a decision without executing it
+ */
+export const useRejectControlPlaneDecision = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectControlPlaneDecision>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rejectControlPlaneDecision>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneDecisionNoteBody> },
+  TContext
+> => {
+  return useMutation(getRejectControlPlaneDecisionMutationOptions(options));
+};
+
+/**
+ * @summary Current guardrails
+ */
+export const getGetControlPlanePolicyUrl = () => {
+  return `/api/control-plane/policy`;
+};
+
+export const getControlPlanePolicy = async (
+  options?: RequestInit,
+): Promise<ControlPlanePolicyResponse> => {
+  return customFetch<ControlPlanePolicyResponse>(
+    getGetControlPlanePolicyUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetControlPlanePolicyQueryKey = () => {
+  return [`/api/control-plane/policy`] as const;
+};
+
+export const getGetControlPlanePolicyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlPlanePolicy>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlanePolicy>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetControlPlanePolicyQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlPlanePolicy>>
+  > = ({ signal }) => getControlPlanePolicy({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlanePolicy>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlPlanePolicyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlPlanePolicy>>
+>;
+export type GetControlPlanePolicyQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Current guardrails
+ */
+
+export function useGetControlPlanePolicy<
+  TData = Awaited<ReturnType<typeof getControlPlanePolicy>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlanePolicy>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlPlanePolicyQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Change one or more guardrails
+ */
+export const getUpdateControlPlanePolicyUrl = () => {
+  return `/api/control-plane/policy`;
+};
+
+export const updateControlPlanePolicy = async (
+  controlPlanePolicyBody: ControlPlanePolicyBody,
+  options?: RequestInit,
+): Promise<ControlPlanePolicyResponse> => {
+  return customFetch<ControlPlanePolicyResponse>(
+    getUpdateControlPlanePolicyUrl(),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlanePolicyBody),
+    },
+  );
+};
+
+export const getUpdateControlPlanePolicyMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlanePolicy>>,
+    TError,
+    { data: BodyType<ControlPlanePolicyBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlPlanePolicy>>,
+  TError,
+  { data: BodyType<ControlPlanePolicyBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlPlanePolicy"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlPlanePolicy>>,
+    { data: BodyType<ControlPlanePolicyBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateControlPlanePolicy(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlPlanePolicyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlPlanePolicy>>
+>;
+export type UpdateControlPlanePolicyMutationBody =
+  BodyType<ControlPlanePolicyBody>;
+export type UpdateControlPlanePolicyMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Change one or more guardrails
+ */
+export const useUpdateControlPlanePolicy = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlanePolicy>>,
+    TError,
+    { data: BodyType<ControlPlanePolicyBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlPlanePolicy>>,
+  TError,
+  { data: BodyType<ControlPlanePolicyBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlPlanePolicyMutationOptions(options));
+};
+
+/**
+ * While engaged nothing executes — not a scheduled decision, not one a
+human approves. Agents keep observing and proposing so the queue
+reflects reality when the switch is released.
+
+ * @summary Engage or release the master stop
+ */
+export const getSetControlPlaneKillSwitchUrl = () => {
+  return `/api/control-plane/kill-switch`;
+};
+
+export const setControlPlaneKillSwitch = async (
+  controlPlaneKillSwitchBody: ControlPlaneKillSwitchBody,
+  options?: RequestInit,
+): Promise<ControlPlanePolicyResponse> => {
+  return customFetch<ControlPlanePolicyResponse>(
+    getSetControlPlaneKillSwitchUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneKillSwitchBody),
+    },
+  );
+};
+
+export const getSetControlPlaneKillSwitchMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlPlaneKillSwitch>>,
+    TError,
+    { data: BodyType<ControlPlaneKillSwitchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setControlPlaneKillSwitch>>,
+  TError,
+  { data: BodyType<ControlPlaneKillSwitchBody> },
+  TContext
+> => {
+  const mutationKey = ["setControlPlaneKillSwitch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setControlPlaneKillSwitch>>,
+    { data: BodyType<ControlPlaneKillSwitchBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setControlPlaneKillSwitch(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetControlPlaneKillSwitchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setControlPlaneKillSwitch>>
+>;
+export type SetControlPlaneKillSwitchMutationBody =
+  BodyType<ControlPlaneKillSwitchBody>;
+export type SetControlPlaneKillSwitchMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Engage or release the master stop
+ */
+export const useSetControlPlaneKillSwitch = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlPlaneKillSwitch>>,
+    TError,
+    { data: BodyType<ControlPlaneKillSwitchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setControlPlaneKillSwitch>>,
+  TError,
+  { data: BodyType<ControlPlaneKillSwitchBody> },
+  TContext
+> => {
+  return useMutation(getSetControlPlaneKillSwitchMutationOptions(options));
+};
+
+/**
+ * @summary Support inbox
+ */
+export const getListControlPlaneTicketsUrl = (
+  params?: ListControlPlaneTicketsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/tickets?${stringifiedParams}`
+    : `/api/control-plane/tickets`;
+};
+
+export const listControlPlaneTickets = async (
+  params?: ListControlPlaneTicketsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneTicketList> => {
+  return customFetch<ControlPlaneTicketList>(
+    getListControlPlaneTicketsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneTicketsQueryKey = (
+  params?: ListControlPlaneTicketsParams,
+) => {
+  return [`/api/control-plane/tickets`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneTicketsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneTickets>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneTicketsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneTickets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneTicketsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneTickets>>
+  > = ({ signal }) =>
+    listControlPlaneTickets(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneTickets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneTicketsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneTickets>>
+>;
+export type ListControlPlaneTicketsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Support inbox
+ */
+
+export function useListControlPlaneTickets<
+  TData = Awaited<ReturnType<typeof listControlPlaneTickets>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneTicketsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneTickets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneTicketsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Open a support ticket from the console
+ */
+export const getCreateControlPlaneTicketUrl = () => {
+  return `/api/control-plane/tickets`;
+};
+
+export const createControlPlaneTicket = async (
+  controlPlaneTicketBody: ControlPlaneTicketBody,
+  options?: RequestInit,
+): Promise<ControlPlaneTicketCreated> => {
+  return customFetch<ControlPlaneTicketCreated>(
+    getCreateControlPlaneTicketUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneTicketBody),
+    },
+  );
+};
+
+export const getCreateControlPlaneTicketMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createControlPlaneTicket>>,
+    TError,
+    { data: BodyType<ControlPlaneTicketBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createControlPlaneTicket>>,
+  TError,
+  { data: BodyType<ControlPlaneTicketBody> },
+  TContext
+> => {
+  const mutationKey = ["createControlPlaneTicket"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createControlPlaneTicket>>,
+    { data: BodyType<ControlPlaneTicketBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createControlPlaneTicket(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateControlPlaneTicketMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createControlPlaneTicket>>
+>;
+export type CreateControlPlaneTicketMutationBody =
+  BodyType<ControlPlaneTicketBody>;
+export type CreateControlPlaneTicketMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Open a support ticket from the console
+ */
+export const useCreateControlPlaneTicket = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createControlPlaneTicket>>,
+    TError,
+    { data: BodyType<ControlPlaneTicketBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createControlPlaneTicket>>,
+  TError,
+  { data: BodyType<ControlPlaneTicketBody> },
+  TContext
+> => {
+  return useMutation(getCreateControlPlaneTicketMutationOptions(options));
+};
+
+/**
+ * @summary Update a ticket's status, priority, or resolution note
+ */
+export const getUpdateControlPlaneTicketUrl = (id: number) => {
+  return `/api/control-plane/tickets/${id}`;
+};
+
+export const updateControlPlaneTicket = async (
+  id: number,
+  controlPlaneTicketUpdateBody: ControlPlaneTicketUpdateBody,
+  options?: RequestInit,
+): Promise<ControlPlaneTicketResponse> => {
+  return customFetch<ControlPlaneTicketResponse>(
+    getUpdateControlPlaneTicketUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneTicketUpdateBody),
+    },
+  );
+};
+
+export const getUpdateControlPlaneTicketMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlaneTicket>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneTicketUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlPlaneTicket>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneTicketUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlPlaneTicket"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlPlaneTicket>>,
+    { id: number; data: BodyType<ControlPlaneTicketUpdateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateControlPlaneTicket(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlPlaneTicketMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlPlaneTicket>>
+>;
+export type UpdateControlPlaneTicketMutationBody =
+  BodyType<ControlPlaneTicketUpdateBody>;
+export type UpdateControlPlaneTicketMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Update a ticket's status, priority, or resolution note
+ */
+export const useUpdateControlPlaneTicket = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlaneTicket>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneTicketUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlPlaneTicket>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneTicketUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlPlaneTicketMutationOptions(options));
+};
+
+/**
+ * @summary Sales pipeline
+ */
+export const getListControlPlaneLeadsUrl = (
+  params?: ListControlPlaneLeadsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/leads?${stringifiedParams}`
+    : `/api/control-plane/leads`;
+};
+
+export const listControlPlaneLeads = async (
+  params?: ListControlPlaneLeadsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneLeadList> => {
+  return customFetch<ControlPlaneLeadList>(
+    getListControlPlaneLeadsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneLeadsQueryKey = (
+  params?: ListControlPlaneLeadsParams,
+) => {
+  return [`/api/control-plane/leads`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneLeads>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneLeadsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneLeads>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneLeadsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneLeads>>
+  > = ({ signal }) =>
+    listControlPlaneLeads(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneLeadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneLeads>>
+>;
+export type ListControlPlaneLeadsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Sales pipeline
+ */
+
+export function useListControlPlaneLeads<
+  TData = Awaited<ReturnType<typeof listControlPlaneLeads>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneLeadsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneLeads>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneLeadsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a lead to the pipeline
+ */
+export const getCreateControlPlaneLeadUrl = () => {
+  return `/api/control-plane/leads`;
+};
+
+export const createControlPlaneLead = async (
+  controlPlaneLeadBody: ControlPlaneLeadBody,
+  options?: RequestInit,
+): Promise<ControlPlaneLeadResponse> => {
+  return customFetch<ControlPlaneLeadResponse>(getCreateControlPlaneLeadUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(controlPlaneLeadBody),
+  });
+};
+
+export const getCreateControlPlaneLeadMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createControlPlaneLead>>,
+    TError,
+    { data: BodyType<ControlPlaneLeadBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createControlPlaneLead>>,
+  TError,
+  { data: BodyType<ControlPlaneLeadBody> },
+  TContext
+> => {
+  const mutationKey = ["createControlPlaneLead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createControlPlaneLead>>,
+    { data: BodyType<ControlPlaneLeadBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createControlPlaneLead(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateControlPlaneLeadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createControlPlaneLead>>
+>;
+export type CreateControlPlaneLeadMutationBody = BodyType<ControlPlaneLeadBody>;
+export type CreateControlPlaneLeadMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Add a lead to the pipeline
+ */
+export const useCreateControlPlaneLead = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createControlPlaneLead>>,
+    TError,
+    { data: BodyType<ControlPlaneLeadBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createControlPlaneLead>>,
+  TError,
+  { data: BodyType<ControlPlaneLeadBody> },
+  TContext
+> => {
+  return useMutation(getCreateControlPlaneLeadMutationOptions(options));
+};
+
+/**
+ * @summary Product repair and upgrade backlog
+ */
+export const getListControlPlaneWorkItemsUrl = (
+  params?: ListControlPlaneWorkItemsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/work-items?${stringifiedParams}`
+    : `/api/control-plane/work-items`;
+};
+
+export const listControlPlaneWorkItems = async (
+  params?: ListControlPlaneWorkItemsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneWorkItemList> => {
+  return customFetch<ControlPlaneWorkItemList>(
+    getListControlPlaneWorkItemsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneWorkItemsQueryKey = (
+  params?: ListControlPlaneWorkItemsParams,
+) => {
+  return [
+    `/api/control-plane/work-items`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListControlPlaneWorkItemsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneWorkItems>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneWorkItemsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneWorkItems>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneWorkItemsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneWorkItems>>
+  > = ({ signal }) =>
+    listControlPlaneWorkItems(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneWorkItems>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneWorkItemsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneWorkItems>>
+>;
+export type ListControlPlaneWorkItemsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Product repair and upgrade backlog
+ */
+
+export function useListControlPlaneWorkItems<
+  TData = Awaited<ReturnType<typeof listControlPlaneWorkItems>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneWorkItemsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneWorkItems>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneWorkItemsQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Move a work item through its lifecycle
+ */
+export const getUpdateControlPlaneWorkItemUrl = (id: number) => {
+  return `/api/control-plane/work-items/${id}`;
+};
+
+export const updateControlPlaneWorkItem = async (
+  id: number,
+  controlPlaneWorkItemUpdateBody: ControlPlaneWorkItemUpdateBody,
+  options?: RequestInit,
+): Promise<ControlPlaneWorkItemResponse> => {
+  return customFetch<ControlPlaneWorkItemResponse>(
+    getUpdateControlPlaneWorkItemUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlPlaneWorkItemUpdateBody),
+    },
+  );
+};
+
+export const getUpdateControlPlaneWorkItemMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlaneWorkItem>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneWorkItemUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlPlaneWorkItem>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneWorkItemUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlPlaneWorkItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlPlaneWorkItem>>,
+    { id: number; data: BodyType<ControlPlaneWorkItemUpdateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateControlPlaneWorkItem(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlPlaneWorkItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlPlaneWorkItem>>
+>;
+export type UpdateControlPlaneWorkItemMutationBody =
+  BodyType<ControlPlaneWorkItemUpdateBody>;
+export type UpdateControlPlaneWorkItemMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Move a work item through its lifecycle
+ */
+export const useUpdateControlPlaneWorkItem = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPlaneWorkItem>>,
+    TError,
+    { id: number; data: BodyType<ControlPlaneWorkItemUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlPlaneWorkItem>>,
+  TError,
+  { id: number; data: BodyType<ControlPlaneWorkItemUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlPlaneWorkItemMutationOptions(options));
+};
+
+/**
+ * @summary Experiments with live variant results
+ */
+export const getListControlPlaneExperimentsUrl = () => {
+  return `/api/control-plane/experiments`;
+};
+
+export const listControlPlaneExperiments = async (
+  options?: RequestInit,
+): Promise<ControlPlaneExperimentList> => {
+  return customFetch<ControlPlaneExperimentList>(
+    getListControlPlaneExperimentsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneExperimentsQueryKey = () => {
+  return [`/api/control-plane/experiments`] as const;
+};
+
+export const getListControlPlaneExperimentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneExperiments>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneExperiments>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneExperimentsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneExperiments>>
+  > = ({ signal }) =>
+    listControlPlaneExperiments({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneExperiments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneExperimentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneExperiments>>
+>;
+export type ListControlPlaneExperimentsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Experiments with live variant results
+ */
+
+export function useListControlPlaneExperiments<
+  TData = Awaited<ReturnType<typeof listControlPlaneExperiments>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneExperiments>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneExperimentsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Recent business signals the fleet reasons over
+ */
+export const getListControlPlaneSignalsUrl = (
+  params?: ListControlPlaneSignalsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/signals?${stringifiedParams}`
+    : `/api/control-plane/signals`;
+};
+
+export const listControlPlaneSignals = async (
+  params?: ListControlPlaneSignalsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneSignalList> => {
+  return customFetch<ControlPlaneSignalList>(
+    getListControlPlaneSignalsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneSignalsQueryKey = (
+  params?: ListControlPlaneSignalsParams,
+) => {
+  return [`/api/control-plane/signals`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneSignalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneSignals>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneSignalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneSignals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneSignalsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneSignals>>
+  > = ({ signal }) =>
+    listControlPlaneSignals(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneSignals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneSignalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneSignals>>
+>;
+export type ListControlPlaneSignalsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Recent business signals the fleet reasons over
+ */
+
+export function useListControlPlaneSignals<
+  TData = Awaited<ReturnType<typeof listControlPlaneSignals>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneSignalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneSignals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneSignalsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Agent run history
+ */
+export const getListControlPlaneRunsUrl = (
+  params?: ListControlPlaneRunsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/runs?${stringifiedParams}`
+    : `/api/control-plane/runs`;
+};
+
+export const listControlPlaneRuns = async (
+  params?: ListControlPlaneRunsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneRunList> => {
+  return customFetch<ControlPlaneRunList>(getListControlPlaneRunsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListControlPlaneRunsQueryKey = (
+  params?: ListControlPlaneRunsParams,
+) => {
+  return [`/api/control-plane/runs`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneRuns>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneRunsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneRuns>>
+  > = ({ signal }) =>
+    listControlPlaneRuns(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneRuns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneRuns>>
+>;
+export type ListControlPlaneRunsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Agent run history
+ */
+
+export function useListControlPlaneRuns<
+  TData = Awaited<ReturnType<typeof listControlPlaneRuns>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneRunsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Append-only audit trail
+ */
+export const getListControlPlaneAuditUrl = (
+  params?: ListControlPlaneAuditParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/audit?${stringifiedParams}`
+    : `/api/control-plane/audit`;
+};
+
+export const listControlPlaneAudit = async (
+  params?: ListControlPlaneAuditParams,
+  options?: RequestInit,
+): Promise<ControlPlaneAuditList> => {
+  return customFetch<ControlPlaneAuditList>(
+    getListControlPlaneAuditUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneAuditQueryKey = (
+  params?: ListControlPlaneAuditParams,
+) => {
+  return [`/api/control-plane/audit`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneAuditQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneAudit>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneAuditParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneAuditQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneAudit>>
+  > = ({ signal }) =>
+    listControlPlaneAudit(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneAudit>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneAuditQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneAudit>>
+>;
+export type ListControlPlaneAuditQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Append-only audit trail
+ */
+
+export function useListControlPlaneAudit<
+  TData = Awaited<ReturnType<typeof listControlPlaneAudit>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneAuditParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneAuditQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary What the fleet has learned
+ */
+export const getListControlPlaneMemoryUrl = (
+  params?: ListControlPlaneMemoryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/memory?${stringifiedParams}`
+    : `/api/control-plane/memory`;
+};
+
+export const listControlPlaneMemory = async (
+  params?: ListControlPlaneMemoryParams,
+  options?: RequestInit,
+): Promise<ControlPlaneMemoryList> => {
+  return customFetch<ControlPlaneMemoryList>(
+    getListControlPlaneMemoryUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlPlaneMemoryQueryKey = (
+  params?: ListControlPlaneMemoryParams,
+) => {
+  return [`/api/control-plane/memory`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlPlaneMemoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlPlaneMemory>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneMemoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneMemory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlPlaneMemoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlPlaneMemory>>
+  > = ({ signal }) =>
+    listControlPlaneMemory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlPlaneMemory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlPlaneMemoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlPlaneMemory>>
+>;
+export type ListControlPlaneMemoryQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary What the fleet has learned
+ */
+
+export function useListControlPlaneMemory<
+  TData = Awaited<ReturnType<typeof listControlPlaneMemory>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: ListControlPlaneMemoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlPlaneMemory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlPlaneMemoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Daily KPI series recorded by the fleet
+ */
+export const getGetControlPlaneMetricsUrl = (
+  params?: GetControlPlaneMetricsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control-plane/metrics?${stringifiedParams}`
+    : `/api/control-plane/metrics`;
+};
+
+export const getControlPlaneMetrics = async (
+  params?: GetControlPlaneMetricsParams,
+  options?: RequestInit,
+): Promise<ControlPlaneMetricSeries> => {
+  return customFetch<ControlPlaneMetricSeries>(
+    getGetControlPlaneMetricsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetControlPlaneMetricsQueryKey = (
+  params?: GetControlPlaneMetricsParams,
+) => {
+  return [`/api/control-plane/metrics`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetControlPlaneMetricsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlPlaneMetrics>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: GetControlPlaneMetricsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlPlaneMetrics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetControlPlaneMetricsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlPlaneMetrics>>
+  > = ({ signal }) =>
+    getControlPlaneMetrics(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlPlaneMetrics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlPlaneMetricsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlPlaneMetrics>>
+>;
+export type GetControlPlaneMetricsQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Daily KPI series recorded by the fleet
+ */
+
+export function useGetControlPlaneMetrics<
+  TData = Awaited<ReturnType<typeof getControlPlaneMetrics>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  params?: GetControlPlaneMetricsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlPlaneMetrics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlPlaneMetricsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -29,6 +29,7 @@ import {
   fetchClerkUserEmail,
 } from "../lib/orgAuth.js";
 import { logger } from "../lib/logger.js";
+import { signalBillingEvent } from "../lib/controlPlane/signals.js";
 
 const router: IRouter = Router();
 
@@ -234,6 +235,9 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
 
         if (product === "credit_pack") {
           await grantCreditsToOrg(organizationId, CREDIT_PACK_AMOUNT, "pack_purchase", event.id);
+          void signalBillingEvent(organizationId, "pack_purchased", "Credit pack purchased", {
+            credits: CREDIT_PACK_AMOUNT,
+          });
         } else if (product === "starter" || product === "growth") {
           const subId =
             typeof session.subscription === "string"
@@ -246,6 +250,9 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
               stripeSubscriptionId: subId ?? null,
             })
             .where(eq(organizationsTable.id, organizationId));
+          void signalBillingEvent(organizationId, "subscription_started", `Subscribed to ${product}`, {
+            plan: product,
+          });
         }
         break;
       }
@@ -266,6 +273,7 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         const credits =
           org.plan === "growth" ? GROWTH_MONTHLY_CREDITS : STARTER_MONTHLY_CREDITS;
         await setOrgCreditsBalance(org.id, credits, "subscription_grant", event.id);
+        void signalBillingEvent(org.id, "renewed", `${org.plan} plan renewed`, { credits });
 
         const periodEnd = invoice.lines?.data?.[0]?.period?.end;
         if (periodEnd) {
@@ -278,14 +286,21 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
       }
       case "customer.subscription.deleted": {
         const sub = event.data.object;
-        await db
+        const [cancelled] = await db
           .update(organizationsTable)
           .set({
             plan: "none",
             stripeSubscriptionId: null,
             billingPeriodEnd: null,
           })
-          .where(eq(organizationsTable.stripeSubscriptionId, sub.id));
+          .where(eq(organizationsTable.stripeSubscriptionId, sub.id))
+          .returning({ id: organizationsTable.id });
+        // Churn is the single most important signal the fleet can receive.
+        if (cancelled) {
+          void signalBillingEvent(cancelled.id, "churned", "Subscription cancelled", {
+            stripeSubscriptionId: sub.id,
+          });
+        }
         break;
       }
       default:

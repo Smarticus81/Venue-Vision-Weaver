@@ -35,6 +35,7 @@ export type ReadinessStatusChecks = {
   qualityGate: ReadinessCheckState;
   imageModel: ReadinessCheckState;
   ffmpeg: ReadinessCheckState;
+  controlPlane: ReadinessCheckState;
 };
 
 export interface ReadinessStatus {
@@ -503,6 +504,642 @@ export interface UploadUrlResponse {
   metadata?: UploadUrlRequest;
 }
 
+export interface ControlPlaneJson {
+  [key: string]: unknown;
+}
+
+export type ControlPlaneSeverity =
+  (typeof ControlPlaneSeverity)[keyof typeof ControlPlaneSeverity];
+
+export const ControlPlaneSeverity = {
+  info: "info",
+  warning: "warning",
+  critical: "critical",
+} as const;
+
+export type ControlPlaneAutonomy =
+  (typeof ControlPlaneAutonomy)[keyof typeof ControlPlaneAutonomy];
+
+export const ControlPlaneAutonomy = {
+  observe: "observe",
+  recommend: "recommend",
+  supervised: "supervised",
+  autonomous: "autonomous",
+} as const;
+
+export type ControlPlaneRiskLevel =
+  (typeof ControlPlaneRiskLevel)[keyof typeof ControlPlaneRiskLevel];
+
+export const ControlPlaneRiskLevel = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type ControlPlaneObservationGoodDirection =
+  (typeof ControlPlaneObservationGoodDirection)[keyof typeof ControlPlaneObservationGoodDirection];
+
+export const ControlPlaneObservationGoodDirection = {
+  up: "up",
+  down: "down",
+  neutral: "neutral",
+} as const;
+
+export interface ControlPlaneObservation {
+  key: string;
+  label: string;
+  value: string | number | null;
+  goodDirection?: ControlPlaneObservationGoodDirection;
+  /** @nullable */
+  delta?: number | null;
+  severity?: ControlPlaneSeverity;
+  detail?: string;
+}
+
+export interface ControlPlaneStateOfBusiness {
+  headline: string;
+  severity: ControlPlaneSeverity;
+  narrative: string;
+  highlights: ControlPlaneObservation[];
+  concerns: ControlPlaneObservation[];
+}
+
+export interface ControlPlanePolicy {
+  /** Master stop. Nothing executes while engaged. */
+  killSwitch: boolean;
+  autoExecuteEnabled: boolean;
+  maxAutoExecutionsPerDay: number;
+  confidenceFloor: number;
+  alwaysApprove: string[];
+  /** Whether agents may send email to venues, couples, or leads. */
+  outboundEmailEnabled: boolean;
+  maxCreditGrant: number;
+  reviewSlaHours: number;
+  decisionTtlHours: number;
+}
+
+export interface ControlPlanePolicyResponse {
+  policy: ControlPlanePolicy;
+  keys?: string[];
+}
+
+export interface ControlPlanePolicyBody {
+  killSwitch?: boolean;
+  autoExecuteEnabled?: boolean;
+  maxAutoExecutionsPerDay?: number;
+  confidenceFloor?: number;
+  outboundEmailEnabled?: boolean;
+  maxCreditGrant?: number;
+  reviewSlaHours?: number;
+  decisionTtlHours?: number;
+  [key: string]: unknown;
+}
+
+export interface ControlPlaneKillSwitchBody {
+  engaged: boolean;
+}
+
+export interface ControlPlaneAgent {
+  id?: number;
+  agentKey: string;
+  domain: string;
+  displayName: string;
+  /** @nullable */
+  charter?: string | null;
+  enabled: boolean;
+  autonomy: ControlPlaneAutonomy;
+  status: string;
+  healthScore: number;
+  intervalMinutes: number;
+  dailyActionBudget: number;
+  actionsToday: number;
+  /** @nullable */
+  lastRunAt?: string | null;
+  /** @nullable */
+  nextRunAt?: string | null;
+  /** @nullable */
+  minutesSinceLastRun?: number | null;
+  /** @nullable */
+  lastError?: string | null;
+  failedRuns24h?: number;
+  succeededRuns24h?: number;
+  registered?: boolean;
+}
+
+export interface ControlPlaneAgentResponse {
+  agent: ControlPlaneAgent;
+}
+
+export interface ControlPlaneAgentCatalogEntry {
+  key: string;
+  domain: string;
+  displayName: string;
+  charter: string;
+  defaultAutonomy: ControlPlaneAutonomy;
+  defaultIntervalMinutes: number;
+}
+
+export interface ControlPlaneAgentList {
+  agents: ControlPlaneAgent[];
+  catalog: ControlPlaneAgentCatalogEntry[];
+}
+
+export interface ControlPlaneAgentUpdateBody {
+  enabled?: boolean;
+  autonomy?: ControlPlaneAutonomy;
+  intervalMinutes?: number;
+  dailyActionBudget?: number;
+}
+
+export type ControlPlaneDecisionStatus =
+  (typeof ControlPlaneDecisionStatus)[keyof typeof ControlPlaneDecisionStatus];
+
+export const ControlPlaneDecisionStatus = {
+  proposed: "proposed",
+  approved: "approved",
+  rejected: "rejected",
+  executed: "executed",
+  failed: "failed",
+  expired: "expired",
+} as const;
+
+export interface ControlPlaneDecision {
+  id: number;
+  /** @nullable */
+  runId?: number | null;
+  agentKey: string;
+  domain: string;
+  kind: string;
+  title: string;
+  rationale: string;
+  evidence?: ControlPlaneJson;
+  effect?: ControlPlaneJson;
+  confidence: number;
+  impactScore: number;
+  riskLevel: ControlPlaneRiskLevel;
+  status: ControlPlaneDecisionStatus;
+  requiresApproval: boolean;
+  /** @nullable */
+  blockedReason?: string | null;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  /** @nullable */
+  decisionNote?: string | null;
+  /** @nullable */
+  executedAt?: string | null;
+  executionResult?: ControlPlaneJson | null;
+  /** @nullable */
+  expiresAt?: string | null;
+  dedupeKey: string;
+  createdAt: string;
+}
+
+export interface ControlPlaneDecisionList {
+  decisions: ControlPlaneDecision[];
+}
+
+export interface ControlPlaneDecisionResponse {
+  decision: ControlPlaneDecision;
+}
+
+export interface ControlPlaneDecisionOutcome {
+  decision?: ControlPlaneDecision;
+  executed: boolean;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface ControlPlaneDecisionNoteBody {
+  note?: string;
+}
+
+export type ControlPlaneAgentTickResultStatus =
+  (typeof ControlPlaneAgentTickResultStatus)[keyof typeof ControlPlaneAgentTickResultStatus];
+
+export const ControlPlaneAgentTickResultStatus = {
+  succeeded: "succeeded",
+  failed: "failed",
+} as const;
+
+export interface ControlPlaneAgentTickResult {
+  agentKey: string;
+  status: ControlPlaneAgentTickResultStatus;
+  /** @nullable */
+  runId?: number | null;
+  summary: string;
+  proposed: number;
+  executed: number;
+  held: number;
+  rejected: number;
+  /** @nullable */
+  error?: string | null;
+}
+
+export type ControlPlaneTickResultSkippedItem = {
+  agentKey: string;
+  reason: string;
+};
+
+export interface ControlPlaneTickResult {
+  organizationId: number;
+  ready: boolean;
+  headline: string;
+  narrative: string;
+  ran: ControlPlaneAgentTickResult[];
+  skipped: ControlPlaneTickResultSkippedItem[];
+}
+
+export interface ControlPlaneRun {
+  id: number;
+  agentKey: string;
+  domain?: string;
+  trigger?: string;
+  status: string;
+  startedAt: string;
+  /** @nullable */
+  finishedAt?: string | null;
+  /** @nullable */
+  durationMs?: number | null;
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  narrative?: string | null;
+  /** @nullable */
+  error?: string | null;
+  proposedCount?: number;
+  executedCount?: number;
+  observations?: ControlPlaneObservation[];
+}
+
+export interface ControlPlaneRunList {
+  runs: ControlPlaneRun[];
+}
+
+export interface ControlPlaneFunnelWindow {
+  started: number;
+  ready: number;
+  failed: number;
+  processing: number;
+  /** @nullable */
+  medianMinutesToReady?: number | null;
+}
+
+export interface ControlPlaneFinance {
+  creditsBalance: number;
+  creditsGranted30d: number;
+  creditsBurned30d: number;
+  creditsBurned7d: number;
+  estimatedCogsUsd30d: number;
+  estimatedRevenueUsd30d: number;
+  /** @nullable */
+  runwayDays?: number | null;
+  refunds30d: number;
+  planPriceUsd: number;
+}
+
+export interface ControlPlaneVenue {
+  id: number;
+  name: string;
+  slug: string;
+  ownerEmail?: string;
+  /** @nullable */
+  contactEmail?: string | null;
+  createdAt?: string;
+  ageDays?: number;
+  mediaCount: number;
+  coverageGaps: string[];
+  ready: boolean;
+  sessionsTotal: number;
+  sessionsLast7d?: number;
+  sessionsPrev7d?: number;
+  sessionsLast30d?: number;
+  readyCount?: number;
+  failedCount?: number;
+  /** @nullable */
+  lastSessionAt?: string | null;
+  /** @nullable */
+  daysSinceLastSession?: number | null;
+}
+
+export type ControlPlaneLedgerStaleItem = {
+  id: number;
+  agentKey: string;
+  title: string;
+  ageHours: number;
+  riskLevel: ControlPlaneRiskLevel;
+};
+
+export type ControlPlaneLedgerByAgentItem = {
+  agentKey: string;
+  open: number;
+  executed7d: number;
+  rejected7d: number;
+};
+
+export interface ControlPlaneLedger {
+  openCount: number;
+  executed24h: number;
+  approved7d: number;
+  rejected7d: number;
+  stale: ControlPlaneLedgerStaleItem[];
+  byAgent: ControlPlaneLedgerByAgentItem[];
+}
+
+export interface ControlPlaneMetricPoint {
+  date: string;
+  value: number;
+}
+
+export type ControlPlaneMetricSeriesSeries = {
+  [key: string]: ControlPlaneMetricPoint[];
+};
+
+export interface ControlPlaneMetricSeries {
+  series: ControlPlaneMetricSeriesSeries;
+}
+
+export interface ControlPlaneWorkItem {
+  id: number;
+  type: string;
+  title: string;
+  detail?: string;
+  severity: string;
+  status: string;
+  surface: string;
+  dedupeKey: string;
+  evidence?: ControlPlaneJson;
+  ageDays?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  /** @nullable */
+  closedAt?: string | null;
+}
+
+export interface ControlPlaneWorkItemList {
+  workItems: ControlPlaneWorkItem[];
+}
+
+export interface ControlPlaneWorkItemResponse {
+  workItem: ControlPlaneWorkItem;
+}
+
+export type ControlPlaneWorkItemUpdateBodyStatus =
+  (typeof ControlPlaneWorkItemUpdateBodyStatus)[keyof typeof ControlPlaneWorkItemUpdateBodyStatus];
+
+export const ControlPlaneWorkItemUpdateBodyStatus = {
+  open: "open",
+  in_progress: "in_progress",
+  blocked: "blocked",
+  done: "done",
+  cancelled: "cancelled",
+} as const;
+
+export interface ControlPlaneWorkItemUpdateBody {
+  status: ControlPlaneWorkItemUpdateBodyStatus;
+}
+
+export interface ControlPlaneExperimentVariant {
+  key: string;
+  label: string;
+  exposures: number;
+  conversions: number;
+  conversionRate: number;
+}
+
+export interface ControlPlaneExperiment {
+  id: number;
+  key: string;
+  hypothesis: string;
+  surface: string;
+  primaryMetric: string;
+  status: string;
+  minimumSampleSize: number;
+  /** @nullable */
+  ageDays?: number | null;
+  variants: ControlPlaneExperimentVariant[];
+}
+
+export interface ControlPlaneExperimentList {
+  experiments: ControlPlaneExperiment[];
+}
+
+export interface ControlPlaneTicket {
+  id: number;
+  /** @nullable */
+  venueId?: number | null;
+  /** @nullable */
+  sessionId?: number | null;
+  source: string;
+  /** @nullable */
+  requesterEmail?: string | null;
+  /** @nullable */
+  requesterName?: string | null;
+  subject: string;
+  body: string;
+  category: string;
+  sentiment: string;
+  priority: string;
+  status: string;
+  /** @nullable */
+  assignedTo?: string | null;
+  /** @nullable */
+  aiDraft?: string | null;
+  /** @nullable */
+  resolutionNote?: string | null;
+  /** @nullable */
+  firstResponseAt?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ControlPlaneTicketList {
+  tickets: ControlPlaneTicket[];
+}
+
+export interface ControlPlaneTicketResponse {
+  ticket: ControlPlaneTicket;
+}
+
+export interface ControlPlaneTicketBody {
+  /** @minLength 1 */
+  subject: string;
+  /** @minLength 1 */
+  body: string;
+  requesterEmail?: string;
+  venueId?: number;
+}
+
+export interface ControlPlaneTicketCreated {
+  /** @nullable */
+  ticketId?: number | null;
+}
+
+export type ControlPlaneTicketUpdateBodyStatus =
+  (typeof ControlPlaneTicketUpdateBodyStatus)[keyof typeof ControlPlaneTicketUpdateBodyStatus];
+
+export const ControlPlaneTicketUpdateBodyStatus = {
+  open: "open",
+  pending: "pending",
+  resolved: "resolved",
+  closed: "closed",
+} as const;
+
+export interface ControlPlaneTicketUpdateBody {
+  status?: ControlPlaneTicketUpdateBodyStatus;
+  priority?: string;
+  resolutionNote?: string;
+}
+
+export interface ControlPlaneLead {
+  id: number;
+  companyName: string;
+  /** @nullable */
+  contactName?: string | null;
+  /** @nullable */
+  contactEmail?: string | null;
+  source: string;
+  stage: string;
+  score: number;
+  ownerAgent?: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  nextActionAt?: string | null;
+  /** @nullable */
+  lastTouchAt?: string | null;
+  metadata?: ControlPlaneJson;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ControlPlaneLeadList {
+  leads: ControlPlaneLead[];
+}
+
+export interface ControlPlaneLeadResponse {
+  lead: ControlPlaneLead;
+}
+
+export type ControlPlaneLeadBodyStage =
+  (typeof ControlPlaneLeadBodyStage)[keyof typeof ControlPlaneLeadBodyStage];
+
+export const ControlPlaneLeadBodyStage = {
+  new: "new",
+  qualified: "qualified",
+  contacted: "contacted",
+  demo: "demo",
+  won: "won",
+  lost: "lost",
+} as const;
+
+export interface ControlPlaneLeadBody {
+  /** @minLength 1 */
+  companyName: string;
+  contactName?: string;
+  contactEmail?: string;
+  source?: string;
+  stage?: ControlPlaneLeadBodyStage;
+}
+
+export interface ControlPlaneSignal {
+  id: number;
+  /** @nullable */
+  venueId?: number | null;
+  kind: string;
+  severity: ControlPlaneSeverity;
+  source: string;
+  /** @nullable */
+  subjectType?: string | null;
+  /** @nullable */
+  subjectId?: string | null;
+  title: string;
+  payload?: ControlPlaneJson;
+  occurredAt: string;
+  createdAt?: string;
+}
+
+export interface ControlPlaneSignalList {
+  signals: ControlPlaneSignal[];
+}
+
+export interface ControlPlaneAuditEntry {
+  id: number;
+  actorType: string;
+  actor: string;
+  action: string;
+  /** @nullable */
+  subjectType?: string | null;
+  /** @nullable */
+  subjectId?: string | null;
+  detail?: ControlPlaneJson;
+  createdAt: string;
+}
+
+export interface ControlPlaneAuditList {
+  entries: ControlPlaneAuditEntry[];
+}
+
+export interface ControlPlaneMemoryNote {
+  id: number;
+  agentKey: string;
+  kind: string;
+  content: string;
+  importance: number;
+  tags?: string[];
+  createdAt: string;
+}
+
+export interface ControlPlaneMemoryList {
+  notes: ControlPlaneMemoryNote[];
+}
+
+export type ControlPlaneSnapshotOrganization = {
+  id: number;
+  name: string;
+  plan: string;
+  creditsBalance: number;
+  hasSubscription?: boolean;
+  /** @nullable */
+  billingPeriodEnd?: string | null;
+  createdAt?: string;
+  ageDays?: number;
+};
+
+export type ControlPlaneSnapshotFunnel = {
+  last7d: ControlPlaneFunnelWindow;
+  prev7d: ControlPlaneFunnelWindow;
+  last24h: ControlPlaneFunnelWindow;
+};
+
+export type ControlPlaneSnapshotMetrics = {
+  [key: string]: ControlPlaneMetricPoint[];
+};
+
+export interface ControlPlaneSnapshot {
+  now: string;
+  organization: ControlPlaneSnapshotOrganization;
+  funnel: ControlPlaneSnapshotFunnel;
+  finance: ControlPlaneFinance;
+  venues: ControlPlaneVenue[];
+  ledger: ControlPlaneLedger;
+  workItems?: ControlPlaneWorkItem[];
+  experiments?: ControlPlaneExperiment[];
+  metrics?: ControlPlaneSnapshotMetrics;
+}
+
+export interface ControlPlaneOverview {
+  state: ControlPlaneStateOfBusiness;
+  policy: ControlPlanePolicy;
+  snapshot: ControlPlaneSnapshot;
+  fleet: ControlPlaneAgent[];
+  recentRuns: ControlPlaneRun[];
+  openDecisions: ControlPlaneDecision[];
+}
+
 export type GetStorageObjectParams = {
   /**
    * Required to read generated gallery assets from a public share page.
@@ -512,4 +1149,47 @@ export type GetStorageObjectParams = {
    * Required to read venue media from the public couple preview for that venue.
    */
   venueSlug?: string;
+};
+
+export type ListControlPlaneDecisionsParams = {
+  /**
+   * open (default), all, or one specific status
+   */
+  status?: string;
+  agentKey?: string;
+  limit?: number;
+};
+
+export type ListControlPlaneTicketsParams = {
+  status?: string;
+  limit?: number;
+};
+
+export type ListControlPlaneLeadsParams = {
+  limit?: number;
+};
+
+export type ListControlPlaneWorkItemsParams = {
+  limit?: number;
+};
+
+export type ListControlPlaneSignalsParams = {
+  limit?: number;
+};
+
+export type ListControlPlaneRunsParams = {
+  agentKey?: string;
+  limit?: number;
+};
+
+export type ListControlPlaneAuditParams = {
+  limit?: number;
+};
+
+export type ListControlPlaneMemoryParams = {
+  limit?: number;
+};
+
+export type GetControlPlaneMetricsParams = {
+  days?: number;
 };

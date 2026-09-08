@@ -31,6 +31,7 @@ export const ReadinessCheckResponse = zod.object({
     qualityGate: zod.enum(["ok", "degraded"]),
     imageModel: zod.enum(["ok", "degraded"]),
     ffmpeg: zod.enum(["ok", "degraded"]),
+    controlPlane: zod.enum(["ok", "degraded"]),
   }),
 });
 
@@ -904,4 +905,1007 @@ export const GetStorageObjectQueryParams = zod.object({
     .describe(
       "Required to read venue media from the public couple preview for that venue.",
     ),
+});
+
+/**
+ * One call that backs the operator console: the chief-of-staff read of
+the business, current guardrails, the fleet's live state, the most
+recent agent runs, and the decisions waiting on a human.
+
+ * @summary State of the business, fleet health, and the open decision queue
+ */
+export const GetControlPlaneOverviewResponse = zod.object({
+  state: zod.object({
+    headline: zod.string(),
+    severity: zod.enum(["info", "warning", "critical"]),
+    narrative: zod.string(),
+    highlights: zod.array(
+      zod.object({
+        key: zod.string(),
+        label: zod.string(),
+        value: zod.union([zod.string(), zod.number(), zod.null()]),
+        goodDirection: zod.enum(["up", "down", "neutral"]).optional(),
+        delta: zod.number().nullish(),
+        severity: zod.enum(["info", "warning", "critical"]).optional(),
+        detail: zod.string().optional(),
+      }),
+    ),
+    concerns: zod.array(
+      zod.object({
+        key: zod.string(),
+        label: zod.string(),
+        value: zod.union([zod.string(), zod.number(), zod.null()]),
+        goodDirection: zod.enum(["up", "down", "neutral"]).optional(),
+        delta: zod.number().nullish(),
+        severity: zod.enum(["info", "warning", "critical"]).optional(),
+        detail: zod.string().optional(),
+      }),
+    ),
+  }),
+  policy: zod.object({
+    killSwitch: zod
+      .boolean()
+      .describe("Master stop. Nothing executes while engaged."),
+    autoExecuteEnabled: zod.boolean(),
+    maxAutoExecutionsPerDay: zod.number(),
+    confidenceFloor: zod.number(),
+    alwaysApprove: zod.array(zod.string()),
+    outboundEmailEnabled: zod
+      .boolean()
+      .describe("Whether agents may send email to venues, couples, or leads."),
+    maxCreditGrant: zod.number(),
+    reviewSlaHours: zod.number(),
+    decisionTtlHours: zod.number(),
+  }),
+  snapshot: zod.object({
+    now: zod.coerce.date(),
+    organization: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      plan: zod.string(),
+      creditsBalance: zod.number(),
+      hasSubscription: zod.boolean().optional(),
+      billingPeriodEnd: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date().optional(),
+      ageDays: zod.number().optional(),
+    }),
+    funnel: zod.object({
+      last7d: zod.object({
+        started: zod.number(),
+        ready: zod.number(),
+        failed: zod.number(),
+        processing: zod.number(),
+        medianMinutesToReady: zod.number().nullish(),
+      }),
+      prev7d: zod.object({
+        started: zod.number(),
+        ready: zod.number(),
+        failed: zod.number(),
+        processing: zod.number(),
+        medianMinutesToReady: zod.number().nullish(),
+      }),
+      last24h: zod.object({
+        started: zod.number(),
+        ready: zod.number(),
+        failed: zod.number(),
+        processing: zod.number(),
+        medianMinutesToReady: zod.number().nullish(),
+      }),
+    }),
+    finance: zod.object({
+      creditsBalance: zod.number(),
+      creditsGranted30d: zod.number(),
+      creditsBurned30d: zod.number(),
+      creditsBurned7d: zod.number(),
+      estimatedCogsUsd30d: zod.number(),
+      estimatedRevenueUsd30d: zod.number(),
+      runwayDays: zod.number().nullish(),
+      refunds30d: zod.number(),
+      planPriceUsd: zod.number(),
+    }),
+    venues: zod.array(
+      zod.object({
+        id: zod.number(),
+        name: zod.string(),
+        slug: zod.string(),
+        ownerEmail: zod.string().optional(),
+        contactEmail: zod.string().nullish(),
+        createdAt: zod.coerce.date().optional(),
+        ageDays: zod.number().optional(),
+        mediaCount: zod.number(),
+        coverageGaps: zod.array(zod.string()),
+        ready: zod.boolean(),
+        sessionsTotal: zod.number(),
+        sessionsLast7d: zod.number().optional(),
+        sessionsPrev7d: zod.number().optional(),
+        sessionsLast30d: zod.number().optional(),
+        readyCount: zod.number().optional(),
+        failedCount: zod.number().optional(),
+        lastSessionAt: zod.coerce.date().nullish(),
+        daysSinceLastSession: zod.number().nullish(),
+      }),
+    ),
+    ledger: zod.object({
+      openCount: zod.number(),
+      executed24h: zod.number(),
+      approved7d: zod.number(),
+      rejected7d: zod.number(),
+      stale: zod.array(
+        zod.object({
+          id: zod.number(),
+          agentKey: zod.string(),
+          title: zod.string(),
+          ageHours: zod.number(),
+          riskLevel: zod.enum(["low", "medium", "high"]),
+        }),
+      ),
+      byAgent: zod.array(
+        zod.object({
+          agentKey: zod.string(),
+          open: zod.number(),
+          executed7d: zod.number(),
+          rejected7d: zod.number(),
+        }),
+      ),
+    }),
+    workItems: zod
+      .array(
+        zod.object({
+          id: zod.number(),
+          type: zod.string(),
+          title: zod.string(),
+          detail: zod.string().optional(),
+          severity: zod.string(),
+          status: zod.string(),
+          surface: zod.string(),
+          dedupeKey: zod.string(),
+          evidence: zod.record(zod.string(), zod.unknown()).optional(),
+          ageDays: zod.number().optional(),
+          createdAt: zod.coerce.date().optional(),
+          updatedAt: zod.coerce.date().optional(),
+          closedAt: zod.coerce.date().nullish(),
+        }),
+      )
+      .optional(),
+    experiments: zod
+      .array(
+        zod.object({
+          id: zod.number(),
+          key: zod.string(),
+          hypothesis: zod.string(),
+          surface: zod.string(),
+          primaryMetric: zod.string(),
+          status: zod.string(),
+          minimumSampleSize: zod.number(),
+          ageDays: zod.number().nullish(),
+          variants: zod.array(
+            zod.object({
+              key: zod.string(),
+              label: zod.string(),
+              exposures: zod.number(),
+              conversions: zod.number(),
+              conversionRate: zod.number(),
+            }),
+          ),
+        }),
+      )
+      .optional(),
+    metrics: zod
+      .record(
+        zod.string(),
+        zod.array(
+          zod.object({
+            date: zod.string(),
+            value: zod.number(),
+          }),
+        ),
+      )
+      .optional(),
+  }),
+  fleet: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      agentKey: zod.string(),
+      domain: zod.string(),
+      displayName: zod.string(),
+      charter: zod.string().nullish(),
+      enabled: zod.boolean(),
+      autonomy: zod.enum(["observe", "recommend", "supervised", "autonomous"]),
+      status: zod.string(),
+      healthScore: zod.number(),
+      intervalMinutes: zod.number(),
+      dailyActionBudget: zod.number(),
+      actionsToday: zod.number(),
+      lastRunAt: zod.coerce.date().nullish(),
+      nextRunAt: zod.coerce.date().nullish(),
+      minutesSinceLastRun: zod.number().nullish(),
+      lastError: zod.string().nullish(),
+      failedRuns24h: zod.number().optional(),
+      succeededRuns24h: zod.number().optional(),
+      registered: zod.boolean().optional(),
+    }),
+  ),
+  recentRuns: zod.array(
+    zod.object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      domain: zod.string().optional(),
+      trigger: zod.string().optional(),
+      status: zod.string(),
+      startedAt: zod.coerce.date(),
+      finishedAt: zod.coerce.date().nullish(),
+      durationMs: zod.number().nullish(),
+      summary: zod.string().nullish(),
+      narrative: zod.string().nullish(),
+      error: zod.string().nullish(),
+      proposedCount: zod.number().optional(),
+      executedCount: zod.number().optional(),
+      observations: zod
+        .array(
+          zod.object({
+            key: zod.string(),
+            label: zod.string(),
+            value: zod.union([zod.string(), zod.number(), zod.null()]),
+            goodDirection: zod.enum(["up", "down", "neutral"]).optional(),
+            delta: zod.number().nullish(),
+            severity: zod.enum(["info", "warning", "critical"]).optional(),
+            detail: zod.string().optional(),
+          }),
+        )
+        .optional(),
+    }),
+  ),
+  openDecisions: zod.array(
+    zod.object({
+      id: zod.number(),
+      runId: zod.number().nullish(),
+      agentKey: zod.string(),
+      domain: zod.string(),
+      kind: zod.string(),
+      title: zod.string(),
+      rationale: zod.string(),
+      evidence: zod.record(zod.string(), zod.unknown()).optional(),
+      effect: zod.record(zod.string(), zod.unknown()).optional(),
+      confidence: zod.number(),
+      impactScore: zod.number(),
+      riskLevel: zod.enum(["low", "medium", "high"]),
+      status: zod.enum([
+        "proposed",
+        "approved",
+        "rejected",
+        "executed",
+        "failed",
+        "expired",
+      ]),
+      requiresApproval: zod.boolean(),
+      blockedReason: zod.string().nullish(),
+      decidedBy: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      decisionNote: zod.string().nullish(),
+      executedAt: zod.coerce.date().nullish(),
+      executionResult: zod
+        .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+        .optional(),
+      expiresAt: zod.coerce.date().nullish(),
+      dedupeKey: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary The registered agent fleet and the build's agent catalog
+ */
+export const ListControlPlaneAgentsResponse = zod.object({
+  agents: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      agentKey: zod.string(),
+      domain: zod.string(),
+      displayName: zod.string(),
+      charter: zod.string().nullish(),
+      enabled: zod.boolean(),
+      autonomy: zod.enum(["observe", "recommend", "supervised", "autonomous"]),
+      status: zod.string(),
+      healthScore: zod.number(),
+      intervalMinutes: zod.number(),
+      dailyActionBudget: zod.number(),
+      actionsToday: zod.number(),
+      lastRunAt: zod.coerce.date().nullish(),
+      nextRunAt: zod.coerce.date().nullish(),
+      minutesSinceLastRun: zod.number().nullish(),
+      lastError: zod.string().nullish(),
+      failedRuns24h: zod.number().optional(),
+      succeededRuns24h: zod.number().optional(),
+      registered: zod.boolean().optional(),
+    }),
+  ),
+  catalog: zod.array(
+    zod.object({
+      key: zod.string(),
+      domain: zod.string(),
+      displayName: zod.string(),
+      charter: zod.string(),
+      defaultAutonomy: zod.enum([
+        "observe",
+        "recommend",
+        "supervised",
+        "autonomous",
+      ]),
+      defaultIntervalMinutes: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Change an agent's autonomy, schedule, or budget
+ */
+export const UpdateControlPlaneAgentParams = zod.object({
+  agentKey: zod.coerce.string(),
+});
+
+export const UpdateControlPlaneAgentBody = zod.object({
+  enabled: zod.boolean().optional(),
+  autonomy: zod
+    .enum(["observe", "recommend", "supervised", "autonomous"])
+    .optional(),
+  intervalMinutes: zod.number().optional(),
+  dailyActionBudget: zod.number().optional(),
+});
+
+export const UpdateControlPlaneAgentResponse = zod.object({
+  agent: zod.object({
+    id: zod.number().optional(),
+    agentKey: zod.string(),
+    domain: zod.string(),
+    displayName: zod.string(),
+    charter: zod.string().nullish(),
+    enabled: zod.boolean(),
+    autonomy: zod.enum(["observe", "recommend", "supervised", "autonomous"]),
+    status: zod.string(),
+    healthScore: zod.number(),
+    intervalMinutes: zod.number(),
+    dailyActionBudget: zod.number(),
+    actionsToday: zod.number(),
+    lastRunAt: zod.coerce.date().nullish(),
+    nextRunAt: zod.coerce.date().nullish(),
+    minutesSinceLastRun: zod.number().nullish(),
+    lastError: zod.string().nullish(),
+    failedRuns24h: zod.number().optional(),
+    succeededRuns24h: zod.number().optional(),
+    registered: zod.boolean().optional(),
+  }),
+});
+
+/**
+ * @summary Run one agent now, regardless of its schedule
+ */
+export const RunControlPlaneAgentParams = zod.object({
+  agentKey: zod.coerce.string(),
+});
+
+export const RunControlPlaneAgentResponse = zod.object({
+  organizationId: zod.number(),
+  ready: zod.boolean(),
+  headline: zod.string(),
+  narrative: zod.string(),
+  ran: zod.array(
+    zod.object({
+      agentKey: zod.string(),
+      status: zod.enum(["succeeded", "failed"]),
+      runId: zod.number().nullish(),
+      summary: zod.string(),
+      proposed: zod.number(),
+      executed: zod.number(),
+      held: zod.number(),
+      rejected: zod.number(),
+      error: zod.string().nullish(),
+    }),
+  ),
+  skipped: zod.array(
+    zod.object({
+      agentKey: zod.string(),
+      reason: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Run every agent that is currently due
+ */
+export const RunControlPlaneTickResponse = zod.object({
+  organizationId: zod.number(),
+  ready: zod.boolean(),
+  headline: zod.string(),
+  narrative: zod.string(),
+  ran: zod.array(
+    zod.object({
+      agentKey: zod.string(),
+      status: zod.enum(["succeeded", "failed"]),
+      runId: zod.number().nullish(),
+      summary: zod.string(),
+      proposed: zod.number(),
+      executed: zod.number(),
+      held: zod.number(),
+      rejected: zod.number(),
+      error: zod.string().nullish(),
+    }),
+  ),
+  skipped: zod.array(
+    zod.object({
+      agentKey: zod.string(),
+      reason: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary The decision ledger
+ */
+export const ListControlPlaneDecisionsQueryParams = zod.object({
+  status: zod.coerce
+    .string()
+    .optional()
+    .describe("open (default), all, or one specific status"),
+  agentKey: zod.coerce.string().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneDecisionsResponse = zod.object({
+  decisions: zod.array(
+    zod.object({
+      id: zod.number(),
+      runId: zod.number().nullish(),
+      agentKey: zod.string(),
+      domain: zod.string(),
+      kind: zod.string(),
+      title: zod.string(),
+      rationale: zod.string(),
+      evidence: zod.record(zod.string(), zod.unknown()).optional(),
+      effect: zod.record(zod.string(), zod.unknown()).optional(),
+      confidence: zod.number(),
+      impactScore: zod.number(),
+      riskLevel: zod.enum(["low", "medium", "high"]),
+      status: zod.enum([
+        "proposed",
+        "approved",
+        "rejected",
+        "executed",
+        "failed",
+        "expired",
+      ]),
+      requiresApproval: zod.boolean(),
+      blockedReason: zod.string().nullish(),
+      decidedBy: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      decisionNote: zod.string().nullish(),
+      executedAt: zod.coerce.date().nullish(),
+      executionResult: zod
+        .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+        .optional(),
+      expiresAt: zod.coerce.date().nullish(),
+      dedupeKey: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Approve a decision and execute its effect
+ */
+export const ApproveControlPlaneDecisionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ApproveControlPlaneDecisionBody = zod.object({
+  note: zod.string().optional(),
+});
+
+export const ApproveControlPlaneDecisionResponse = zod.object({
+  decision: zod
+    .object({
+      id: zod.number(),
+      runId: zod.number().nullish(),
+      agentKey: zod.string(),
+      domain: zod.string(),
+      kind: zod.string(),
+      title: zod.string(),
+      rationale: zod.string(),
+      evidence: zod.record(zod.string(), zod.unknown()).optional(),
+      effect: zod.record(zod.string(), zod.unknown()).optional(),
+      confidence: zod.number(),
+      impactScore: zod.number(),
+      riskLevel: zod.enum(["low", "medium", "high"]),
+      status: zod.enum([
+        "proposed",
+        "approved",
+        "rejected",
+        "executed",
+        "failed",
+        "expired",
+      ]),
+      requiresApproval: zod.boolean(),
+      blockedReason: zod.string().nullish(),
+      decidedBy: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      decisionNote: zod.string().nullish(),
+      executedAt: zod.coerce.date().nullish(),
+      executionResult: zod
+        .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+        .optional(),
+      expiresAt: zod.coerce.date().nullish(),
+      dedupeKey: zod.string(),
+      createdAt: zod.coerce.date(),
+    })
+    .optional(),
+  executed: zod.boolean(),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Reject a decision without executing it
+ */
+export const RejectControlPlaneDecisionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RejectControlPlaneDecisionBody = zod.object({
+  note: zod.string().optional(),
+});
+
+export const RejectControlPlaneDecisionResponse = zod.object({
+  decision: zod.object({
+    id: zod.number(),
+    runId: zod.number().nullish(),
+    agentKey: zod.string(),
+    domain: zod.string(),
+    kind: zod.string(),
+    title: zod.string(),
+    rationale: zod.string(),
+    evidence: zod.record(zod.string(), zod.unknown()).optional(),
+    effect: zod.record(zod.string(), zod.unknown()).optional(),
+    confidence: zod.number(),
+    impactScore: zod.number(),
+    riskLevel: zod.enum(["low", "medium", "high"]),
+    status: zod.enum([
+      "proposed",
+      "approved",
+      "rejected",
+      "executed",
+      "failed",
+      "expired",
+    ]),
+    requiresApproval: zod.boolean(),
+    blockedReason: zod.string().nullish(),
+    decidedBy: zod.string().nullish(),
+    decidedAt: zod.coerce.date().nullish(),
+    decisionNote: zod.string().nullish(),
+    executedAt: zod.coerce.date().nullish(),
+    executionResult: zod
+      .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+      .optional(),
+    expiresAt: zod.coerce.date().nullish(),
+    dedupeKey: zod.string(),
+    createdAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Current guardrails
+ */
+export const GetControlPlanePolicyResponse = zod.object({
+  policy: zod.object({
+    killSwitch: zod
+      .boolean()
+      .describe("Master stop. Nothing executes while engaged."),
+    autoExecuteEnabled: zod.boolean(),
+    maxAutoExecutionsPerDay: zod.number(),
+    confidenceFloor: zod.number(),
+    alwaysApprove: zod.array(zod.string()),
+    outboundEmailEnabled: zod
+      .boolean()
+      .describe("Whether agents may send email to venues, couples, or leads."),
+    maxCreditGrant: zod.number(),
+    reviewSlaHours: zod.number(),
+    decisionTtlHours: zod.number(),
+  }),
+  keys: zod.array(zod.string()).optional(),
+});
+
+/**
+ * @summary Change one or more guardrails
+ */
+export const UpdateControlPlanePolicyBody = zod.object({
+  killSwitch: zod.boolean().optional(),
+  autoExecuteEnabled: zod.boolean().optional(),
+  maxAutoExecutionsPerDay: zod.number().optional(),
+  confidenceFloor: zod.number().optional(),
+  outboundEmailEnabled: zod.boolean().optional(),
+  maxCreditGrant: zod.number().optional(),
+  reviewSlaHours: zod.number().optional(),
+  decisionTtlHours: zod.number().optional(),
+});
+
+export const UpdateControlPlanePolicyResponse = zod.object({
+  policy: zod.object({
+    killSwitch: zod
+      .boolean()
+      .describe("Master stop. Nothing executes while engaged."),
+    autoExecuteEnabled: zod.boolean(),
+    maxAutoExecutionsPerDay: zod.number(),
+    confidenceFloor: zod.number(),
+    alwaysApprove: zod.array(zod.string()),
+    outboundEmailEnabled: zod
+      .boolean()
+      .describe("Whether agents may send email to venues, couples, or leads."),
+    maxCreditGrant: zod.number(),
+    reviewSlaHours: zod.number(),
+    decisionTtlHours: zod.number(),
+  }),
+  keys: zod.array(zod.string()).optional(),
+});
+
+/**
+ * While engaged nothing executes — not a scheduled decision, not one a
+human approves. Agents keep observing and proposing so the queue
+reflects reality when the switch is released.
+
+ * @summary Engage or release the master stop
+ */
+export const SetControlPlaneKillSwitchBody = zod.object({
+  engaged: zod.boolean(),
+});
+
+export const SetControlPlaneKillSwitchResponse = zod.object({
+  policy: zod.object({
+    killSwitch: zod
+      .boolean()
+      .describe("Master stop. Nothing executes while engaged."),
+    autoExecuteEnabled: zod.boolean(),
+    maxAutoExecutionsPerDay: zod.number(),
+    confidenceFloor: zod.number(),
+    alwaysApprove: zod.array(zod.string()),
+    outboundEmailEnabled: zod
+      .boolean()
+      .describe("Whether agents may send email to venues, couples, or leads."),
+    maxCreditGrant: zod.number(),
+    reviewSlaHours: zod.number(),
+    decisionTtlHours: zod.number(),
+  }),
+  keys: zod.array(zod.string()).optional(),
+});
+
+/**
+ * @summary Support inbox
+ */
+export const ListControlPlaneTicketsQueryParams = zod.object({
+  status: zod.coerce.string().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneTicketsResponse = zod.object({
+  tickets: zod.array(
+    zod.object({
+      id: zod.number(),
+      venueId: zod.number().nullish(),
+      sessionId: zod.number().nullish(),
+      source: zod.string(),
+      requesterEmail: zod.string().nullish(),
+      requesterName: zod.string().nullish(),
+      subject: zod.string(),
+      body: zod.string(),
+      category: zod.string(),
+      sentiment: zod.string(),
+      priority: zod.string(),
+      status: zod.string(),
+      assignedTo: zod.string().nullish(),
+      aiDraft: zod.string().nullish(),
+      resolutionNote: zod.string().nullish(),
+      firstResponseAt: zod.coerce.date().nullish(),
+      resolvedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Open a support ticket from the console
+ */
+
+export const CreateControlPlaneTicketBody = zod.object({
+  subject: zod.string().min(1),
+  body: zod.string().min(1),
+  requesterEmail: zod.string().optional(),
+  venueId: zod.number().optional(),
+});
+
+/**
+ * @summary Update a ticket's status, priority, or resolution note
+ */
+export const UpdateControlPlaneTicketParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateControlPlaneTicketBody = zod.object({
+  status: zod.enum(["open", "pending", "resolved", "closed"]).optional(),
+  priority: zod.string().optional(),
+  resolutionNote: zod.string().optional(),
+});
+
+export const UpdateControlPlaneTicketResponse = zod.object({
+  ticket: zod.object({
+    id: zod.number(),
+    venueId: zod.number().nullish(),
+    sessionId: zod.number().nullish(),
+    source: zod.string(),
+    requesterEmail: zod.string().nullish(),
+    requesterName: zod.string().nullish(),
+    subject: zod.string(),
+    body: zod.string(),
+    category: zod.string(),
+    sentiment: zod.string(),
+    priority: zod.string(),
+    status: zod.string(),
+    assignedTo: zod.string().nullish(),
+    aiDraft: zod.string().nullish(),
+    resolutionNote: zod.string().nullish(),
+    firstResponseAt: zod.coerce.date().nullish(),
+    resolvedAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date().optional(),
+  }),
+});
+
+/**
+ * @summary Sales pipeline
+ */
+export const ListControlPlaneLeadsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneLeadsResponse = zod.object({
+  leads: zod.array(
+    zod.object({
+      id: zod.number(),
+      companyName: zod.string(),
+      contactName: zod.string().nullish(),
+      contactEmail: zod.string().nullish(),
+      source: zod.string(),
+      stage: zod.string(),
+      score: zod.number(),
+      ownerAgent: zod.string().optional(),
+      notes: zod.string().nullish(),
+      nextActionAt: zod.coerce.date().nullish(),
+      lastTouchAt: zod.coerce.date().nullish(),
+      metadata: zod.record(zod.string(), zod.unknown()).optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Add a lead to the pipeline
+ */
+
+export const CreateControlPlaneLeadBody = zod.object({
+  companyName: zod.string().min(1),
+  contactName: zod.string().optional(),
+  contactEmail: zod.string().optional(),
+  source: zod.string().optional(),
+  stage: zod
+    .enum(["new", "qualified", "contacted", "demo", "won", "lost"])
+    .optional(),
+});
+
+/**
+ * @summary Product repair and upgrade backlog
+ */
+export const ListControlPlaneWorkItemsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneWorkItemsResponse = zod.object({
+  workItems: zod.array(
+    zod.object({
+      id: zod.number(),
+      type: zod.string(),
+      title: zod.string(),
+      detail: zod.string().optional(),
+      severity: zod.string(),
+      status: zod.string(),
+      surface: zod.string(),
+      dedupeKey: zod.string(),
+      evidence: zod.record(zod.string(), zod.unknown()).optional(),
+      ageDays: zod.number().optional(),
+      createdAt: zod.coerce.date().optional(),
+      updatedAt: zod.coerce.date().optional(),
+      closedAt: zod.coerce.date().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Move a work item through its lifecycle
+ */
+export const UpdateControlPlaneWorkItemParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateControlPlaneWorkItemBody = zod.object({
+  status: zod.enum(["open", "in_progress", "blocked", "done", "cancelled"]),
+});
+
+export const UpdateControlPlaneWorkItemResponse = zod.object({
+  workItem: zod.object({
+    id: zod.number(),
+    type: zod.string(),
+    title: zod.string(),
+    detail: zod.string().optional(),
+    severity: zod.string(),
+    status: zod.string(),
+    surface: zod.string(),
+    dedupeKey: zod.string(),
+    evidence: zod.record(zod.string(), zod.unknown()).optional(),
+    ageDays: zod.number().optional(),
+    createdAt: zod.coerce.date().optional(),
+    updatedAt: zod.coerce.date().optional(),
+    closedAt: zod.coerce.date().nullish(),
+  }),
+});
+
+/**
+ * @summary Experiments with live variant results
+ */
+export const ListControlPlaneExperimentsResponse = zod.object({
+  experiments: zod.array(
+    zod.object({
+      id: zod.number(),
+      key: zod.string(),
+      hypothesis: zod.string(),
+      surface: zod.string(),
+      primaryMetric: zod.string(),
+      status: zod.string(),
+      minimumSampleSize: zod.number(),
+      ageDays: zod.number().nullish(),
+      variants: zod.array(
+        zod.object({
+          key: zod.string(),
+          label: zod.string(),
+          exposures: zod.number(),
+          conversions: zod.number(),
+          conversionRate: zod.number(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Recent business signals the fleet reasons over
+ */
+export const ListControlPlaneSignalsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneSignalsResponse = zod.object({
+  signals: zod.array(
+    zod.object({
+      id: zod.number(),
+      venueId: zod.number().nullish(),
+      kind: zod.string(),
+      severity: zod.enum(["info", "warning", "critical"]),
+      source: zod.string(),
+      subjectType: zod.string().nullish(),
+      subjectId: zod.string().nullish(),
+      title: zod.string(),
+      payload: zod.record(zod.string(), zod.unknown()).optional(),
+      occurredAt: zod.coerce.date(),
+      createdAt: zod.coerce.date().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Agent run history
+ */
+export const ListControlPlaneRunsQueryParams = zod.object({
+  agentKey: zod.coerce.string().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneRunsResponse = zod.object({
+  runs: zod.array(
+    zod.object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      domain: zod.string().optional(),
+      trigger: zod.string().optional(),
+      status: zod.string(),
+      startedAt: zod.coerce.date(),
+      finishedAt: zod.coerce.date().nullish(),
+      durationMs: zod.number().nullish(),
+      summary: zod.string().nullish(),
+      narrative: zod.string().nullish(),
+      error: zod.string().nullish(),
+      proposedCount: zod.number().optional(),
+      executedCount: zod.number().optional(),
+      observations: zod
+        .array(
+          zod.object({
+            key: zod.string(),
+            label: zod.string(),
+            value: zod.union([zod.string(), zod.number(), zod.null()]),
+            goodDirection: zod.enum(["up", "down", "neutral"]).optional(),
+            delta: zod.number().nullish(),
+            severity: zod.enum(["info", "warning", "critical"]).optional(),
+            detail: zod.string().optional(),
+          }),
+        )
+        .optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Append-only audit trail
+ */
+export const ListControlPlaneAuditQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneAuditResponse = zod.object({
+  entries: zod.array(
+    zod.object({
+      id: zod.number(),
+      actorType: zod.string(),
+      actor: zod.string(),
+      action: zod.string(),
+      subjectType: zod.string().nullish(),
+      subjectId: zod.string().nullish(),
+      detail: zod.record(zod.string(), zod.unknown()).optional(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary What the fleet has learned
+ */
+export const ListControlPlaneMemoryQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlPlaneMemoryResponse = zod.object({
+  notes: zod.array(
+    zod.object({
+      id: zod.number(),
+      agentKey: zod.string(),
+      kind: zod.string(),
+      content: zod.string(),
+      importance: zod.number(),
+      tags: zod.array(zod.string()).optional(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Daily KPI series recorded by the fleet
+ */
+export const GetControlPlaneMetricsQueryParams = zod.object({
+  days: zod.coerce.number().optional(),
+});
+
+export const GetControlPlaneMetricsResponse = zod.object({
+  series: zod.record(
+    zod.string(),
+    zod.array(
+      zod.object({
+        date: zod.string(),
+        value: zod.number(),
+      }),
+    ),
+  ),
 });

@@ -44,6 +44,7 @@ import {
 import { ownerVenueResponse, publicContactFields } from "../lib/venueResponse.js";
 import { hasCompletePublicGalleryAssets } from "../lib/sessionVisibility.js";
 import { logger } from "../lib/logger.js";
+import { signalVenueCreated } from "../lib/controlPlane/signals.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_VENUE_PHOTO_EDGE_PX = MIN_REFERENCE_EDGE_PX;
@@ -305,6 +306,10 @@ router.post("/venues", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to create venue. Please try again." });
     return;
   }
+
+  // The activation agent picks new venues up from here: a venue that never
+  // completes photo setup is the funnel's first and largest leak.
+  void signalVenueCreated(ctx.org.id, venue.id, venue.name);
 
   res.status(201).json(ownerVenueResponse(venue, ctx.org));
 });

@@ -41,6 +41,7 @@ const CouplePage = lazyRoute(() => import("@/pages/CouplePage"));
 const GallerySharePage = lazyRoute(() => import("@/pages/GallerySharePage"));
 const FindMyGalleryPage = lazyRoute(() => import("@/pages/FindMyGalleryPage"));
 const OwnerLoginPage = lazyRoute(() => import("@/pages/OwnerLoginPage"));
+const OpsPage = lazyRoute(() => import("@/pages/OpsPage"));
 const NotFound = lazyRoute(() => import("@/pages/not-found"));
 
 function RedirectVenueToPreview() {
@@ -72,6 +73,10 @@ function Router() {
         <Route path="/venue/new">
           {() => <Redirect to="/create-venue" />}
         </Route>
+
+        {/* Autonomous business control plane (operator console) */}
+        <Route path="/ops">{() => <OpsPage />}</Route>
+        <Route path="/control-plane">{() => <Redirect to="/ops" />}</Route>
 
         {/* Owner profile/dashboard */}
         <Route path="/dashboard">{() => <VenueOwnerPage />}</Route>
