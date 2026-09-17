@@ -11,13 +11,9 @@ export default function VenueLandingPage() {
           <div className="hero-copy">
             <p className="eyebrow">A new perspective for wedding venues</p>
             <h1>
-              They’ve seen your venue.
+              Turn tours
               <br />
-              <em>
-                Now let them see
-                <br />
-                their day.
-              </em>
+              <em>to bookings.</em>
             </h1>
             <p className="hero-description">
               Turn a lovely tour into something personal. Give every couple a
