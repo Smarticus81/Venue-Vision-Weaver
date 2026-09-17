@@ -5,7 +5,7 @@ Use the gallery QA harness before calling a model/prompt change production-ready
 - 4 gallery scenes
 - all 2-3 couple references in each generation
 - scene-selected venue references from the venue upload set
-- Gemini image generation
+- OpenAI gpt-image-2.5 image generation (Gemini fallback)
 - automated quality gate for aggregate likeness, per-partner likeness, distinct partner identity preservation, venue preservation, exactly-two-partner checks, face visibility, text artifacts, extra people, and composition
 - adaptive frame retries that feed quality-gate failure reasons back into the next prompt
 - branded still polish
@@ -49,9 +49,11 @@ confirm the QA evidence refers to the exact consented images that were reviewed.
 Required environment:
 
 ```bash
+OPENAI_API_KEY=...
+IMAGE_MODEL=gpt-image-2.5-sunburst
+IMAGE_FALLBACK_MODELS=gpt-image-2.5-flare,gemini-3-pro-image
+OPENAI_IMAGE_QUALITY=high
 GOOGLE_AI_API_KEY=...
-GEMINI_IMAGE_MODEL=gemini-3-pro-image
-GEMINI_IMAGE_FALLBACK_MODELS=gemini-3.1-flash-image
 GEMINI_IMAGE_SIZE=2K
 GENERATED_IMAGE_MIN_CONTRAST=8
 GENERATED_IMAGE_MIN_SHARPNESS=6
@@ -64,10 +66,18 @@ GALLERY_MIN_VENUE_SCORE=0.80
 GALLERY_MIN_COMPOSITION_SCORE=0.74
 ```
 
-Production QA should stay on Gemini 3 native image models: Gemini 3 Pro Image
-(Nano Banana Pro) first, then Gemini 3.1 Flash Image (Nano Banana 2) if the
-primary model is unavailable. Older image fallbacks can reduce reference
-capacity and should not be used for production likeness QA.
+Production QA should stay on the default chain: gpt-image-2.5-sunburst first,
+then gpt-image-2.5-flare, with Gemini 3 Pro Image as the last-resort fallback.
+Sunburst is OpenAI's precision image model and is the one to review against,
+because it is the model that preserves reference subjects and structures most
+faithfully. Renders go to the OpenAI image edits endpoint with
+`input_fidelity=high` and up to 16 ordered reference images. Older image
+fallbacks can reduce reference capacity and should not be used for production
+likeness QA.
+
+Quality steps run low, medium, high, xhigh, max, and auto. Production uses
+`high`; cost and latency climb steeply above it, so raise it only for a
+deliberate QA comparison and record the setting in the report.
 
 ## Output
 

@@ -230,6 +230,15 @@ const originalEnv = {
   NANO_BANANA_MODEL: process.env.NANO_BANANA_MODEL,
   GEMINI_IMAGE_FALLBACK_MODELS: process.env.GEMINI_IMAGE_FALLBACK_MODELS,
   GEMINI_USE_INTERACTIONS_API: process.env.GEMINI_USE_INTERACTIONS_API,
+  IMAGE_MODELS: process.env.IMAGE_MODELS,
+  IMAGE_MODEL: process.env.IMAGE_MODEL,
+  IMAGE_FALLBACK_MODELS: process.env.IMAGE_FALLBACK_MODELS,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_API_BASE_URL: process.env.OPENAI_API_BASE_URL,
+  OPENAI_IMAGE_SIZE: process.env.OPENAI_IMAGE_SIZE,
+  OPENAI_IMAGE_QUALITY: process.env.OPENAI_IMAGE_QUALITY,
+  OPENAI_IMAGE_INPUT_FIDELITY: process.env.OPENAI_IMAGE_INPUT_FIDELITY,
+  OPENAI_IMAGE_OUTPUT_FORMAT: process.env.OPENAI_IMAGE_OUTPUT_FORMAT,
   FFMPEG_PATH: process.env.FFMPEG_PATH,
 };
 const originalFetch = globalThis.fetch;
@@ -326,6 +335,13 @@ try {
   delete process.env.GEMINI_IMAGE_MODEL;
   delete process.env.NANO_BANANA_MODEL;
   delete process.env.GEMINI_IMAGE_FALLBACK_MODELS;
+  delete process.env.IMAGE_MODELS;
+  delete process.env.IMAGE_MODEL;
+  delete process.env.IMAGE_FALLBACK_MODELS;
+  delete process.env.OPENAI_IMAGE_SIZE;
+  delete process.env.OPENAI_IMAGE_QUALITY;
+  delete process.env.OPENAI_IMAGE_INPUT_FIDELITY;
+  delete process.env.OPENAI_IMAGE_OUTPUT_FORMAT;
 
   const now = 1_000;
   const slug = "rosewood-estate";
@@ -487,9 +503,11 @@ try {
     STRIPE_PRICE_CREDIT_PACK_10: "price_123pack10",
     RESEND_API_KEY: "re_live_real",
     EMAIL_FROM: "glimpse <noreply@examplevenue.com>",
+    OPENAI_API_KEY: "sk-proj-production-like-key-123",
     GOOGLE_AI_API_KEY: "AIzaProductionLikeKey123",
-    GEMINI_IMAGE_MODEL: "gemini-3-pro-image",
-    GEMINI_IMAGE_FALLBACK_MODELS: "gemini-3.1-flash-image",
+    IMAGE_MODEL: "gpt-image-2.5-sunburst",
+    IMAGE_FALLBACK_MODELS: "gpt-image-2.5-flare,gemini-3-pro-image",
+    OPENAI_IMAGE_QUALITY: "high",
     GEMINI_QUALITY_MODEL: "gemini-2.5-pro",
     GEMINI_IMAGE_SIZE: "2K",
     GALLERY_FRAME_ATTEMPTS: "4",
@@ -545,7 +563,10 @@ try {
     GENERATED_IMAGE_MIN_EDGE_PX: "512",
     GENERATED_IMAGE_MIN_CONTRAST: "2",
     GENERATED_IMAGE_MIN_SHARPNESS: "2",
-    GEMINI_IMAGE_MODEL: "gemini-2.5-flash-image",
+    OPENAI_API_KEY: "",
+    IMAGE_MODEL: "gemini-2.5-flash-image",
+    IMAGE_FALLBACK_MODELS: "gpt-image-2.5-flare",
+    OPENAI_IMAGE_QUALITY: "ultra",
     GEMINI_QUALITY_MODEL: "gemini-2.5-flash",
     GEMINI_IMAGE_SIZE: "2k",
     GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1",
@@ -593,12 +614,22 @@ try {
     "production env keeps automated quality review enabled",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("gemini-3-pro-image")),
-    "production env requires the Pro image model first for likeness quality",
+    envErrors.some((error) => error.includes("must start with gpt-image-2.5-sunburst")),
+    "production env requires the precision gpt-image model first for likeness quality",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("Gemini 3 native image models only")),
+    envErrors.some((error) =>
+      error.includes("gpt-image-2.5 or Gemini 3 native image models only"),
+    ),
     "production env rejects lower-reference image fallbacks",
+  );
+  assert.ok(
+    envErrors.some((error) => error.includes("OPENAI_API_KEY must be set")),
+    "production env requires an OpenAI key when the chain renders with gpt-image models",
+  );
+  assert.ok(
+    envErrors.some((error) => error.includes("OPENAI_IMAGE_QUALITY must be one of")),
+    "production env rejects unsupported gpt-image quality settings",
   );
   assert.ok(
     envErrors.some((error) => error.includes("GALLERY_MIN_LIKENESS_SCORE")),
@@ -1015,8 +1046,8 @@ try {
   );
   assert.match(
     healthRoute,
-    /productionImageModelChainReady[\s\S]*models\[0\] === "gemini-3-pro-image"[\s\S]*models\.every[\s\S]*gemini-3[\s\S]*imageModel: productionImageModelChainReady\(\) \? "ok" : "degraded"/s,
-    "readiness endpoint degrades when the production image model chain leaves Gemini 3 native image models",
+    /productionImageModelChainReady[\s\S]*models\[0\] === "gpt-image-2\.5-sunburst"[\s\S]*models\.every\(isSupportedImageModel\)[\s\S]*imageModel: productionImageModelChainReady\(\) \? "ok" : "degraded"/s,
+    "readiness endpoint degrades when the production image model chain leaves the supported gpt-image / Gemini 3 models",
   );
   const productionVerifier = fs.readFileSync(
     new URL("../../scripts/src/verify-production.ts", import.meta.url),
@@ -1563,9 +1594,19 @@ try {
   process.env.NODE_ENV = "test";
   assert.deepEqual(
     configuredImageModels(),
-    ["gemini-3-pro-image", "gemini-3.1-flash-image"],
-    "default image model chain keeps production on Gemini 3 native image models",
+    ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gemini-3-pro-image"],
+    "default image model chain leads with gpt-image-2.5-sunburst and keeps Gemini as a fallback",
   );
+
+  process.env.IMAGE_MODEL = "new-style-primary";
+  process.env.IMAGE_FALLBACK_MODELS = "new-style-fallback";
+  assert.deepEqual(
+    configuredImageModels(),
+    ["new-style-primary", "new-style-fallback"],
+    "provider-neutral IMAGE_MODEL/IMAGE_FALLBACK_MODELS drive the chain",
+  );
+  delete process.env.IMAGE_MODEL;
+  delete process.env.IMAGE_FALLBACK_MODELS;
 
   process.env.GEMINI_IMAGE_MODEL = "primary-image-model";
   process.env.GEMINI_IMAGE_FALLBACK_MODELS = "fallback-one, fallback-two, fallback-one";
@@ -1688,6 +1729,102 @@ try {
       gemini3TextParts.includes("COMPOSITING HARD CONSTRAINT"),
     "Gemini image prompt includes hard identity, venue coverage, and compositing constraints",
   );
+
+  // --- OpenAI gpt-image-2.5 primary renderer -------------------------------
+  process.env.OPENAI_API_KEY = "sk-test-openai-key";
+  process.env.OPENAI_API_BASE_URL = "https://mock-openai.invalid/v1";
+  process.env.IMAGE_MODELS = "gpt-image-2.5-sunburst";
+
+  const openAiFetchCalls: string[] = [];
+  let openAiForm: FormData | null = null;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    openAiFetchCalls.push(url);
+    if (url.endsWith("/images/edits")) {
+      assert.equal(init?.method, "POST", "gpt-image renders POST to the edits endpoint");
+      assert.equal(
+        (init?.headers as Record<string, string> | undefined)?.Authorization,
+        "Bearer sk-test-openai-key",
+        "gpt-image requests authenticate with a bearer token, never a query-string key",
+      );
+      openAiForm = init?.body as FormData;
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: generated.toString("base64") }],
+          usage: { input_tokens: 1200, output_tokens: 4096 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response("unexpected endpoint", { status: 500 });
+  };
+
+  const openAiRendered = await generateCinematicStillWithMetadata({
+    prompt: "Render a realistic wedding gallery QA frame.",
+    coupleReference: reference,
+    coupleReferences,
+    venueReference: reference,
+    venueReferences,
+    aspectRatio: "1:1",
+  });
+  assert.equal(
+    openAiRendered.model,
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-sunburst is the model recorded against the rendered frame",
+  );
+  assert.equal(
+    openAiRendered.buffer.equals(generated),
+    true,
+    "the base64 image in data[].b64_json is decoded into the gallery frame",
+  );
+  assert.deepEqual(
+    openAiFetchCalls,
+    ["https://mock-openai.invalid/v1/images/edits"],
+    "multi-reference gallery stills use the OpenAI image edits endpoint",
+  );
+
+  const submittedForm = openAiForm as FormData | null;
+  assert.ok(submittedForm, "gpt-image requests send a multipart form body");
+  assert.equal(submittedForm?.get("model"), "gpt-image-2.5-sunburst");
+  assert.equal(submittedForm?.get("size"), "1536x1536", "1:1 scenes render at 1536x1536");
+  assert.equal(submittedForm?.get("quality"), "high");
+  assert.equal(
+    submittedForm?.get("input_fidelity"),
+    "high",
+    "high input fidelity keeps both partners' faces and the real venue intact",
+  );
+  assert.equal(submittedForm?.get("n"), "1");
+  assert.equal(submittedForm?.get("output_format"), "jpeg");
+  assert.equal(
+    submittedForm?.get("response_format"),
+    null,
+    "response_format is never sent: gpt-image models reject it and always answer with base64",
+  );
+  const submittedImages = submittedForm?.getAll("image[]") ?? [];
+  assert.equal(
+    submittedImages.length,
+    14,
+    "gpt-image edits carry 3 couple references plus 11 venue references",
+  );
+  const openAiPrompt = String(submittedForm?.get("prompt") ?? "");
+  assert.ok(
+    openAiPrompt.includes("COUPLE IDENTITY MANIFEST") &&
+      openAiPrompt.includes("IDENTITY HARD CONSTRAINT") &&
+      openAiPrompt.includes("VENUE SCENE MANIFEST") &&
+      openAiPrompt.includes("VENUE COVERAGE ROLES") &&
+      openAiPrompt.includes("COMPOSITING HARD CONSTRAINT") &&
+      openAiPrompt.includes("INPUT IMAGE ORDER MANIFEST"),
+    "gpt-image prompt folds the per-image labels into one ordered manifest",
+  );
+  assert.ok(
+    openAiPrompt.indexOf("INPUT IMAGE 1: COUPLE IDENTITY REFERENCE 1") <
+      openAiPrompt.indexOf("INPUT IMAGE 4: VENUE"),
+    "the prompt manifest lists couple references before venue references, matching upload order",
+  );
+
+  delete process.env.IMAGE_MODELS;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_BASE_URL;
 
   const blurryGenerated = await referenceQualityImage("blurry");
   globalThis.fetch = async (input: string | URL | Request) => {
