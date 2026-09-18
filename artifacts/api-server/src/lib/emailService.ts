@@ -122,12 +122,14 @@ export async function sendControlPlaneEmail(
   to: string,
   subject: string,
   paragraphs: string[],
-): Promise<boolean> {
+): Promise<EmailSendResult> {
   const body = paragraphs
     .filter((p) => p.trim().length > 0)
     .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, "<br />")}</p>`)
     .join("\n");
-  if (!body) return false;
+  if (!body) {
+    return { sent: false, reason: "The email had no message body to send." };
+  }
   return sendEmail(to, subject, emailLayout(subject, body));
 }
 

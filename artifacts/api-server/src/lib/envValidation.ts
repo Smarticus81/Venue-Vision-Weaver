@@ -42,6 +42,14 @@ const MIN_PRODUCTION_GENERATED_IMAGE_SHARPNESS = 6;
 /** Primary gallery renderer: OpenAI's precision gpt-image-2.5 model. */
 const PRIMARY_IMAGE_MODEL = "gpt-image-2.5-sunburst";
 const SUPPORTED_OPENAI_IMAGE_QUALITIES = ["low", "medium", "high", "xhigh", "max", "auto"];
+/** Env vars that can set the image model chain, in the order they win. */
+const IMAGE_MODEL_ENV_KEYS = [
+  "IMAGE_MODELS",
+  "GEMINI_IMAGE_MODELS",
+  "IMAGE_MODEL",
+  "GEMINI_IMAGE_MODEL",
+  "NANO_BANANA_MODEL",
+] as const;
 
 function hasRealValue(env: EnvLike, key: string): boolean {
   const value = env[key]?.trim() ?? "";
@@ -315,8 +323,15 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
 
   const models = configuredImageModels(env);
   if (models[0] !== PRIMARY_IMAGE_MODEL) {
+    // Name the variable that actually set the primary. A deployment upgraded
+    // from the Gemini-first chain still carries GEMINI_IMAGE_MODEL, and without
+    // this hint the failure does not say which value to change.
+    const source = IMAGE_MODEL_ENV_KEYS.find((key) => env[key]?.trim());
     errors.push(
-      `Image model chain must start with ${PRIMARY_IMAGE_MODEL} for best production likeness quality`,
+      `Image model chain must start with ${PRIMARY_IMAGE_MODEL} for best production likeness quality` +
+        (source
+          ? `; it currently starts with "${models[0]}" from ${source}. Set IMAGE_MODEL=${PRIMARY_IMAGE_MODEL} or unset ${source}.`
+          : ""),
     );
   }
   const unsupportedImageModels = models.filter((model) => !isProductionImageModel(model));
