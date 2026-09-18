@@ -117,12 +117,12 @@ export const ACTION_CATALOG: Record<string, ActionDefinition> = {
         .where(eq(venuesTable.slug, params.venueSlug));
       if (!venue) throw new Error(`Venue "${params.venueSlug}" not found.`);
       if (!venue.ownerEmail) throw new Error(`Venue "${params.venueSlug}" has no owner email.`);
-      const sent = await sendControlPlaneEmail(
+      const delivery = await sendControlPlaneEmail(
         venue.ownerEmail,
         params.subject,
         params.message.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean),
       );
-      if (!sent) throw new Error("Email provider rejected or is not configured (RESEND_API_KEY).");
+      if (!delivery.sent) throw new Error(delivery.reason);
       return { sent: true, to: venue.ownerEmail, venueId: venue.id };
     },
   },
