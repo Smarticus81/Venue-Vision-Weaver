@@ -94,7 +94,8 @@ function usage(): never {
       "  --allow-nonpassing  Exit 0 even if the automated QA summary fails (local plumbing only).",
       "",
       "Environment:",
-      "  GOOGLE_AI_API_KEY or GEMINI_API_KEY must be set.",
+      "  OPENAI_API_KEY must be set for the gpt-image-2.5 gallery renderer.",
+      "  GOOGLE_AI_API_KEY or GEMINI_API_KEY must be set for the quality judge and venue selector.",
       "  GALLERY_QUALITY_GATE=off can disable judge scoring for local plumbing tests.",
     ].join("\n"),
   );
@@ -339,6 +340,7 @@ async function writeHtmlReview(params: {
       image: string;
       imageFallbacks: string[];
       imageSize: string;
+      imageQuality: string;
       quality: string;
       qualityGate: string;
     };
@@ -545,6 +547,7 @@ async function main(): Promise<void> {
       image: string;
       imageFallbacks: string[];
       imageSize: string;
+      imageQuality: string;
       quality: string;
       qualityGate: string;
     };
@@ -562,9 +565,10 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
     style: { id: style.id, name: style.name },
     models: {
-      image: configuredImageModels()[0] ?? "gemini-3-pro-image",
+      image: configuredImageModels()[0] ?? "gpt-image-2.5-sunburst",
       imageFallbacks: configuredImageModels().slice(1),
-      imageSize: process.env.GEMINI_IMAGE_SIZE ?? "2K",
+      imageSize: process.env.OPENAI_IMAGE_SIZE ?? "per-scene",
+      imageQuality: process.env.OPENAI_IMAGE_QUALITY ?? "high",
       quality: process.env.GEMINI_QUALITY_MODEL ?? "gemini-2.5-pro",
       qualityGate: process.env.GALLERY_QUALITY_GATE === "off" ? "off" : "on",
     },

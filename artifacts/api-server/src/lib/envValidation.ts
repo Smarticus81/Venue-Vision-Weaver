@@ -39,6 +39,10 @@ const MIN_PRODUCTION_GENERATED_IMAGE_EDGE_PX = 1024;
 const MIN_PRODUCTION_GENERATED_IMAGE_CONTRAST = 8;
 const MIN_PRODUCTION_GENERATED_IMAGE_SHARPNESS = 6;
 
+/** Primary gallery renderer: OpenAI's precision gpt-image-2.5 model. */
+const PRIMARY_IMAGE_MODEL = "gpt-image-2.5-sunburst";
+const SUPPORTED_OPENAI_IMAGE_QUALITIES = ["low", "medium", "high", "xhigh", "max", "auto"];
+
 function hasRealValue(env: EnvLike, key: string): boolean {
   const value = env[key]?.trim() ?? "";
   if (!value || PLACEHOLDER_VALUES.has(value)) return false;
@@ -154,14 +158,20 @@ function stripePriceIdError(env: EnvLike, key: string): string | null {
   return null;
 }
 
+// Mirrors configuredImageModels() in stillImageClient.ts. Keep both in sync.
 function configuredImageModels(env: EnvLike): string[] {
-  const explicit = env.GEMINI_IMAGE_MODELS;
+  const explicit = env.IMAGE_MODELS ?? env.GEMINI_IMAGE_MODELS;
   if (explicit) {
     return explicit.split(",").map((model) => model.trim()).filter(Boolean);
   }
 
-  const primary = env.GEMINI_IMAGE_MODEL ?? env.NANO_BANANA_MODEL ?? "gemini-3-pro-image";
-  const fallbacks = (env.GEMINI_IMAGE_FALLBACK_MODELS ?? "gemini-3.1-flash-image")
+  const primary =
+    env.IMAGE_MODEL ?? env.GEMINI_IMAGE_MODEL ?? env.NANO_BANANA_MODEL ?? PRIMARY_IMAGE_MODEL;
+  const fallbacks = (
+    env.IMAGE_FALLBACK_MODELS ??
+    env.GEMINI_IMAGE_FALLBACK_MODELS ??
+    "gpt-image-2.5-flare,gemini-3-pro-image"
+  )
     .split(",")
     .map((model) => model.trim())
     .filter(Boolean);
@@ -185,8 +195,21 @@ function isProductionQualityModel(model: string): boolean {
   return /^gemini-(?:2\.5|3(?:\.\d+)?)-pro(?:$|-)/i.test(model.trim());
 }
 
+function isOpenAiImageModel(model: string): boolean {
+  return /^gpt-image-/i.test(model.trim());
+}
+
+/**
+ * Models allowed in a production chain: OpenAI's gpt-image-2.5 pair (optionally
+ * pinned to a dated snapshot) and the Gemini 3 native image models kept as a
+ * fallback.
+ */
 function isProductionImageModel(model: string): boolean {
-  return /^gemini-3(?:\.\d+)?-(?:pro|flash)-image$/i.test(model.trim());
+  const trimmed = model.trim();
+  return (
+    /^gpt-image-2\.5-(?:sunburst|flare)(?:-\d{4}-\d{2}-\d{2})?$/i.test(trimmed) ||
+    /^gemini-3(?:\.\d+)?-(?:pro|flash)-image$/i.test(trimmed)
+  );
 }
 
 export function validateProductionEnvironment(env: EnvLike = process.env): string[] {
@@ -291,14 +314,31 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
   if (generatedSharpnessError) errors.push(generatedSharpnessError);
 
   const models = configuredImageModels(env);
-  if (models[0] !== "gemini-3-pro-image") {
-    errors.push("Gemini image model chain must start with gemini-3-pro-image for best production likeness quality");
+  if (models[0] !== PRIMARY_IMAGE_MODEL) {
+    errors.push(
+      `Image model chain must start with ${PRIMARY_IMAGE_MODEL} for best production likeness quality`,
+    );
   }
   const unsupportedImageModels = models.filter((model) => !isProductionImageModel(model));
   if (unsupportedImageModels.length > 0) {
     errors.push(
-      `Production image model chain must use Gemini 3 native image models only; unsupported: ${unsupportedImageModels.join(", ")}`,
+      `Production image model chain must use gpt-image-2.5 or Gemini 3 native image models only; unsupported: ${unsupportedImageModels.join(", ")}`,
     );
+  }
+  if (models.some(isOpenAiImageModel) && !hasRealValue(env, "OPENAI_API_KEY")) {
+    errors.push("OPENAI_API_KEY must be set when the image model chain uses gpt-image models");
+  }
+
+  const openAiQuality = env.OPENAI_IMAGE_QUALITY?.trim().toLowerCase();
+  if (openAiQuality && !SUPPORTED_OPENAI_IMAGE_QUALITIES.includes(openAiQuality)) {
+    errors.push(
+      `OPENAI_IMAGE_QUALITY must be one of ${SUPPORTED_OPENAI_IMAGE_QUALITIES.join(", ")}`,
+    );
+  }
+
+  const openAiSize = env.OPENAI_IMAGE_SIZE?.trim();
+  if (openAiSize && openAiSize !== "auto" && !/^\d{3,4}x\d{3,4}$/.test(openAiSize)) {
+    errors.push("OPENAI_IMAGE_SIZE must be auto or a WIDTHxHEIGHT value such as 2048x1152");
   }
 
   const qualityModel = env.GEMINI_QUALITY_MODEL ?? "gemini-2.5-pro";

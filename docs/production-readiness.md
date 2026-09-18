@@ -118,9 +118,11 @@ readiness.
 
 Production startup refuses:
 
-- image model chains that do not start with `gemini-3-pro-image`
-- image model chains that include non-Gemini-3 image models, because every
-  production frame must preserve all couple references and strong venue context
+- image model chains that do not start with `gpt-image-2.5-sunburst`, or that use models outside the supported gpt-image-2.5 / Gemini 3 set
+- a missing `OPENAI_API_KEY` when the chain renders with gpt-image models
+- unsupported `OPENAI_IMAGE_QUALITY` or `OPENAI_IMAGE_SIZE` values, because
+  every production frame must preserve all couple references and strong venue
+  context at a deliverable resolution
 - disabled gallery quality review
 - lowered likeness, per-partner likeness, venue, or composition thresholds
   (targets that retries aim for), or lowered best-effort acceptance floors
@@ -140,11 +142,24 @@ recognizable as two distinct real identities in all four stills, the venue must
 remain the uploaded venue, and the motion reel must be suitable for venue sales
 follow-up.
 
-The default image model chain uses Gemini 3 Pro Image (Nano Banana Pro) first
-and Gemini 3.1 Flash Image (Nano Banana 2) as the fallback, matching the current
-Gemini native image generation guidance for professional asset production,
-high-resolution output, and multi-reference workflows. If Google reports a
-temporary resolution-specific quality incident, keep the AI quality gate enabled
-and use
-`GEMINI_IMAGE_SIZE=1K` only as a temporary operational mitigation after running
-the gallery QA harness with real references.
+The default image model chain leads with `gpt-image-2.5-sunburst`, OpenAI's
+precision image model, then `gpt-image-2.5-flare` for speed, then
+`gemini-3-pro-image` as a last-resort fallback. Sunburst is chosen because a
+gallery still is a multi-reference composite that has to keep both partners'
+faces and the real venue architecture intact, which is exactly the editing
+precision it is built for. Renders go to the OpenAI image edits endpoint with
+`input_fidelity=high`, up to 16 ordered references, and a per-scene render size
+derived from the scene aspect ratio.
+
+`OPENAI_API_KEY` is required in production whenever the chain contains a
+gpt-image model, and boot refuses a chain that does not start with
+`gpt-image-2.5-sunburst`. `GOOGLE_AI_API_KEY` stays required as well: the
+multimodal quality judge, the venue reference selector, and the control plane
+still run on Gemini.
+
+Quality steps run low, medium, high, xhigh, max, and auto; production uses
+`high` via `OPENAI_IMAGE_QUALITY`. Cost and latency climb steeply above it. If a
+provider reports a temporary resolution-specific quality incident, keep the AI
+quality gate enabled and lower `OPENAI_IMAGE_QUALITY` (or `GEMINI_IMAGE_SIZE=1K`
+on the Gemini fallback) only as a temporary operational mitigation, after
+running the gallery QA harness with real references.

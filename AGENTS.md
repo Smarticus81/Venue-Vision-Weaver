@@ -36,7 +36,7 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 
 ### Artifacts (deployable apps)
 
-- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing, gallery styles). Credit-gated Gemini image generation with Stripe billing.
+- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing, gallery styles). Credit-gated image generation (OpenAI gpt-image-2.5, Gemini fallback) with Stripe billing.
 - **`artifacts/wedding-app`** - React 19 SPA (Vite). Venue main site at `/`, signup at `/create-venue`, owner dashboard at `/dashboard/:slug`, couple flow at `/preview/:slug`, share links at `/v/:shareToken`.
 
 ### Shared libraries (`lib/`)
@@ -60,7 +60,8 @@ This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. 
 - `DATABASE_URL` - Supabase PostgreSQL URI (`pnpm run setup:db`)
 - `APP_BASE_URL` - Public URL for emails and Stripe redirects
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` - Billing
-- `GOOGLE_AI_API_KEY` - Gemini gallery generation and quality review
+- `OPENAI_API_KEY` - gpt-image-2.5 gallery image generation (primary renderer)
+- `GOOGLE_AI_API_KEY` - Gemini quality review, venue reference selection, control plane, and the image fallback
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` - file uploads (`pnpm run setup:storage`)
 
 Deploy: `pnpm run build` then `node artifacts/api-server/dist/index.mjs`. First-time DB: `pnpm run setup:db`.

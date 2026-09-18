@@ -11,13 +11,32 @@ import {
   prepareReferenceImage,
   REFERENCE_TARGET_MIN_EDGE_PX,
 } from "./referenceImagePreparation.js";
+import { StillImageBlockedError, StillImageRequestError } from "./stillImageErrors.js";
+import {
+  generateStillWithOpenAi,
+  isOpenAiImageModel,
+  openaiApiKey,
+  openaiImageQuality,
+  openaiImageSize,
+  OPENAI_MAX_REFERENCE_IMAGES,
+  type OpenAiReferenceImage,
+} from "./openaiImageClient.js";
 
 const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_INTERACTIONS_API_REVISION =
   process.env.GEMINI_INTERACTIONS_API_REVISION ?? "2026-05-20";
+/**
+ * Production model chain. gpt-image-2.5-sunburst is the primary renderer: it is
+ * OpenAI's precision image model, tuned for edits that preserve the subjects
+ * and structures of the reference images, which is exactly what a gallery still
+ * needs (both partners' faces plus the real venue architecture).
+ * gpt-image-2.5-flare is the faster sibling and takes over when Sunburst is
+ * unavailable; the Gemini native image models remain as a last-resort fallback.
+ */
 const DEFAULT_IMAGE_MODELS = [
+  "gpt-image-2.5-sunburst",
+  "gpt-image-2.5-flare",
   "gemini-3-pro-image",
-  "gemini-3.1-flash-image",
 ];
 const MAX_TOTAL_REFERENCE_IMAGES = 14;
 const MAX_COUPLE_REFERENCES = 3;
@@ -38,13 +57,6 @@ type VenueReferenceInput = {
 
 function geminiApiBase(): string {
   return (process.env.GEMINI_API_BASE_URL ?? DEFAULT_GEMINI_API_BASE).replace(/\/$/, "");
-}
-
-class StillImageBlockedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "StillImageBlockedError";
-  }
 }
 
 type StillAspectRatio = ReferenceAspectRatio;
@@ -117,6 +129,15 @@ function useInteractionsApiForImageGeneration(model: string): boolean {
 }
 
 function referenceLimitsForModel(model: string): { couple: number; venue: number } {
+  if (isOpenAiImageModel(model)) {
+    // The edits endpoint accepts up to 16 reference images; stay inside both
+    // that ceiling and the pipeline's own MAX_TOTAL_REFERENCE_IMAGES budget.
+    const venue = Math.min(
+      OPENAI_MAX_REFERENCE_IMAGES - MAX_COUPLE_REFERENCES,
+      MAX_TOTAL_REFERENCE_IMAGES - MAX_COUPLE_REFERENCES,
+    );
+    return { couple: MAX_COUPLE_REFERENCES, venue };
+  }
   if (model === "gemini-3-pro-image") {
     return { couple: 3, venue: 6 };
   }
@@ -145,8 +166,10 @@ function buildReferencePayload(params: {
   normalizedVenueRefs: VenueReferenceInput[];
 }): {
   fullPrompt: string;
+  openAiPrompt: string;
   imageParts: ImagePart[];
   interactionInputs: InteractionInput[];
+  orderedReferences: OpenAiReferenceImage[];
   coupleRefCount: number;
   venueRefCount: number;
 } {
@@ -177,7 +200,7 @@ function buildReferencePayload(params: {
     ...expectedRoleLines.slice(0, coupleRefs.length),
     "If the uploaded order differs, infer Partner A and Partner B from all couple references together, but never collapse the two identities into one averaged face.",
   ].join(" ");
-  const fullPrompt =
+  const promptBody =
     `${params.prompt}\n\n` +
     `COUPLE IDENTITY MANIFEST (${coupleImageLabels}): Treat these inputs as multiple identity observations of the same two real adult partners. First infer two stable identities, Partner A and Partner B, from all reference images together. Preserve each partner's exact facial geometry, eyes, eyebrows, nose, mouth, jaw, ears, skin tone, hair color, hairline, glasses, freckles, moles, age, build, and natural expression cues. Both partners must remain individually recognizable, not averaged into generic wedding faces.\n` +
     `COUPLE REFERENCE ROLES: ${coupleRoleSummary}\n` +
@@ -186,11 +209,17 @@ function buildReferencePayload(params: {
     (venueCoverageSummary
       ? `VENUE COVERAGE ROLES: ${venueCoverageSummary}. Use these roles to choose the correct real venue feature for this scene while preserving the exact architecture from the matching uploaded reference.\n`
       : "") +
-    `COMPOSITING HARD CONSTRAINT: integrate the exact couple naturally into the exact venue photograph with realistic scale, perspective, contact shadows, lens depth, matching light direction, and believable camera optics. Keep both faces crisp, unobstructed, front-readable, and fully visible. Do not crop through faces. Do not add extra people.\n` +
-    `Output: one photorealistic ${params.aspectInstruction} cinematic wedding photograph with both people from the couple references together inside the venue. Instant recognition required. No text, captions, watermarks, or logos.`;
+    `COMPOSITING HARD CONSTRAINT: integrate the exact couple naturally into the exact venue photograph with realistic scale, perspective, contact shadows, lens depth, matching light direction, and believable camera optics. Keep both faces crisp, unobstructed, front-readable, and fully visible. Do not crop through faces. Do not add extra people.\n`;
+  const outputLine = `Output: one photorealistic ${params.aspectInstruction} cinematic wedding photograph with both people from the couple references together inside the venue. Instant recognition required. No text, captions, watermarks, or logos.`;
+  const fullPrompt = `${promptBody}${outputLine}`;
 
   const imageParts: ImagePart[] = [];
   const interactionInputs: InteractionInput[] = [{ type: "text", text: fullPrompt }];
+  // The OpenAI edits endpoint has no per-image text slot, so the same labels
+  // are folded into a single ordered manifest inside the prompt and the files
+  // are uploaded in exactly that order.
+  const referenceLabels: string[] = [];
+  const orderedReferences: OpenAiReferenceImage[] = [];
   coupleRefs.forEach((buf, index) => {
     const role =
       index === 0
@@ -209,6 +238,8 @@ function buildReferencePayload(params: {
       { type: "text", text: label },
       { type: "image", mime_type: "image/jpeg", data: buf.toString("base64") },
     );
+    referenceLabels.push(label);
+    orderedReferences.push({ buffer: buf, filename: `input-${index + 1}-couple.jpg` });
   });
   venueRefs.forEach((ref, index) => {
     const inputIndex = venueImageIndex + index;
@@ -230,12 +261,22 @@ function buildReferencePayload(params: {
       { type: "text", text: label },
       { type: "image", mime_type: "image/jpeg", data: ref.buffer.toString("base64") },
     );
+    referenceLabels.push(label);
+    orderedReferences.push({ buffer: ref.buffer, filename: `input-${inputIndex}-venue.jpg` });
   });
+
+  const openAiPrompt =
+    `${promptBody}` +
+    `INPUT IMAGE ORDER MANIFEST: the attached reference images are supplied in exactly this order.\n` +
+    `${referenceLabels.join("\n")}\n` +
+    `${outputLine}`;
 
   return {
     fullPrompt,
+    openAiPrompt,
     imageParts,
     interactionInputs,
+    orderedReferences,
     coupleRefCount: coupleRefs.length,
     venueRefCount: venueRefs.length,
   };
@@ -257,8 +298,13 @@ function expectedRatio(ratio: StillAspectRatio): number {
   }
 }
 
+/**
+ * Ordered image model chain. `IMAGE_MODEL*` are the provider-neutral names;
+ * the legacy `GEMINI_IMAGE_*` names still work so existing deployments keep
+ * booting without an env change.
+ */
 export function configuredImageModels(): string[] {
-  const explicit = process.env.GEMINI_IMAGE_MODELS;
+  const explicit = process.env.IMAGE_MODELS ?? process.env.GEMINI_IMAGE_MODELS;
   if (explicit) {
     return explicit
       .split(",")
@@ -267,10 +313,15 @@ export function configuredImageModels(): string[] {
   }
 
   const primary =
+    process.env.IMAGE_MODEL ??
     process.env.GEMINI_IMAGE_MODEL ??
     process.env.NANO_BANANA_MODEL ??
     DEFAULT_IMAGE_MODELS[0]!;
-  const fallbacks = (process.env.GEMINI_IMAGE_FALLBACK_MODELS ?? DEFAULT_IMAGE_MODELS.slice(1).join(","))
+  const fallbacks = (
+    process.env.IMAGE_FALLBACK_MODELS ??
+    process.env.GEMINI_IMAGE_FALLBACK_MODELS ??
+    DEFAULT_IMAGE_MODELS.slice(1).join(",")
+  )
     .split(",")
     .map((model) => model.trim())
     .filter(Boolean);
@@ -380,7 +431,10 @@ async function validateGeneratedStill(buffer: Buffer, aspectRatio: StillAspectRa
 }
 
 /**
- * Generate one gallery still using the configured Gemini native image model.
+ * Generate one gallery still with the configured image model chain.
+ *
+ * The chain leads with OpenAI's gpt-image-2.5 models through the
+ * `/v1/images/edits` endpoint and falls back to the Gemini native image models.
  * Couple references are sent first to prioritize identity preservation, followed
  * by ranked venue references that anchor the scene to the real venue.
  */
@@ -392,10 +446,11 @@ export async function generateCinematicStillWithMetadata(params: {
   venueReferences?: { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null }[];
   aspectRatio: StillAspectRatio;
 }): Promise<GeneratedStillResult> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const geminiApiKey = process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
+  const openAiApiKey = openaiApiKey();
+  if (!openAiApiKey && !geminiApiKey) {
     throw new Error(
-      "GOOGLE_AI_API_KEY (or GEMINI_API_KEY) is required for Gemini image generation.",
+      "OPENAI_API_KEY (for gpt-image models) or GOOGLE_AI_API_KEY (for Gemini image models) is required for image generation.",
     );
   }
 
@@ -469,6 +524,82 @@ export async function generateCinematicStillWithMetadata(params: {
       normalizedCoupleRefs,
       normalizedVenueRefs,
     });
+
+    if (isOpenAiImageModel(model)) {
+      if (!openAiApiKey) {
+        const error = new Error(
+          `OPENAI_API_KEY is required for OpenAI image model ${model}.`,
+        );
+        lastError = error;
+        if (models.length > 1) {
+          logger.warn({ model }, "Skipping OpenAI image model: OPENAI_API_KEY is not configured");
+          continue;
+        }
+        throw error;
+      }
+
+      logger.info(
+        {
+          model,
+          size: openaiImageSize(aspectRatio),
+          quality: openaiImageQuality(),
+          promptSnippet: prompt.slice(0, 160),
+          aspectRatio,
+          coupleRefCount: referencePayload.coupleRefCount,
+          venueRefCount: referencePayload.venueRefCount,
+          referenceLimitProfile: referenceLimitsForModel(model),
+        },
+        "Submitting OpenAI image multi-reference edit",
+      );
+
+      try {
+        const rendered = await generateStillWithOpenAi({
+          apiKey: openAiApiKey,
+          model,
+          prompt: referencePayload.openAiPrompt,
+          aspectRatio,
+          images: referencePayload.orderedReferences,
+        });
+        await validateGeneratedStill(rendered.buffer, aspectRatio);
+        logger.info(
+          {
+            model,
+            sizeBytes: rendered.buffer.length,
+            size: rendered.size,
+            quality: rendered.quality,
+            cropped: rendered.cropped,
+            inputTokens: rendered.usage?.inputTokens,
+            outputTokens: rendered.usage?.outputTokens,
+          },
+          "OpenAI image model rendered validated scene still",
+        );
+        return { buffer: rendered.buffer, model };
+      } catch (err) {
+        if (err instanceof StillImageBlockedError) throw err;
+        lastError = err;
+        if (err instanceof StillImageRequestError && models.length > 1 && err.retryWithFallbackModel) {
+          logger.warn(
+            { err, model, status: err.status },
+            "OpenAI image model unavailable; trying fallback",
+          );
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!geminiApiKey) {
+      const error = new Error(
+        `GOOGLE_AI_API_KEY (or GEMINI_API_KEY) is required for Gemini image model ${model}.`,
+      );
+      lastError = error;
+      if (models.length > 1) {
+        logger.warn({ model }, "Skipping Gemini image model: no Google AI key is configured");
+        continue;
+      }
+      throw error;
+    }
+
     const body = {
       contents: [
         {
@@ -524,7 +655,7 @@ export async function generateCinematicStillWithMetadata(params: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
+          "x-goog-api-key": geminiApiKey,
           "Api-Revision": GEMINI_INTERACTIONS_API_REVISION,
         },
         body: JSON.stringify(body),
@@ -569,7 +700,7 @@ export async function generateCinematicStillWithMetadata(params: {
       return { buffer: imageBuffer, model };
     }
 
-    const url = `${geminiApiBase()}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const url = `${geminiApiBase()}/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -632,7 +763,7 @@ export async function generateCinematicStillWithMetadata(params: {
     return { buffer: imageBuffer, model };
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Gemini image model request failed.");
+  throw lastError instanceof Error ? lastError : new Error("Image model request failed.");
 }
 
 function aspectRatioInstruction(ratio: StillAspectRatio): string {
@@ -695,21 +826,38 @@ export function userMessageForStillError(err: unknown): string {
     return "We couldn't render an accurate enough gallery from these photos, even after several attempts. Photos with both faces clearly visible, sharp, and well lit give the best results - swap in stronger couple photos and try again. Your venue credit was refunded.";
   }
 
+  const isOpenAiFailure = /openai|gpt-image/i.test(detail);
+  const providerName = isOpenAiFailure ? "OpenAI" : "Gemini";
+
   if (
     e?.status === 402 ||
-    /exhausted balance|user is locked|top up your balance|insufficient[_ ]?quota|insufficient[_ ]?credit|RESOURCE_EXHAUSTED/i.test(
+    /exhausted balance|user is locked|top up your balance|insufficient[_ ]?quota|insufficient[_ ]?credit|billing[_ ]?hard[_ ]?limit|RESOURCE_EXHAUSTED/i.test(
       detail,
     )
   ) {
-    return "The Google AI account that powers the AI is out of credit. An admin needs to top up the Gemini API quota before new galleries can render. Your venue credit was refunded.";
+    return isOpenAiFailure
+      ? "The OpenAI account that powers the AI is out of credit. An admin needs to top up the OpenAI billing balance before new galleries can render. Your venue credit was refunded."
+      : "The Google AI account that powers the AI is out of credit. An admin needs to top up the Gemini API quota before new galleries can render. Your venue credit was refunded.";
   }
 
   if (err instanceof Error) {
+    if (err.message.includes("OPENAI_API_KEY")) {
+      return "Image generation is not configured on this server (missing OpenAI API key). Your venue credit was refunded.";
+    }
     if (err.message.includes("GOOGLE_AI_API_KEY") || err.message.includes("GEMINI_API_KEY")) {
       return "Image generation is not configured on this server (missing Gemini API key). Your venue credit was refunded.";
     }
-    if (e?.status === 403 || /forbidden|PERMISSION_DENIED/i.test(err.message)) {
-      return "The Gemini API rejected the request (Forbidden). API key is invalid, blocked, or out of credit. Your venue credit was refunded.";
+    if (e?.status === 401 || /invalid[_ ]?api[_ ]?key|\(401\)/i.test(err.message)) {
+      return `The ${providerName} API rejected the credentials (Unauthorized). An admin needs to fix the API key before new galleries can render. Your venue credit was refunded.`;
+    }
+    if (e?.status === 403 || /forbidden|PERMISSION_DENIED|\(403\)/i.test(err.message)) {
+      return `The ${providerName} API rejected the request (Forbidden). API key is invalid, blocked, or out of credit. Your venue credit was refunded.`;
+    }
+    if (e?.status === 429 || /rate[_ ]?limit/i.test(err.message)) {
+      return `The ${providerName} API is rate limiting gallery renders right now. Please try again in a few minutes. Your venue credit was refunded.`;
+    }
+    if (/timed? ?out|AbortError|The operation was aborted/i.test(detail)) {
+      return "The image model took too long to render this gallery. Please try again. Your venue credit was refunded.";
     }
     return (detail.trim() || err.message).slice(0, 320);
   }

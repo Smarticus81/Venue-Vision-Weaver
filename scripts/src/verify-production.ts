@@ -172,8 +172,8 @@ function checkGalleryQaEvidence(): CheckResult {
     if (report.summary?.reelReady !== true || typeof report.reelPath !== "string") {
       failures.push("motion reel is missing");
     }
-    if (report.models?.image !== "gemini-3-pro-image") {
-      failures.push("primary image model is not gemini-3-pro-image");
+    if (report.models?.image !== "gpt-image-2.5-sunburst") {
+      failures.push("primary image model is not gpt-image-2.5-sunburst");
     }
     if (report.models?.qualityGate !== "on") failures.push("quality gate was not enabled");
     if (!numberAtLeast(report.summary?.minLikenessScore, 0.82)) {

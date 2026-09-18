@@ -25,12 +25,25 @@ function storageConfigured(): boolean {
   return hasSupabase || hasGcs;
 }
 
+function isSupportedImageModel(model: string): boolean {
+  return (
+    /^gpt-image-2\.5-(?:sunburst|flare)(?:-\d{4}-\d{2}-\d{2})?$/i.test(model) ||
+    /^gemini-3(?:\.\d+)?-(?:pro|flash)-image$/i.test(model)
+  );
+}
+
 function productionImageModelChainReady(): boolean {
   const models = configuredImageModels();
-  return (
-    models[0] === "gemini-3-pro-image" &&
-    models.every((model) => /^gemini-3(?:\.\d+)?-(?:pro|flash)-image$/i.test(model))
-  );
+  return models[0] === "gpt-image-2.5-sunburst" && models.every(isSupportedImageModel);
+}
+
+function imageProviderKeysReady(): boolean {
+  const models = configuredImageModels();
+  const needsOpenAi = models.some((model) => /^gpt-image-/i.test(model));
+  const needsGemini = models.some((model) => !/^gpt-image-/i.test(model));
+  if (needsOpenAi && !hasValue("OPENAI_API_KEY")) return false;
+  if (needsGemini && !hasValue("GOOGLE_AI_API_KEY") && !hasValue("GEMINI_API_KEY")) return false;
+  return needsOpenAi || needsGemini;
 }
 
 router.get("/readyz", async (_req, res) => {
@@ -38,7 +51,10 @@ router.get("/readyz", async (_req, res) => {
     env: validateProductionEnvironment().length === 0 ? "ok" : "degraded",
     database: "degraded",
     storage: storageConfigured() ? "ok" : "degraded",
-    ai: hasValue("GOOGLE_AI_API_KEY") || hasValue("GEMINI_API_KEY") ? "ok" : "degraded",
+    ai:
+      (hasValue("GOOGLE_AI_API_KEY") || hasValue("GEMINI_API_KEY")) && imageProviderKeysReady()
+        ? "ok"
+        : "degraded",
     billing: isStripeConfigured() ? "ok" : "degraded",
     email: hasValue("RESEND_API_KEY") && hasValue("EMAIL_FROM") ? "ok" : "degraded",
     qualityGate: (process.env.GALLERY_QUALITY_GATE ?? "on").toLowerCase() === "off" ? "degraded" : "ok",
