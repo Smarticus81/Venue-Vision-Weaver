@@ -28,6 +28,22 @@ export const POLICY_DEFAULTS: Array<{
     description: "Maximum venue-facing emails the control plane may send per UTC day.",
   },
   {
+    key: "max_prospect_emails_per_day",
+    value: { emails: 15 },
+    description: "Maximum prospect outreach emails the control plane may send per UTC day.",
+  },
+  {
+    key: "min_hours_between_prospect_contacts",
+    value: { hours: 72 },
+    description: "Minimum gap between two emails to the same prospect.",
+  },
+  {
+    key: "max_contacts_per_prospect",
+    value: { contacts: 3 },
+    description:
+      "Lifetime cap of automated emails per prospect (first touch plus follow-ups); replies and opt-outs stop contact immediately.",
+  },
+  {
     key: "auto_execute_low_risk",
     value: { enabled: true },
     description: "Whether low-risk actions execute immediately without operator approval.",

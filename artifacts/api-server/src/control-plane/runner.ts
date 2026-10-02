@@ -11,7 +11,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { getAgentDefinition, type AgentDefinition } from "./agents.js";
 import { computeBusinessMetrics } from "./metrics.js";
-import { runAgentLoop, controlPlaneModel } from "./gemini.js";
+import { runAgentLoop, controlPlaneModel } from "./grok.js";
 import { toolDeclarations, executeControlPlaneTool } from "./tools.js";
 import { recordAuditEvent } from "./audit.js";
 
@@ -86,6 +86,7 @@ async function executeRun(runId: number, definition: AgentDefinition): Promise<v
       systemPrompt: definition.mission,
       userMessage: briefing,
       tools: toolDeclarations(definition.tools),
+      enableWebSearch: definition.webSearch === true,
       executeTool: (name, args) => {
         if (!definition.tools.includes(name)) {
           return Promise.reject(new Error(`Tool "${name}" is not granted to ${definition.key}.`));

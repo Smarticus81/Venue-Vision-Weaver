@@ -25,7 +25,7 @@ import { computeBusinessMetrics } from "../control-plane/metrics.js";
 import { startAgentRun } from "../control-plane/runner.js";
 import { decideAction } from "../control-plane/actions.js";
 import { listPolicies } from "../control-plane/policies.js";
-import { controlPlaneAiConfigured, controlPlaneModel } from "../control-plane/gemini.js";
+import { controlPlaneAiConfigured, controlPlaneModel } from "../control-plane/grok.js";
 import { recordAuditEvent } from "../control-plane/audit.js";
 import { logger } from "../lib/logger.js";
 
@@ -117,7 +117,7 @@ router.post("/control/agents/:key/run", async (req, res): Promise<void> => {
     return;
   }
   if (!controlPlaneAiConfigured()) {
-    res.status(503).json({ error: "GOOGLE_AI_API_KEY is not configured; agents cannot reason." });
+    res.status(503).json({ error: "XAI_API_KEY is not configured; agents cannot reason." });
     return;
   }
 

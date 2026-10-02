@@ -6,10 +6,12 @@ import {
   coupleSessionsTable,
   controlAgentsTable,
   agentActionsTable,
+  controlProspectsTable,
+  controlCampaignsTable,
   type AgentAction,
   type ActionRiskLevel,
 } from "@workspace/db";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { grantCreditsToOrg } from "../lib/credits.js";
 import { sendControlPlaneEmail } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
@@ -97,6 +99,35 @@ const updatePolicySchema = z
   })
   .strict();
 
+const sendProspectEmailSchema = z
+  .object({
+    prospectId: z.number().int().positive(),
+    subject: z.string().min(3).max(140),
+    message: z
+      .string()
+      .min(20)
+      .max(4000)
+      .describe("Plain-text body. Paragraphs separated by blank lines."),
+    campaignId: z.number().int().positive().optional(),
+    step: z.number().int().min(1).max(10).optional(),
+  })
+  .strict();
+
+const enrollProspectsSchema = z
+  .object({
+    campaignId: z.number().int().positive(),
+    prospectIds: z.array(z.number().int().positive()).min(1).max(25),
+  })
+  .strict();
+
+const campaignIdSchema = z.object({ campaignId: z.number().int().positive() }).strict();
+
+/** Statuses a prospect may be in for the control plane to email them. */
+const CONTACTABLE_PROSPECT_STATUSES = ["new", "qualified", "contacted"] as const;
+
+const OPT_OUT_FOOTER =
+  'If you would rather not hear from us, just reply "unsubscribe" and we will not contact you again.';
+
 export const ACTION_CATALOG: Record<string, ActionDefinition> = {
   send_venue_email: {
     type: "send_venue_email",
@@ -124,6 +155,240 @@ export const ACTION_CATALOG: Record<string, ActionDefinition> = {
       );
       if (!delivery.sent) throw new Error(delivery.reason);
       return { sent: true, to: venue.ownerEmail, venueId: venue.id };
+    },
+  },
+  send_prospect_email: {
+    type: "send_prospect_email",
+    riskLevel: "high",
+    description:
+      "Send one personalized outreach email to a prospect (first touch or campaign follow-up). Blocked for prospects who replied, converted, unsubscribed, or were disqualified; subject to daily send caps and minimum contact gaps.",
+    paramsSchema: sendProspectEmailSchema as z.ZodType<Record<string, unknown>>,
+    async execute(rawParams) {
+      const params = sendProspectEmailSchema.parse(rawParams);
+
+      const cap = await getPolicyNumber("max_prospect_emails_per_day", "emails", 15);
+      const sentToday = await executedTodayCount("send_prospect_email");
+      if (sentToday >= cap) {
+        throw new Error(`Daily prospect email cap reached (${sentToday}/${cap}).`);
+      }
+
+      const [prospect] = await db
+        .select()
+        .from(controlProspectsTable)
+        .where(eq(controlProspectsTable.id, params.prospectId));
+      if (!prospect) throw new Error(`Prospect ${params.prospectId} not found.`);
+      if (
+        !CONTACTABLE_PROSPECT_STATUSES.includes(
+          prospect.status as (typeof CONTACTABLE_PROSPECT_STATUSES)[number],
+        )
+      ) {
+        throw new Error(
+          `Prospect ${prospect.id} is "${prospect.status}" and may not be emailed by the control plane.`,
+        );
+      }
+
+      const maxContacts = await getPolicyNumber("max_contacts_per_prospect", "contacts", 3);
+      if (prospect.contactCount >= maxContacts) {
+        throw new Error(
+          `Prospect ${prospect.id} already received ${prospect.contactCount}/${maxContacts} emails; no further automated contact allowed.`,
+        );
+      }
+
+      const minGapHours = await getPolicyNumber("min_hours_between_prospect_contacts", "hours", 72);
+      if (prospect.lastContactedAt) {
+        const hoursSince = (Date.now() - prospect.lastContactedAt.getTime()) / 3_600_000;
+        if (hoursSince < minGapHours) {
+          throw new Error(
+            `Prospect ${prospect.id} was contacted ${Math.round(hoursSince)}h ago; policy requires a ${minGapHours}h gap.`,
+          );
+        }
+      }
+
+      // Existing customers are venue outreach, not prospect outreach.
+      const [existingVenue] = await db
+        .select({ id: venuesTable.id, slug: venuesTable.slug })
+        .from(venuesTable)
+        .where(sql`lower(${venuesTable.ownerEmail}) = ${prospect.email.toLowerCase()}`)
+        .limit(1);
+      if (existingVenue) {
+        throw new Error(
+          `Prospect ${prospect.id} (${prospect.email}) already owns venue "${existingVenue.slug}"; use send_venue_email instead.`,
+        );
+      }
+
+      if (params.campaignId) {
+        const [campaign] = await db
+          .select({ id: controlCampaignsTable.id, status: controlCampaignsTable.status })
+          .from(controlCampaignsTable)
+          .where(eq(controlCampaignsTable.id, params.campaignId));
+        if (!campaign) throw new Error(`Campaign ${params.campaignId} not found.`);
+        if (campaign.status !== "active") {
+          throw new Error(
+            `Campaign ${campaign.id} is "${campaign.status}"; only active campaigns may send.`,
+          );
+        }
+        if (prospect.campaignId !== campaign.id) {
+          throw new Error(
+            `Prospect ${prospect.id} is not enrolled in campaign ${campaign.id}; enroll first.`,
+          );
+        }
+      }
+
+      const paragraphs = params.message
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      paragraphs.push(OPT_OUT_FOOTER);
+
+      const delivery = await sendControlPlaneEmail(prospect.email, params.subject, paragraphs);
+      if (!delivery.sent) throw new Error(delivery.reason);
+
+      const now = new Date();
+      await db
+        .update(controlProspectsTable)
+        .set({
+          status: "contacted",
+          contactCount: prospect.contactCount + 1,
+          lastContactedAt: now,
+          campaignStep: params.step ?? prospect.campaignStep,
+          updatedAt: now,
+        })
+        .where(eq(controlProspectsTable.id, prospect.id));
+
+      return {
+        sent: true,
+        to: prospect.email,
+        prospectId: prospect.id,
+        contactCount: prospect.contactCount + 1,
+        campaignId: params.campaignId ?? prospect.campaignId,
+        step: params.step ?? null,
+      };
+    },
+  },
+  enroll_prospects_in_campaign: {
+    type: "enroll_prospects_in_campaign",
+    riskLevel: "medium",
+    description:
+      "Enroll qualified prospects into an outreach campaign (max 25 per action). Enrollment stages future sends; each email still needs its own approval.",
+    paramsSchema: enrollProspectsSchema as z.ZodType<Record<string, unknown>>,
+    async execute(rawParams) {
+      const params = enrollProspectsSchema.parse(rawParams);
+      const [campaign] = await db
+        .select()
+        .from(controlCampaignsTable)
+        .where(eq(controlCampaignsTable.id, params.campaignId));
+      if (!campaign) throw new Error(`Campaign ${params.campaignId} not found.`);
+      if (campaign.status !== "draft" && campaign.status !== "active") {
+        throw new Error(`Campaign ${campaign.id} is "${campaign.status}" and cannot take enrollments.`);
+      }
+
+      const prospects = await db
+        .select({
+          id: controlProspectsTable.id,
+          status: controlProspectsTable.status,
+          campaignId: controlProspectsTable.campaignId,
+        })
+        .from(controlProspectsTable)
+        .where(inArray(controlProspectsTable.id, params.prospectIds));
+      const foundIds = new Set(prospects.map((p) => p.id));
+
+      const enrolled: number[] = [];
+      const skipped: Array<{ prospectId: number; reason: string }> = [];
+      for (const id of params.prospectIds) {
+        if (!foundIds.has(id)) {
+          skipped.push({ prospectId: id, reason: "not_found" });
+          continue;
+        }
+        const prospect = prospects.find((p) => p.id === id)!;
+        if (prospect.campaignId != null && prospect.campaignId !== campaign.id) {
+          skipped.push({ prospectId: id, reason: "already_in_another_campaign" });
+          continue;
+        }
+        if (prospect.status !== "new" && prospect.status !== "qualified") {
+          skipped.push({ prospectId: id, reason: `status_${prospect.status}` });
+          continue;
+        }
+        enrolled.push(id);
+      }
+
+      if (enrolled.length > 0) {
+        await db
+          .update(controlProspectsTable)
+          .set({ campaignId: campaign.id, campaignStep: 0, updatedAt: new Date() })
+          .where(inArray(controlProspectsTable.id, enrolled));
+      }
+      return { campaignId: campaign.id, enrolledCount: enrolled.length, enrolled, skipped };
+    },
+  },
+  launch_campaign: {
+    type: "launch_campaign",
+    riskLevel: "high",
+    description:
+      "Activate a draft or paused outreach campaign so its enrolled prospects become eligible for sends (each send still individually approved).",
+    paramsSchema: campaignIdSchema as z.ZodType<Record<string, unknown>>,
+    async execute(rawParams) {
+      const params = campaignIdSchema.parse(rawParams);
+      const [updated] = await db
+        .update(controlCampaignsTable)
+        .set({
+          status: "active",
+          launchedAt: sql`coalesce(${controlCampaignsTable.launchedAt}, now())`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(controlCampaignsTable.id, params.campaignId),
+            inArray(controlCampaignsTable.status, ["draft", "paused"]),
+          ),
+        )
+        .returning({ id: controlCampaignsTable.id, status: controlCampaignsTable.status });
+      if (!updated) {
+        throw new Error(`Campaign ${params.campaignId} is not in a launchable state (or does not exist).`);
+      }
+      return { campaignId: updated.id, status: updated.status };
+    },
+  },
+  pause_campaign: {
+    type: "pause_campaign",
+    riskLevel: "medium",
+    description: "Pause an active outreach campaign; no further sends may reference it until relaunched.",
+    paramsSchema: campaignIdSchema as z.ZodType<Record<string, unknown>>,
+    async execute(rawParams) {
+      const params = campaignIdSchema.parse(rawParams);
+      const [updated] = await db
+        .update(controlCampaignsTable)
+        .set({ status: "paused", updatedAt: new Date() })
+        .where(
+          and(eq(controlCampaignsTable.id, params.campaignId), eq(controlCampaignsTable.status, "active")),
+        )
+        .returning({ id: controlCampaignsTable.id });
+      if (!updated) {
+        throw new Error(`Campaign ${params.campaignId} is not active (or does not exist).`);
+      }
+      return { campaignId: updated.id, status: "paused" };
+    },
+  },
+  complete_campaign: {
+    type: "complete_campaign",
+    riskLevel: "medium",
+    description: "Mark a campaign completed and stop all further activity under it.",
+    paramsSchema: campaignIdSchema as z.ZodType<Record<string, unknown>>,
+    async execute(rawParams) {
+      const params = campaignIdSchema.parse(rawParams);
+      const [updated] = await db
+        .update(controlCampaignsTable)
+        .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(controlCampaignsTable.id, params.campaignId),
+            inArray(controlCampaignsTable.status, ["draft", "active", "paused"]),
+          ),
+        )
+        .returning({ id: controlCampaignsTable.id });
+      if (!updated) {
+        throw new Error(`Campaign ${params.campaignId} is already completed (or does not exist).`);
+      }
+      return { campaignId: updated.id, status: "completed" };
     },
   },
   grant_promo_credits: {

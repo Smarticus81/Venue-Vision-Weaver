@@ -10,15 +10,19 @@ import {
   agentRunsTable,
   controlExperimentsTable,
   controlAuditEventsTable,
+  controlProspectsTable,
+  controlCampaignsTable,
   AGENT_TASK_PRIORITIES,
   EXPERIMENT_STATUSES,
+  PROSPECT_STATUSES,
+  PROSPECT_SOURCES,
 } from "@workspace/db";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { computeBusinessMetrics } from "./metrics.js";
 import { ACTION_CATALOG, describeActionCatalog, proposeAction } from "./actions.js";
-import { listPolicies } from "./policies.js";
+import { getPolicyNumber, listPolicies } from "./policies.js";
 import { recordAuditEvent } from "./audit.js";
-import type { GeminiFunctionDeclaration } from "./gemini.js";
+import type { ToolDeclaration } from "./grok.js";
 
 export interface ToolContext {
   agentKey: string;
@@ -26,7 +30,7 @@ export interface ToolContext {
 }
 
 interface ControlPlaneTool {
-  declaration: GeminiFunctionDeclaration;
+  declaration: ToolDeclaration;
   execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
 }
 
@@ -355,6 +359,314 @@ const TOOLS: Record<string, ControlPlaneTool> = {
     },
   },
 
+  list_prospects: {
+    declaration: {
+      name: "list_prospects",
+      description:
+        "Prospect pipeline rows (potential venue customers) with score, status, campaign membership, and contact history. Set dueFollowUp=true to get contacted prospects who are past the minimum contact gap, under the lifetime contact cap, and have not replied or opted out.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            enum: [...PROSPECT_STATUSES],
+            description: "Optional status filter.",
+          },
+          campaignId: { type: "integer", description: "Only prospects enrolled in this campaign." },
+          dueFollowUp: {
+            type: "boolean",
+            description: "Only prospects eligible for a follow-up email right now.",
+          },
+          limit: { type: "integer", description: "Max rows (default 25, max 100)." },
+        },
+      },
+    },
+    async execute(args) {
+      const limit = num(args.limit, 25, 100);
+      const status = str(args.status);
+      const campaignId = Number(args.campaignId);
+      const conditions = [];
+      if (status && PROSPECT_STATUSES.includes(status as (typeof PROSPECT_STATUSES)[number])) {
+        conditions.push(eq(controlProspectsTable.status, status));
+      }
+      if (Number.isInteger(campaignId) && campaignId > 0) {
+        conditions.push(eq(controlProspectsTable.campaignId, campaignId));
+      }
+      if (args.dueFollowUp === true) {
+        const minGapHours = await getPolicyNumber("min_hours_between_prospect_contacts", "hours", 72);
+        const maxContacts = await getPolicyNumber("max_contacts_per_prospect", "contacts", 3);
+        conditions.push(
+          eq(controlProspectsTable.status, "contacted"),
+          lt(controlProspectsTable.contactCount, maxContacts),
+          sql`${controlProspectsTable.lastContactedAt} < now() - (${minGapHours} * interval '1 hour')`,
+        );
+      }
+      const rows = await db
+        .select()
+        .from(controlProspectsTable)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(controlProspectsTable.score), desc(controlProspectsTable.updatedAt))
+        .limit(limit);
+      return { prospects: rows };
+    },
+  },
+
+  upsert_prospect: {
+    declaration: {
+      name: "upsert_prospect",
+      description:
+        "Create or update a prospect record (deduplicated by email). Only verifiable businesses with a publicly listed email belong here — cite where you found them in qualification. Agents may set status new, qualified, or disqualified; contacted/replied/converted/unsubscribed are managed by the send action and operators and cannot be changed here.",
+      parameters: {
+        type: "object",
+        properties: {
+          email: { type: "string", description: "Public contact email; the dedupe key." },
+          name: { type: "string", description: "Venue / business name." },
+          contactName: { type: "string", description: "Person to address, if known." },
+          phone: { type: "string" },
+          website: { type: "string" },
+          region: { type: "string", description: "City/region, e.g. 'Austin, TX'." },
+          source: { type: "string", enum: [...PROSPECT_SOURCES] },
+          score: { type: "integer", description: "Fit score 0-100." },
+          qualification: {
+            type: "string",
+            description: "Why they fit (or not), with the source of every claim.",
+          },
+          status: { type: "string", enum: ["new", "qualified", "disqualified"] },
+        },
+        required: ["email", "name"],
+      },
+    },
+    async execute(args, ctx) {
+      const email = str(args.email)?.toLowerCase() ?? null;
+      const name = str(args.name);
+      if (!email || !name) throw new Error("email and name are required.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+        throw new Error(`"${email}" is not a valid email address.`);
+      }
+
+      const [existingVenue] = await db
+        .select({ slug: venuesTable.slug })
+        .from(venuesTable)
+        .where(sql`lower(${venuesTable.ownerEmail}) = ${email}`)
+        .limit(1);
+      if (existingVenue) {
+        return {
+          saved: false,
+          reason: "already_customer",
+          detail: `This email owns venue "${existingVenue.slug}". Existing customers are not prospects.`,
+        };
+      }
+
+      const statusRaw = str(args.status);
+      const status =
+        statusRaw && ["new", "qualified", "disqualified"].includes(statusRaw) ? statusRaw : null;
+      const sourceRaw = str(args.source);
+      const source =
+        sourceRaw && PROSPECT_SOURCES.includes(sourceRaw as (typeof PROSPECT_SOURCES)[number])
+          ? sourceRaw
+          : "agent_research";
+      const scoreRaw = Number(args.score);
+      const score =
+        Number.isFinite(scoreRaw) && scoreRaw >= 0 ? Math.min(Math.floor(scoreRaw), 100) : null;
+
+      const [existing] = await db
+        .select()
+        .from(controlProspectsTable)
+        .where(eq(controlProspectsTable.email, email));
+
+      if (existing) {
+        const lockedStatuses = ["contacted", "replied", "converted", "unsubscribed"];
+        const statusLocked = lockedStatuses.includes(existing.status);
+        const [updated] = await db
+          .update(controlProspectsTable)
+          .set({
+            name,
+            contactName: str(args.contactName) ?? existing.contactName,
+            phone: str(args.phone) ?? existing.phone,
+            website: str(args.website) ?? existing.website,
+            region: str(args.region) ?? existing.region,
+            score: score ?? existing.score,
+            qualification: str(args.qualification) ?? existing.qualification,
+            status: statusLocked ? existing.status : (status ?? existing.status),
+            updatedAt: new Date(),
+          })
+          .where(eq(controlProspectsTable.id, existing.id))
+          .returning();
+        await recordAuditEvent({
+          actorType: "agent",
+          actor: ctx.agentKey,
+          eventType: "prospect_updated",
+          subjectType: "prospect",
+          subjectId: existing.id,
+          detail: { email, score: score ?? existing.score, statusLocked },
+        });
+        return {
+          saved: true,
+          created: false,
+          statusLocked,
+          prospect: updated,
+        };
+      }
+
+      const [prospect] = await db
+        .insert(controlProspectsTable)
+        .values({
+          name,
+          contactName: str(args.contactName),
+          email,
+          phone: str(args.phone),
+          website: str(args.website),
+          region: str(args.region),
+          source,
+          score: score ?? 0,
+          qualification: str(args.qualification),
+          status: status ?? "new",
+          createdByAgent: ctx.agentKey,
+        })
+        .returning();
+      await recordAuditEvent({
+        actorType: "agent",
+        actor: ctx.agentKey,
+        eventType: "prospect_created",
+        subjectType: "prospect",
+        subjectId: prospect?.id,
+        detail: { email, name, score: score ?? 0 },
+      });
+      return { saved: true, created: true, prospect };
+    },
+  },
+
+  list_campaigns: {
+    declaration: {
+      name: "list_campaigns",
+      description:
+        "Outreach campaigns with their sequence steps, status, and per-status prospect counts (enrolled, contacted, replied, converted, unsubscribed).",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "integer", description: "Max rows (default 20, max 50)." },
+        },
+      },
+    },
+    async execute(args) {
+      const limit = num(args.limit, 20, 50);
+      const campaigns = await db
+        .select()
+        .from(controlCampaignsTable)
+        .orderBy(desc(controlCampaignsTable.createdAt))
+        .limit(limit);
+      const counts = await db
+        .select({
+          campaignId: controlProspectsTable.campaignId,
+          status: controlProspectsTable.status,
+          total: sql<number>`count(*)::int`,
+        })
+        .from(controlProspectsTable)
+        .where(sql`${controlProspectsTable.campaignId} is not null`)
+        .groupBy(controlProspectsTable.campaignId, controlProspectsTable.status);
+      return {
+        campaigns: campaigns.map((campaign) => ({
+          ...campaign,
+          prospectCounts: Object.fromEntries(
+            counts
+              .filter((row) => row.campaignId === campaign.id)
+              .map((row) => [row.status, row.total]),
+          ),
+        })),
+      };
+    },
+  },
+
+  create_campaign: {
+    declaration: {
+      name: "create_campaign",
+      description:
+        "Design a multi-step outreach campaign (created as draft; contacts nobody). Steps define the sequence: wait time and drafting guidance per touch. Launching it later is a governed high-risk action.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Short unique campaign name." },
+          objective: {
+            type: "string",
+            description: "What the campaign should achieve and how success is measured.",
+          },
+          audience: { type: "string", description: "Who qualifies for enrollment." },
+          steps: {
+            type: "array",
+            description:
+              "Ordered sequence of 1-4 touches: [{waitDays, guidance}]. waitDays is the gap after the previous touch (0 for the first).",
+            items: {
+              type: "object",
+              properties: {
+                waitDays: { type: "integer", description: "Days after the previous touch." },
+                guidance: {
+                  type: "string",
+                  description: "What this touch should say and what it asks for.",
+                },
+              },
+              required: ["waitDays", "guidance"],
+            },
+          },
+        },
+        required: ["name", "objective", "steps"],
+      },
+    },
+    async execute(args, ctx) {
+      const name = str(args.name);
+      const objective = str(args.objective);
+      if (!name || !objective) throw new Error("name and objective are required.");
+      const stepsRaw = Array.isArray(args.steps) ? args.steps : [];
+      const steps = stepsRaw
+        .filter(
+          (step): step is Record<string, unknown> =>
+            Boolean(step) && typeof step === "object" && !Array.isArray(step),
+        )
+        .slice(0, 4)
+        .map((step, index) => ({
+          step: index + 1,
+          waitDays: Math.max(0, Math.min(Math.floor(Number(step.waitDays) || 0), 60)),
+          guidance: str(step.guidance) ?? "",
+        }));
+      if (steps.length === 0 || steps.some((step) => !step.guidance)) {
+        throw new Error("steps must contain 1-4 entries, each with guidance text.");
+      }
+
+      const [duplicate] = await db
+        .select({ id: controlCampaignsTable.id })
+        .from(controlCampaignsTable)
+        .where(
+          and(
+            eq(controlCampaignsTable.name, name),
+            sql`${controlCampaignsTable.status} in ('draft', 'active', 'paused')`,
+          ),
+        )
+        .limit(1);
+      if (duplicate) {
+        return { created: false, reason: "duplicate_campaign", existingCampaignId: duplicate.id };
+      }
+
+      const [campaign] = await db
+        .insert(controlCampaignsTable)
+        .values({
+          name,
+          objective,
+          audience: str(args.audience),
+          steps,
+          createdByAgent: ctx.agentKey,
+        })
+        .returning();
+      await recordAuditEvent({
+        actorType: "agent",
+        actor: ctx.agentKey,
+        eventType: "campaign_created",
+        subjectType: "campaign",
+        subjectId: campaign?.id,
+        detail: { name, steps: steps.length },
+      });
+      return { created: true, campaign };
+    },
+  },
+
   create_task: {
     declaration: {
       name: "create_task",
@@ -446,7 +758,7 @@ const TOOLS: Record<string, ControlPlaneTool> = {
           params: {
             type: "object",
             description:
-              "Action parameters. send_venue_email: {venueSlug, subject, message}. grant_promo_credits: {organizationId, amount, note}. requeue_failed_session: {sessionId}. pause_agent/resume_agent: {agentKey}. update_policy: {key, value, note}.",
+              "Action parameters. send_prospect_email: {prospectId, subject, message, campaignId?, step?}. enroll_prospects_in_campaign: {campaignId, prospectIds}. launch_campaign/pause_campaign/complete_campaign: {campaignId}. send_venue_email: {venueSlug, subject, message}. grant_promo_credits: {organizationId, amount, note}. requeue_failed_session: {sessionId}. pause_agent/resume_agent: {agentKey}. update_policy: {key, value, note}.",
           },
         },
         required: ["actionType", "title", "reasoning", "params"],
@@ -603,10 +915,10 @@ const TOOLS: Record<string, ControlPlaneTool> = {
 
 export const TOOL_NAMES = Object.keys(TOOLS) as Array<keyof typeof TOOLS & string>;
 
-export function toolDeclarations(names: string[]): GeminiFunctionDeclaration[] {
+export function toolDeclarations(names: string[]): ToolDeclaration[] {
   return names
     .map((name) => TOOLS[name]?.declaration)
-    .filter((decl): decl is GeminiFunctionDeclaration => Boolean(decl));
+    .filter((decl): decl is ToolDeclaration => Boolean(decl));
 }
 
 export async function executeControlPlaneTool(
