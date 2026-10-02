@@ -18,7 +18,7 @@ import {
   type ErrorEnvelope,
   type ErrorType,
 } from "@workspace/api-client-react";
-import { useClerk, useUser } from "@clerk/clerk-react";
+import { useClerk } from "@clerk/clerk-react";
 import { ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
 import { clerkConfigured } from "@/lib/clerk";
 
@@ -26,7 +26,6 @@ type BillingProductId = "starter" | "growth" | "credit_pack";
 
 const BILLING_PRODUCTS: Array<{
   id: BillingProductId;
-  kicker: string;
   title: string;
   description: string;
   credits: string;
@@ -34,28 +33,22 @@ const BILLING_PRODUCTS: Array<{
 }> = [
   {
     id: "starter",
-    kicker: "Plan 01",
     title: "Starter",
-    description:
-      "For a single active venue building post-tour follow-up into the sales flow.",
+    description: "For a single venue following up after every tour.",
     credits: "25 credits / month",
     cta: "Subscribe to Starter",
   },
   {
     id: "growth",
-    kicker: "Plan 02",
     title: "Growth",
-    description:
-      "For organizations running several venues or a full tour calendar.",
+    description: "For several venues or a full tour calendar.",
     credits: "100 credits / month",
     cta: "Subscribe to Growth",
   },
   {
     id: "credit_pack",
-    kicker: "Top-up",
     title: "Credit pack",
-    description:
-      "One-off boost when a busy weekend outruns the monthly allowance.",
+    description: "A one-off boost for a busy weekend.",
     credits: "+10 credits, one time",
     cta: "Buy credit pack",
   },
@@ -150,7 +143,6 @@ function DashboardInner() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useUser();
   const { signOut } = useClerk();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coupleFileInputRef = useRef<HTMLInputElement>(null);
@@ -706,16 +698,9 @@ function DashboardInner() {
       <div className="workspace-body">
         <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium">Workspace</span>
-              <div className="hidden h-4 w-px bg-border sm:block"></div>
-              <p className="eyebrow hidden normal-case tracking-normal text-muted-foreground sm:block">
-                {organization?.name ?? ""}
-                {user?.primaryEmailAddress
-                  ? ` · ${user.primaryEmailAddress.emailAddress}`
-                  : ""}
-              </p>
-            </div>
+            <p className="eyebrow normal-case tracking-normal text-muted-foreground">
+              {organization?.name ?? ""}
+            </p>
             <div className="flex items-center gap-3">
               {orgVenues.length > 1 ? (
                 <select
@@ -760,16 +745,10 @@ function DashboardInner() {
               transition={{ duration: 0.45 }}
               className="overview-content"
             >
-              <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="eyebrow mb-4 text-brand">Venue dashboard</p>
-                  <h1 className="font-display text-3xl md:text-4xl font-medium tracking-tight text-foreground">
-                    {venue?.name ?? "Your venue"}
-                  </h1>
-                  <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-muted-foreground">
-                    Create, review, and share a more personal follow-up.
-                  </p>
-                </div>
+              <div className="flex flex-col gap-4 md:flex-row md:items-baseline md:justify-between">
+                <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">
+                  {venue?.name ?? "Your venue"}
+                </h1>
                 <p
                   className={
                     venueReady
@@ -788,7 +767,7 @@ function DashboardInner() {
                   value={organization?.creditsBalance ?? 0}
                   hero
                 />
-                <Metric label="Approved" value={readySessions} />
+                <Metric label="Ready" value={readySessions} />
                 <Metric label="In production" value={processingSessions} />
                 <Metric label="Venue photos" value={media.length} />
               </div>
@@ -808,10 +787,12 @@ function DashboardInner() {
                 className="bg-card border border-card-border rounded-lg p-6 md:p-8"
               >
                 <div className="mb-6">
-                  <p className="eyebrow mb-3 text-brand">Settings</p>
                   <h2 className="font-display text-2xl font-medium text-foreground">
-                    Inquiry details
+                    Venue details
                   </h2>
+                  <p className="mt-2 text-sm font-light text-muted-foreground">
+                    Shown to couples on their gallery page.
+                  </p>
                 </div>
                 <div className="space-y-5">
                   <div className="space-y-2">
@@ -892,27 +873,13 @@ function DashboardInner() {
           )}
           {workspaceTab === "new" && (
             <section className="border-t border-border pt-6">
-              <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-                <div className="max-w-2xl">
-                  <p className="eyebrow mb-4 text-brand">New couple</p>
-                  <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-foreground">
-                    Create a couple’s gallery
-                  </h2>
-                  <p className="mt-3 text-base font-light leading-relaxed text-muted-foreground">
-                    Add the couple's email and reference photos. Glimpse creates
-                    a photoreal, venue-branded preview and emails their private
-                    link after generation.
-                  </p>
-                </div>
-                <p
-                  className={
-                    venueReady
-                      ? "eyebrow shrink-0 inline-flex items-center gap-2 text-emerald-700"
-                      : "eyebrow shrink-0 inline-flex items-center gap-2 text-brand"
-                  }
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {venueReady ? "Owner approval enabled" : "Venue setup needed"}
+              <div className="mb-6 max-w-2xl">
+                <h2 className="font-display text-2xl font-medium tracking-tight text-foreground">
+                  Create a couple’s gallery
+                </h2>
+                <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
+                  Add the couple’s email and a few photos. Glimpse emails their
+                  private link when the gallery is ready.
                 </p>
               </div>
 
@@ -1062,23 +1029,10 @@ function DashboardInner() {
                 </div>
               </form>
 
-              <div className="mt-8 grid md:grid-cols-3 md:gap-10">
-                {[
-                  "Photoreal scale, lighting, and shadow cues",
-                  "Tasteful venue branding and inquiry CTA",
-                  "Preview first, then email or reuse in marketing",
-                ].map((item, index) => (
-                  <div
-                    key={item}
-                    className="flex items-baseline gap-4 border-t border-border py-4"
-                  >
-                    <span className="eyebrow text-brand">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <p className="text-sm text-muted-foreground">{item}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
+                One credit per gallery · You preview everything before it’s
+                sent
+              </p>
             </section>
           )}
 
@@ -1086,14 +1040,13 @@ function DashboardInner() {
             <section className="grid gap-10 border-t border-border pt-6 lg:grid-cols-[420px_1fr]">
               <div className="flex flex-col">
                 <div className="mb-6">
-                  <p className="eyebrow mb-4 text-brand">Coverage</p>
-                  <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">
+                  <h2 className="font-display text-2xl font-medium text-foreground">
                     Prepare your venue
                   </h2>
                   <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
                     {missingCoverage.length === 0
-                      ? "The venue has the visual coverage needed for accurate branded previews."
-                      : "Recommended: add the missing room views so output can better preserve space, scale, and atmosphere."}
+                      ? "All views covered — galleries will match your spaces."
+                      : "Add these views so galleries match your real spaces."}
                   </p>
                 </div>
 
@@ -1148,16 +1101,10 @@ function DashboardInner() {
               </div>
 
               <div>
-                <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-4">
-                  <div>
-                    <p className="eyebrow mb-4 text-brand">Library</p>
-                    <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">
-                      Your venue photos
-                    </h2>
-                    <p className="mt-1 text-sm font-light text-muted-foreground">
-                      Real spaces power accurate scale, lighting, and shadows.
-                    </p>
-                  </div>
+                <div className="mb-6 flex items-baseline justify-between gap-4 border-b border-border pb-4">
+                  <h2 className="font-display text-2xl font-medium text-foreground">
+                    Your venue photos
+                  </h2>
                   <p className="eyebrow shrink-0 text-muted-foreground">
                     {media.length} photos
                   </p>
@@ -1210,16 +1157,13 @@ function DashboardInner() {
 
           {workspaceTab === "galleries" && (
             <section className="border-t border-border pt-6">
-              <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="eyebrow mb-4 text-brand">Deliveries</p>
-                  <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">
-                    Couple galleries
-                  </h2>
-                  <p className="mt-2 text-base font-light text-muted-foreground">
-                    Review each gallery and send the couple their private link.
-                  </p>
-                </div>
+              <div className="mb-6">
+                <h2 className="font-display text-2xl font-medium text-foreground">
+                  Couple galleries
+                </h2>
+                <p className="mt-2 text-sm font-light text-muted-foreground">
+                  Review each gallery, then send the couple their private link.
+                </p>
               </div>
 
               <div>
@@ -1315,16 +1259,16 @@ function DashboardInner() {
                                 session.coupleName,
                               )
                             }
-                            className="text-red-700 hover:text-red-800"
+                            className="text-muted-foreground hover:text-red-700"
+                            aria-label={`Delete ${session.coupleName || "gallery"}`}
                             data-testid={`delete-gallery-${session.id}`}
                           >
                             {deleteSession.isPending &&
                             deleteSession.variables?.id === session.id ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              <Trash2 className="mr-2 h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             )}
-                            Delete
                           </Button>
                         </div>
                       </div>
@@ -1342,34 +1286,31 @@ function DashboardInner() {
             <section className="border-t border-border pt-6">
               <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <p className="eyebrow mb-4 text-brand">
-                    Organization billing
-                  </p>
-                  <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground">
-                    {organization?.name ?? "Your organization"}
+                  <h2 className="font-display text-2xl font-medium text-foreground">
+                    Plan &amp; credits
                   </h2>
-                  <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-muted-foreground">
-                    One subscription covers every venue in your organization.
-                    Each couple gallery uses one credit from the shared balance.
+                  <p className="mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                    One plan covers all your venues. Each gallery uses one
+                    credit.
                   </p>
                 </div>
-                <div className="flex items-end gap-10">
+                <div className="flex items-end gap-8">
                   <div>
                     <p className="eyebrow text-muted-foreground">Plan</p>
-                    <p className="mt-2 font-mono text-2xl uppercase tracking-tight text-foreground">
+                    <p className="mt-1 font-mono text-xl uppercase tracking-tight text-foreground">
                       {organization?.plan ?? "trial"}
                     </p>
                   </div>
                   <div>
                     <p className="eyebrow text-muted-foreground">Credits</p>
-                    <p className="mt-2 font-display text-4xl font-medium tracking-tight text-brand">
+                    <p className="mt-1 font-display text-3xl font-medium tracking-tight text-brand">
                       {organization?.creditsBalance ?? 0}
                     </p>
                   </div>
                   {organization?.billingPeriodEnd ? (
                     <div>
                       <p className="eyebrow text-muted-foreground">Renews</p>
-                      <p className="mt-2 font-mono text-sm text-foreground">
+                      <p className="mt-1 font-mono text-sm text-foreground">
                         {new Date(
                           organization.billingPeriodEnd,
                         ).toLocaleDateString()}
@@ -1379,14 +1320,13 @@ function DashboardInner() {
                 </div>
               </div>
 
-              <div className="mt-10 grid gap-px overflow-hidden border border-border bg-border md:grid-cols-3">
+              <div className="mt-8 grid gap-px overflow-hidden border border-border bg-border md:grid-cols-3">
                 {BILLING_PRODUCTS.map((product) => (
                   <div
                     key={product.id}
-                    className="flex flex-col bg-background p-6 md:p-8"
+                    className="flex flex-col bg-background p-6"
                   >
-                    <p className="eyebrow text-brand">{product.kicker}</p>
-                    <h3 className="mt-3 font-display text-2xl font-medium text-foreground">
+                    <h3 className="font-display text-2xl font-medium text-foreground">
                       {product.title}
                     </h3>
                     <p className="mt-2 flex-1 text-sm font-light leading-relaxed text-muted-foreground">
@@ -1420,10 +1360,9 @@ function DashboardInner() {
               </div>
 
               <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="eyebrow normal-case tracking-[0.08em] text-muted-foreground">
-                  Stripe billing, owned by the organization · renewals refresh
-                  the shared credit pool · 1 credit = 1 couple's complete
-                  gallery
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Billing is handled securely by Stripe · Renewals refresh your
+                  shared credits
                 </p>
                 <Button
                   variant="ghost"
