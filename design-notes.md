@@ -3,6 +3,47 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-10-02 (sixteenth pass) — Dashboard de-clutter (visual only)
+
+Owner brief after a full review: make the owner dashboard cleaner and
+sleeker, visual changes only — no behavior, data flow, or route changes.
+Rendered before/after at 1440/390 via the qa fixture harness; copy-link,
+QR, delete dialog, billing CTAs and uploads smoke-checked with Playwright.
+
+- **One header pattern per section:** h2 (text-2xl) + one short muted
+  line. All per-section uppercase eyebrows ("Deliveries", "New couple",
+  "Coverage", "Library", "Settings", "Organization billing") killed —
+  the sidebar already names the view; the uppercase noise fought the
+  metric labels and form labels that legitimately use the eyebrow style.
+- **Overview reduced to venue name + readiness pill + metrics.** The
+  "Venue dashboard" eyebrow and "Create, review, and share a more
+  personal follow-up." subtitle dropped. Metric "Approved" → "Ready"
+  (matches the status badge vocabulary).
+- **Top bar:** "Workspace" label, divider, and member email dropped
+  (the email had crept back after being killed in pass fifteen); org
+  name only.
+- **Re-killed "Owner approval enabled"** (resurrected since pass 15)
+  and the "Venue setup needed" twin — the overview pill already carries
+  readiness on every tab.
+- **Create a gallery:** description de-jargoned ("photoreal,
+  venue-branded preview" gone); the three-numbered-facts strip replaced
+  by one caption: "One credit per gallery · You preview everything
+  before it's sent".
+- **Billing:** "Plan 01 / Plan 02 / Top-up" kickers killed; section
+  retitled "Plan & credits"; summary figures a step smaller; footnote
+  sentence-cased ("Billing is handled securely by Stripe …"). Plan
+  descriptions cut to one line each. No prices invented — still the
+  open item from the review.
+- **Galleries:** Delete is now an icon-only quiet button (aria-label +
+  testid kept; existing CSS already guarantees 44px for
+  `aria-label^="Delete"`). Settings retitled "Venue details" to match
+  the nav, with one line of purpose ("Shown to couples on their
+  gallery page.").
+
+Left alone deliberately: CoupleLinkCard (already the strongest element
+on the page), the mobile workspace-view select, StatusBadge, all
+testids, handlers, API calls, and ControlPlanePage (owned by PR #45).
+
 ## 2026-09-03 (fifteenth pass) — Product screens: dashboard, share page, couple flow
 
 Autonomous observe → diagnose → fix → render loop over the app surfaces
