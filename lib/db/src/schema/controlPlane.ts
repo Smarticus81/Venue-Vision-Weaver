@@ -14,13 +14,16 @@ import {
  * Autonomous Business Control Plane.
  *
  * A registry-driven multi-agent operating system runs the business: each
- * domain agent (growth, support, product, finance, experiments, sales,
- * activation, governance) is defined in code, mirrored into control_agents
- * for scheduling/pause state, and every run, task, proposed action, and
- * decision is persisted here with a full audit trail.
+ * domain agent is defined in code, mirrored into control_agents for
+ * scheduling/pause state, and every run, task, proposed action, and decision
+ * is persisted here with a full audit trail. Revenue domains (prospecting,
+ * outreach, campaigns) additionally own the prospect pipeline tables below.
  */
 
 export const AGENT_DOMAINS = [
+  "prospecting",
+  "outreach",
+  "campaigns",
   "growth",
   "support",
   "product",
@@ -64,6 +67,29 @@ export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];
 
 export const AUDIT_ACTOR_TYPES = ["agent", "operator", "system"] as const;
 export type AuditActorType = (typeof AUDIT_ACTOR_TYPES)[number];
+
+/**
+ * Prospect lifecycle. Agents may move prospects between new, qualified, and
+ * disqualified; "contacted" is set by the governed send action; replied,
+ * converted, and unsubscribed are operator-recorded facts (inbound email is
+ * read by humans) that agents must respect but can never set themselves.
+ */
+export const PROSPECT_STATUSES = [
+  "new",
+  "qualified",
+  "contacted",
+  "replied",
+  "converted",
+  "unsubscribed",
+  "disqualified",
+] as const;
+export type ProspectStatus = (typeof PROSPECT_STATUSES)[number];
+
+export const PROSPECT_SOURCES = ["agent_research", "operator_import", "inbound"] as const;
+export type ProspectSource = (typeof PROSPECT_SOURCES)[number];
+
+export const CAMPAIGN_STATUSES = ["draft", "active", "paused", "completed"] as const;
+export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
 /** Scheduling + pause state for each code-defined agent. */
 export const controlAgentsTable = pgTable("control_agents", {
@@ -194,6 +220,66 @@ export const controlAuditEventsTable = pgTable(
   }),
 );
 
+/**
+ * Multi-step outreach campaigns designed by the campaigns agent. A campaign
+ * is a named sequence of outreach steps; it only becomes able to generate
+ * sends after an operator approves the launch_campaign action, and every
+ * individual email still goes through the send_prospect_email approval.
+ */
+export const controlCampaignsTable = pgTable("control_campaigns", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  objective: text("objective").notNull(),
+  audience: text("audience"),
+  /** Ordered sequence: [{ step, waitDays, guidance }] — guidance steers the drafting agent. */
+  steps: jsonb("steps").$type<Array<Record<string, unknown>>>().notNull(),
+  status: text("status").notNull().default("draft"),
+  createdByAgent: text("created_by_agent"),
+  launchedAt: timestamp("launched_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Prospective venue customers discovered by the prospecting agent or imported
+ * by operators. Email is the dedupe key (stored lowercased, unique). Contact
+ * bookkeeping (contactCount, lastContactedAt, campaignStep) is written only
+ * by the governed send_prospect_email action, never directly by agents.
+ */
+export const controlProspectsTable = pgTable(
+  "control_prospects",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    contactName: text("contact_name"),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    website: text("website"),
+    region: text("region"),
+    source: text("source").notNull().default("agent_research"),
+    /** 0-100 fit score assigned by the prospecting agent with its rationale in qualification. */
+    score: integer("score").notNull().default(0),
+    qualification: text("qualification"),
+    status: text("status").notNull().default("new"),
+    campaignId: integer("campaign_id").references(() => controlCampaignsTable.id, {
+      onDelete: "set null",
+    }),
+    campaignStep: integer("campaign_step").notNull().default(0),
+    contactCount: integer("contact_count").notNull().default(0),
+    lastContactedAt: timestamp("last_contacted_at"),
+    statusChangedBy: text("status_changed_by"),
+    createdByAgent: text("created_by_agent"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailUnique: uniqueIndex("control_prospects_email_unique").on(table.email),
+    statusIdx: index("control_prospects_status_idx").on(table.status, table.updatedAt),
+    campaignIdx: index("control_prospects_campaign_idx").on(table.campaignId),
+  }),
+);
+
 /** Governance policy limits (spend caps, email caps, auto-execution flags). */
 export const controlPoliciesTable = pgTable(
   "control_policies",
@@ -218,3 +304,5 @@ export type ControlExperiment = typeof controlExperimentsTable.$inferSelect;
 export type ControlMetricsSnapshot = typeof controlMetricsSnapshotsTable.$inferSelect;
 export type ControlAuditEvent = typeof controlAuditEventsTable.$inferSelect;
 export type ControlPolicy = typeof controlPoliciesTable.$inferSelect;
+export type ControlCampaign = typeof controlCampaignsTable.$inferSelect;
+export type ControlProspect = typeof controlProspectsTable.$inferSelect;

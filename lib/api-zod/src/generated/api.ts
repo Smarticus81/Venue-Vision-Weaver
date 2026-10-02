@@ -961,6 +961,9 @@ export const GetControlOverviewResponse = zod.object({
       key: zod.string(),
       name: zod.string(),
       domain: zod.enum([
+        "prospecting",
+        "outreach",
+        "campaigns",
         "growth",
         "support",
         "product",
@@ -1008,6 +1011,9 @@ export const SetControlAgentStatusResponse = zod.object({
     key: zod.string(),
     name: zod.string(),
     domain: zod.enum([
+      "prospecting",
+      "outreach",
+      "campaigns",
       "growth",
       "support",
       "product",
@@ -1332,6 +1338,139 @@ export const GetControlMetricsHistoryResponse = zod.object({
         })
         .describe("Live business KPIs computed from production tables."),
       createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Prospect pipeline (potential venue customers)
+ */
+export const ListControlProspectsQueryParams = zod.object({
+  status: zod
+    .enum([
+      "new",
+      "qualified",
+      "contacted",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ])
+    .optional(),
+  campaignId: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlProspectsResponse = zod.object({
+  prospects: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      contactName: zod.string().nullish(),
+      email: zod.string(),
+      phone: zod.string().nullish(),
+      website: zod.string().nullish(),
+      region: zod.string().nullish(),
+      source: zod.enum(["agent_research", "operator_import", "inbound"]),
+      score: zod.number(),
+      qualification: zod.string().nullish(),
+      status: zod.enum([
+        "new",
+        "qualified",
+        "contacted",
+        "replied",
+        "converted",
+        "unsubscribed",
+        "disqualified",
+      ]),
+      campaignId: zod.number().nullish(),
+      campaignStep: zod.number(),
+      contactCount: zod.number(),
+      lastContactedAt: zod.coerce.date().nullish(),
+      statusChangedBy: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Record a prospect outcome (reply, conversion, opt-out) or re-stage them
+ */
+export const SetControlProspectStatusParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SetControlProspectStatusBody = zod.object({
+  status: zod
+    .enum([
+      "new",
+      "qualified",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ])
+    .describe(
+      'Operator-recorded outcome. \"contacted\" is reserved for the governed send action and cannot be set here.',
+    ),
+});
+
+export const SetControlProspectStatusResponse = zod.object({
+  prospect: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    contactName: zod.string().nullish(),
+    email: zod.string(),
+    phone: zod.string().nullish(),
+    website: zod.string().nullish(),
+    region: zod.string().nullish(),
+    source: zod.enum(["agent_research", "operator_import", "inbound"]),
+    score: zod.number(),
+    qualification: zod.string().nullish(),
+    status: zod.enum([
+      "new",
+      "qualified",
+      "contacted",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ]),
+    campaignId: zod.number().nullish(),
+    campaignStep: zod.number(),
+    contactCount: zod.number(),
+    lastContactedAt: zod.coerce.date().nullish(),
+    statusChangedBy: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Outreach campaigns with funnel counts
+ */
+export const ListControlCampaignsQueryParams = zod.object({
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlCampaignsResponse = zod.object({
+  campaigns: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      objective: zod.string(),
+      audience: zod.string().nullish(),
+      steps: zod.array(zod.record(zod.string(), zod.unknown())),
+      status: zod.enum(["draft", "active", "paused", "completed"]),
+      prospectCounts: zod.record(zod.string(), zod.number()),
+      createdByAgent: zod.string().nullish(),
+      launchedAt: zod.coerce.date().nullish(),
+      completedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
     }),
   ),
 });

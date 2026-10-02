@@ -1,12 +1,12 @@
 import { db, controlAgentsTable, agentRunsTable, agentActionsTable } from "@workspace/db";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, notInArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
-import { AGENT_DEFINITIONS } from "./agents.js";
+import { AGENT_DEFINITIONS, AGENT_KEYS } from "./agents.js";
 import { ensurePolicyDefaults } from "./policies.js";
 import { snapshotMetrics, latestSnapshotAgeMinutes } from "./metrics.js";
 import { executeAction } from "./actions.js";
 import { startAgentRun, isRunInProgress } from "./runner.js";
-import { controlPlaneAiConfigured } from "./gemini.js";
+import { controlPlaneAiConfigured } from "./grok.js";
 
 const POLL_MS = 60_000;
 const SNAPSHOT_INTERVAL_MINUTES = Number(process.env.CONTROL_PLANE_SNAPSHOT_MINUTES ?? "360");
@@ -38,6 +38,17 @@ async function seedAgents(): Promise<void> {
           updatedAt: new Date(),
         },
       });
+  }
+  // Agents removed from the registry (e.g. growth/sales, replaced by the
+  // prospecting/outreach/campaigns trio) can never run again; drop their rows
+  // so the scheduler does not pick dead keys. Their runs/tasks/actions keep
+  // the historical agentKey strings.
+  const retired = await db
+    .delete(controlAgentsTable)
+    .where(notInArray(controlAgentsTable.key, AGENT_KEYS))
+    .returning({ key: controlAgentsTable.key });
+  if (retired.length > 0) {
+    logger.info({ keys: retired.map((r) => r.key) }, "Retired control-plane agents not in registry");
   }
 }
 
@@ -172,7 +183,7 @@ export function startControlPlaneWorker(): void {
     }
     if (!controlPlaneAiConfigured()) {
       logger.warn(
-        "GOOGLE_AI_API_KEY not set — control-plane agents cannot reason; approvals and metrics snapshots still run",
+        "XAI_API_KEY not set — control-plane agents stay idle; approvals and metrics snapshots still run",
       );
     }
     safeTick();

@@ -27,10 +27,14 @@ import type {
   ControlAgentResponse,
   ControlAgentStatusBody,
   ControlAuditResponse,
+  ControlCampaignsResponse,
   ControlExperimentsResponse,
   ControlMetricsHistoryResponse,
   ControlOverviewResponse,
   ControlPoliciesResponse,
+  ControlProspectResponse,
+  ControlProspectStatusBody,
+  ControlProspectsResponse,
   ControlRunDetailResponse,
   ControlRunStartedResponse,
   ControlRunsResponse,
@@ -46,7 +50,9 @@ import type {
   GetStorageObjectParams,
   HealthStatus,
   ListControlActionsParams,
+  ListControlCampaignsParams,
   ListControlExperimentsParams,
+  ListControlProspectsParams,
   ListControlRunsParams,
   ListControlTasksParams,
   ListGalleryStylesResponse,
@@ -3579,6 +3585,303 @@ export function useGetControlMetricsHistory<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetControlMetricsHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Prospect pipeline (potential venue customers)
+ */
+export const getListControlProspectsUrl = (
+  params?: ListControlProspectsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/prospects?${stringifiedParams}`
+    : `/api/control/prospects`;
+};
+
+export const listControlProspects = async (
+  params?: ListControlProspectsParams,
+  options?: RequestInit,
+): Promise<ControlProspectsResponse> => {
+  return customFetch<ControlProspectsResponse>(
+    getListControlProspectsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlProspectsQueryKey = (
+  params?: ListControlProspectsParams,
+) => {
+  return [`/api/control/prospects`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlProspectsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlProspects>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlProspectsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlProspects>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlProspectsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlProspects>>
+  > = ({ signal }) =>
+    listControlProspects(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlProspects>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlProspectsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlProspects>>
+>;
+export type ListControlProspectsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Prospect pipeline (potential venue customers)
+ */
+
+export function useListControlProspects<
+  TData = Awaited<ReturnType<typeof listControlProspects>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlProspectsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlProspects>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlProspectsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a prospect outcome (reply, conversion, opt-out) or re-stage them
+ */
+export const getSetControlProspectStatusUrl = (id: number) => {
+  return `/api/control/prospects/${id}/status`;
+};
+
+export const setControlProspectStatus = async (
+  id: number,
+  controlProspectStatusBody: ControlProspectStatusBody,
+  options?: RequestInit,
+): Promise<ControlProspectResponse> => {
+  return customFetch<ControlProspectResponse>(
+    getSetControlProspectStatusUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlProspectStatusBody),
+    },
+  );
+};
+
+export const getSetControlProspectStatusMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlProspectStatus>>,
+    TError,
+    { id: number; data: BodyType<ControlProspectStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setControlProspectStatus>>,
+  TError,
+  { id: number; data: BodyType<ControlProspectStatusBody> },
+  TContext
+> => {
+  const mutationKey = ["setControlProspectStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setControlProspectStatus>>,
+    { id: number; data: BodyType<ControlProspectStatusBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setControlProspectStatus(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetControlProspectStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setControlProspectStatus>>
+>;
+export type SetControlProspectStatusMutationBody =
+  BodyType<ControlProspectStatusBody>;
+export type SetControlProspectStatusMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Record a prospect outcome (reply, conversion, opt-out) or re-stage them
+ */
+export const useSetControlProspectStatus = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlProspectStatus>>,
+    TError,
+    { id: number; data: BodyType<ControlProspectStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setControlProspectStatus>>,
+  TError,
+  { id: number; data: BodyType<ControlProspectStatusBody> },
+  TContext
+> => {
+  return useMutation(getSetControlProspectStatusMutationOptions(options));
+};
+
+/**
+ * @summary Outreach campaigns with funnel counts
+ */
+export const getListControlCampaignsUrl = (
+  params?: ListControlCampaignsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/campaigns?${stringifiedParams}`
+    : `/api/control/campaigns`;
+};
+
+export const listControlCampaigns = async (
+  params?: ListControlCampaignsParams,
+  options?: RequestInit,
+): Promise<ControlCampaignsResponse> => {
+  return customFetch<ControlCampaignsResponse>(
+    getListControlCampaignsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlCampaignsQueryKey = (
+  params?: ListControlCampaignsParams,
+) => {
+  return [`/api/control/campaigns`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlCampaignsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlCampaigns>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlCampaignsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlCampaigns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlCampaignsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlCampaigns>>
+  > = ({ signal }) =>
+    listControlCampaigns(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlCampaigns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlCampaignsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlCampaigns>>
+>;
+export type ListControlCampaignsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Outreach campaigns with funnel counts
+ */
+
+export function useListControlCampaigns<
+  TData = Awaited<ReturnType<typeof listControlCampaigns>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlCampaignsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlCampaigns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlCampaignsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

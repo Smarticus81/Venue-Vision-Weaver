@@ -154,8 +154,10 @@ derived from the scene aspect ratio.
 `OPENAI_API_KEY` is required in production whenever the chain contains a
 gpt-image model, and boot refuses a chain that does not start with
 `gpt-image-2.5-sunburst`. `GOOGLE_AI_API_KEY` stays required as well: the
-multimodal quality judge, the venue reference selector, and the control plane
-still run on Gemini.
+multimodal quality judge and the venue reference selector still run on Gemini.
+The Autonomous Business Control Plane reasons with Grok instead and needs
+`XAI_API_KEY`; without it the server boots normally and the control-plane
+agents simply stay idle (approvals and metrics snapshots keep running).
 
 Quality steps run low, medium, high, xhigh, max, and auto; production uses
 `high` via `OPENAI_IMAGE_QUALITY`. Cost and latency climb steeply above it. If a

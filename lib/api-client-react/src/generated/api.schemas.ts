@@ -567,6 +567,9 @@ export type ControlAgentDomain =
   (typeof ControlAgentDomain)[keyof typeof ControlAgentDomain];
 
 export const ControlAgentDomain = {
+  prospecting: "prospecting",
+  outreach: "outreach",
+  campaigns: "campaigns",
   growth: "growth",
   support: "support",
   product: "product",
@@ -884,6 +887,111 @@ export interface ControlMetricsHistoryResponse {
   snapshots: ControlMetricsSnapshot[];
 }
 
+export type ControlProspectSource =
+  (typeof ControlProspectSource)[keyof typeof ControlProspectSource];
+
+export const ControlProspectSource = {
+  agent_research: "agent_research",
+  operator_import: "operator_import",
+  inbound: "inbound",
+} as const;
+
+export type ControlProspectStatus =
+  (typeof ControlProspectStatus)[keyof typeof ControlProspectStatus];
+
+export const ControlProspectStatus = {
+  new: "new",
+  qualified: "qualified",
+  contacted: "contacted",
+  replied: "replied",
+  converted: "converted",
+  unsubscribed: "unsubscribed",
+  disqualified: "disqualified",
+} as const;
+
+export interface ControlProspect {
+  id: number;
+  name: string;
+  contactName?: string | null;
+  email: string;
+  phone?: string | null;
+  website?: string | null;
+  region?: string | null;
+  source: ControlProspectSource;
+  score: number;
+  qualification?: string | null;
+  status: ControlProspectStatus;
+  campaignId?: number | null;
+  campaignStep: number;
+  contactCount: number;
+  lastContactedAt?: string | null;
+  statusChangedBy?: string | null;
+  createdByAgent?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlProspectsResponse {
+  prospects: ControlProspect[];
+}
+
+/**
+ * Operator-recorded outcome. "contacted" is reserved for the governed send action and cannot be set here.
+ */
+export type ControlProspectStatusBodyStatus =
+  (typeof ControlProspectStatusBodyStatus)[keyof typeof ControlProspectStatusBodyStatus];
+
+export const ControlProspectStatusBodyStatus = {
+  new: "new",
+  qualified: "qualified",
+  replied: "replied",
+  converted: "converted",
+  unsubscribed: "unsubscribed",
+  disqualified: "disqualified",
+} as const;
+
+export interface ControlProspectStatusBody {
+  /** Operator-recorded outcome. "contacted" is reserved for the governed send action and cannot be set here. */
+  status: ControlProspectStatusBodyStatus;
+}
+
+export interface ControlProspectResponse {
+  prospect: ControlProspect;
+}
+
+export type ControlCampaignStepsItem = { [key: string]: unknown };
+
+export type ControlCampaignStatus =
+  (typeof ControlCampaignStatus)[keyof typeof ControlCampaignStatus];
+
+export const ControlCampaignStatus = {
+  draft: "draft",
+  active: "active",
+  paused: "paused",
+  completed: "completed",
+} as const;
+
+export type ControlCampaignProspectCounts = { [key: string]: number };
+
+export interface ControlCampaign {
+  id: number;
+  name: string;
+  objective: string;
+  audience?: string | null;
+  steps: ControlCampaignStepsItem[];
+  status: ControlCampaignStatus;
+  prospectCounts: ControlCampaignProspectCounts;
+  createdByAgent?: string | null;
+  launchedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlCampaignsResponse {
+  campaigns: ControlCampaign[];
+}
+
 export type GetStorageObjectParams = {
   /**
    * Required to read generated gallery assets from a public share page.
@@ -940,5 +1048,28 @@ export type GetControlAuditParams = {
 };
 
 export type GetControlMetricsHistoryParams = {
+  limit?: number;
+};
+
+export type ListControlProspectsParams = {
+  status?: ListControlProspectsStatus;
+  campaignId?: number;
+  limit?: number;
+};
+
+export type ListControlProspectsStatus =
+  (typeof ListControlProspectsStatus)[keyof typeof ListControlProspectsStatus];
+
+export const ListControlProspectsStatus = {
+  new: "new",
+  qualified: "qualified",
+  contacted: "contacted",
+  replied: "replied",
+  converted: "converted",
+  unsubscribed: "unsubscribed",
+  disqualified: "disqualified",
+} as const;
+
+export type ListControlCampaignsParams = {
   limit?: number;
 };
