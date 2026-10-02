@@ -19,6 +19,11 @@ import {
   useSetControlTaskStatus,
   useListControlExperiments,
   getListControlExperimentsQueryKey,
+  useListControlProspects,
+  getListControlProspectsQueryKey,
+  useSetControlProspectStatus,
+  useListControlCampaigns,
+  getListControlCampaignsQueryKey,
   useGetControlAudit,
   getGetControlAuditQueryKey,
   useListControlPolicies,
@@ -28,6 +33,9 @@ import {
   type ControlAction,
   type ControlRun,
   type ControlTask,
+  type ControlProspect,
+  type ControlCampaign,
+  type ControlProspectStatusBodyStatus,
   type ErrorEnvelope,
   type ErrorType,
 } from "@workspace/api-client-react";
@@ -79,6 +87,14 @@ const PILL: Record<string, string> = {
   high: "text-amber-300",
   medium: "text-foreground/70",
   low: "text-muted-foreground",
+  new: "text-amber-300",
+  qualified: "text-emerald-300",
+  contacted: "text-rose",
+  replied: "text-emerald-300",
+  converted: "text-emerald-300",
+  unsubscribed: "text-muted-foreground",
+  disqualified: "text-muted-foreground",
+  draft: "text-amber-300",
 };
 
 function Pill({ value, className }: { value: string; className?: string }) {
@@ -661,6 +677,216 @@ function ExperimentsTab() {
   );
 }
 
+/* ————— Pipeline: prospects + campaigns ————— */
+
+const PROSPECT_TRANSITIONS: Record<
+  string,
+  Array<{ status: ControlProspectStatusBodyStatus; label: string; tone: "primary" | "neutral" | "danger" }>
+> = {
+  new: [
+    { status: "qualified", label: "Qualify", tone: "primary" },
+    { status: "disqualified", label: "Disqualify", tone: "danger" },
+  ],
+  qualified: [{ status: "disqualified", label: "Disqualify", tone: "danger" }],
+  contacted: [
+    { status: "replied", label: "Replied", tone: "neutral" },
+    { status: "converted", label: "Converted", tone: "primary" },
+    { status: "unsubscribed", label: "Unsubscribed", tone: "danger" },
+  ],
+  replied: [
+    { status: "converted", label: "Converted", tone: "primary" },
+    { status: "unsubscribed", label: "Unsubscribed", tone: "danger" },
+  ],
+  disqualified: [{ status: "qualified", label: "Requalify", tone: "neutral" }],
+};
+
+function ProspectRow({ prospect, campaigns }: { prospect: ControlProspect; campaigns: ControlCampaign[] }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const setStatus = useSetControlProspectStatus({
+    mutation: {
+      onSuccess: (data) => {
+        toast({ title: `${prospect.name} marked ${data.prospect.status.replace(/_/g, " ")}` });
+        void queryClient.invalidateQueries({ queryKey: getListControlProspectsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getListControlCampaignsQueryKey() });
+      },
+      onError: (err: ErrorType<ErrorEnvelope>) =>
+        toast({ title: "Update failed", description: apiErrorMessage(err), variant: "destructive" }),
+    },
+  });
+  const campaign = prospect.campaignId
+    ? campaigns.find((c) => c.id === prospect.campaignId)
+    : undefined;
+  const transitions = PROSPECT_TRANSITIONS[prospect.status] ?? [];
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <Pill value={prospect.status} />
+          <span className="text-sm font-medium text-foreground">{prospect.name}</span>
+          <span className="mono-label text-muted-foreground">{prospect.email}</span>
+          {prospect.region ? (
+            <span className="mono-label text-muted-foreground">{prospect.region}</span>
+          ) : null}
+        </div>
+        <span className="mono-label text-rose/90">score {prospect.score}</span>
+      </div>
+      {prospect.qualification ? (
+        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+          {prospect.qualification}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <div className="mono-label flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+          <span>
+            {prospect.contactCount} email{prospect.contactCount === 1 ? "" : "s"} sent
+            {prospect.lastContactedAt ? ` · last ${fmt(prospect.lastContactedAt)}` : ""}
+          </span>
+          {campaign ? (
+            <span>
+              {campaign.name}
+              {prospect.campaignStep > 0 ? ` · step ${prospect.campaignStep}` : ""}
+            </span>
+          ) : null}
+          <span>
+            via {prospect.createdByAgent ?? prospect.source.replace(/_/g, " ")} · {fmt(prospect.createdAt)}
+          </span>
+        </div>
+        {transitions.length > 0 ? (
+          <div className="flex items-center gap-1.5">
+            {transitions.map((transition) => (
+              <ActionButton
+                key={transition.status}
+                tone={transition.tone}
+                disabled={setStatus.isPending}
+                onClick={() => setStatus.mutate({ id: prospect.id, data: { status: transition.status } })}
+              >
+                {setStatus.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                {transition.label}
+              </ActionButton>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+function CampaignCard({ campaign }: { campaign: ControlCampaign }) {
+  const counts = campaign.prospectCounts as Record<string, number | undefined>;
+  const enrolled = Object.values(counts).reduce((sum: number, n) => sum + (n ?? 0), 0);
+  const steps = (campaign.steps ?? []) as Array<Record<string, unknown>>;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <Pill value={campaign.status} />
+          <span className="text-sm font-medium text-foreground">{campaign.name}</span>
+        </div>
+        <span className="mono-label text-muted-foreground">
+          {campaign.createdByAgent ?? "operator"} · {fmt(campaign.createdAt)}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{campaign.objective}</p>
+      {campaign.audience ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          <span className="text-foreground/70">Audience:</span> {campaign.audience}
+        </p>
+      ) : null}
+      {steps.length > 0 ? (
+        <ol className="mt-3 space-y-1.5 border-t border-border pt-3">
+          {steps.map((step, index) => (
+            <li key={index} className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
+              <span className="mono-label shrink-0 text-rose/80">
+                {index + 1}
+                {Number(step.waitDays) > 0 ? ` · +${Number(step.waitDays)}d` : ""}
+              </span>
+              <span>{String(step.guidance ?? "")}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <div className="mono-label mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-muted-foreground">
+        <span className="text-foreground/80">{enrolled} enrolled</span>
+        <span>{counts.contacted ?? 0} contacted</span>
+        <span className="text-emerald-300">{counts.replied ?? 0} replied</span>
+        <span className="text-emerald-300">{counts.converted ?? 0} converted</span>
+        <span>{counts.unsubscribed ?? 0} unsubscribed</span>
+      </div>
+    </Card>
+  );
+}
+
+const PROSPECT_FILTERS = [
+  "all",
+  "new",
+  "qualified",
+  "contacted",
+  "replied",
+  "converted",
+  "unsubscribed",
+  "disqualified",
+] as const;
+
+function PipelineTab() {
+  const [filter, setFilter] = useState<(typeof PROSPECT_FILTERS)[number]>("all");
+  const params = filter === "all" ? {} : { status: filter };
+  const prospectsQuery = useListControlProspects(params, {
+    query: { queryKey: getListControlProspectsQueryKey(params), refetchInterval: 30000 },
+  });
+  const campaignsQuery = useListControlCampaigns(
+    {},
+    { query: { queryKey: getListControlCampaignsQueryKey(), refetchInterval: 30000 } },
+  );
+  const prospects = prospectsQuery.data?.prospects ?? [];
+  const campaigns = campaignsQuery.data?.campaigns ?? [];
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <h2 className="mono-label text-muted-foreground">Campaigns ({campaigns.length})</h2>
+        {campaignsQuery.isLoading ? (
+          <TabLoading />
+        ) : campaigns.length === 0 ? (
+          <EmptyState text="No campaigns yet. The campaigns agent designs multi-step sequences here; launching one is a governed action." />
+        ) : (
+          campaigns.map((campaign) => <CampaignCard key={campaign.id} campaign={campaign} />)
+        )}
+      </section>
+      <section className="space-y-3">
+        <h2 className="mono-label text-muted-foreground">Prospects</h2>
+        <div className="flex flex-wrap gap-1.5">
+          {PROSPECT_FILTERS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFilter(value)}
+              className={cn(
+                "mono-label h-8 border px-3 transition-colors",
+                filter === value
+                  ? "border-rose/60 text-rose"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+        {prospectsQuery.isLoading ? (
+          <TabLoading />
+        ) : prospects.length === 0 ? (
+          <EmptyState text="No prospects here. The prospecting agent researches and qualifies potential venue customers; outreach goes through the approval queue. Mark replies, conversions, and unsubscribes as they land in your inbox." />
+        ) : (
+          prospects.map((prospect) => (
+            <ProspectRow key={prospect.id} prospect={prospect} campaigns={campaigns} />
+          ))
+        )}
+      </section>
+    </div>
+  );
+}
+
 /* ————— Audit + policies ————— */
 
 function AuditTab() {
@@ -748,6 +974,7 @@ function TabLoading() {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "pipeline", label: "Pipeline" },
   { id: "approvals", label: "Approvals" },
   { id: "tasks", label: "Tasks" },
   { id: "runs", label: "Runs" },
@@ -886,6 +1113,8 @@ function ControlConsole() {
               </div>
             </section>
           </div>
+        ) : tab === "pipeline" ? (
+          <PipelineTab />
         ) : tab === "approvals" ? (
           <ApprovalsTab />
         ) : tab === "tasks" ? (
