@@ -1197,6 +1197,92 @@ paths:
               schema:
                 $ref: "#/components/schemas/ControlMetricsHistoryResponse"
 
+  /control/prospects:
+    get:
+      operationId: listControlProspects
+      tags: [control-plane]
+      summary: Prospect pipeline (potential venue customers)
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [new, qualified, contacted, replied, converted, unsubscribed, disqualified]
+        - name: campaignId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Prospects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectsResponse"
+
+  /control/prospects/{id}/status:
+    post:
+      operationId: setControlProspectStatus
+      tags: [control-plane]
+      summary: Record a prospect outcome (reply, conversion, opt-out) or re-stage them
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlProspectStatusBody"
+      responses:
+        "200":
+          description: Prospect updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectResponse"
+        "400":
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/campaigns:
+    get:
+      operationId: listControlCampaigns
+      tags: [control-plane]
+      summary: Outreach campaigns with funnel counts
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaigns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlCampaignsResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -2021,7 +2107,20 @@ components:
           type: string
         domain:
           type: string
-          enum: [growth, support, product, finance, experiments, sales, activation, governance]
+          enum:
+            [
+              prospecting,
+              outreach,
+              campaigns,
+              growth,
+              support,
+              product,
+              finance,
+              experiments,
+              sales,
+              activation,
+              governance,
+            ]
         description:
           type: string
         status:
@@ -2431,4 +2530,141 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ControlMetricsSnapshot"
+
+    ControlProspect:
+      type: object
+      required:
+        [id, name, email, source, score, status, campaignStep, contactCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        contactName:
+          type: string
+          nullable: true
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [agent_research, operator_import, inbound]
+        score:
+          type: integer
+        qualification:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [new, qualified, contacted, replied, converted, unsubscribed, disqualified]
+        campaignId:
+          type: integer
+          nullable: true
+        campaignStep:
+          type: integer
+        contactCount:
+          type: integer
+        lastContactedAt:
+          type: string
+          format: date-time
+          nullable: true
+        statusChangedBy:
+          type: string
+          nullable: true
+        createdByAgent:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlProspectsResponse:
+      type: object
+      required: [prospects]
+      properties:
+        prospects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlProspect"
+
+    ControlProspectStatusBody:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: >-
+            Operator-recorded outcome. "contacted" is reserved for the governed
+            send action and cannot be set here.
+          enum: [new, qualified, replied, converted, unsubscribed, disqualified]
+
+    ControlProspectResponse:
+      type: object
+      required: [prospect]
+      properties:
+        prospect:
+          $ref: "#/components/schemas/ControlProspect"
+
+    ControlCampaign:
+      type: object
+      required: [id, name, objective, steps, status, prospectCounts, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        objective:
+          type: string
+        audience:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        status:
+          type: string
+          enum: [draft, active, paused, completed]
+        prospectCounts:
+          type: object
+          additionalProperties:
+            type: integer
+        createdByAgent:
+          type: string
+          nullable: true
+        launchedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlCampaignsResponse:
+      type: object
+      required: [campaigns]
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlCampaign"
 

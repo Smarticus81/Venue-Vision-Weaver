@@ -8,15 +8,19 @@ import {
   controlExperimentsTable,
   controlAuditEventsTable,
   controlMetricsSnapshotsTable,
+  controlProspectsTable,
+  controlCampaignsTable,
   AGENT_TASK_STATUSES,
   AGENT_ACTION_STATUSES,
   AGENT_STATUSES,
+  PROSPECT_STATUSES,
 } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   SetControlAgentStatusBody,
   DecideControlActionBody,
   SetControlTaskStatusBody,
+  SetControlProspectStatusBody,
 } from "@workspace/api-zod";
 import { requireOperator } from "../control-plane/operatorAuth.js";
 import { requireOwnerMutationOrigin } from "../lib/orgAuth.js";
@@ -397,6 +401,123 @@ router.get("/control/policies", async (req, res): Promise<void> => {
   const operator = await requireOperator(req, res);
   if (!operator) return;
   res.json({ policies: await listPolicies() });
+});
+
+/* ————— Prospect pipeline + campaigns ————— */
+
+// GET /control/prospects — the prospect pipeline, filterable by status/campaign.
+router.get("/control/prospects", async (req, res): Promise<void> => {
+  const operator = await requireOperator(req, res);
+  if (!operator) return;
+
+  const limit = parseLimit(req.query.limit, 50, 200);
+  const status = typeof req.query.status === "string" ? req.query.status : null;
+  if (status && !PROSPECT_STATUSES.includes(status as (typeof PROSPECT_STATUSES)[number])) {
+    res.status(400).json({ error: `status must be one of ${PROSPECT_STATUSES.join(", ")}` });
+    return;
+  }
+  const campaignId = Number(req.query.campaignId);
+
+  const conditions = [];
+  if (status) conditions.push(eq(controlProspectsTable.status, status));
+  if (Number.isInteger(campaignId) && campaignId > 0) {
+    conditions.push(eq(controlProspectsTable.campaignId, campaignId));
+  }
+
+  const rows = await db
+    .select()
+    .from(controlProspectsTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(controlProspectsTable.updatedAt))
+    .limit(limit);
+  res.json({ prospects: rows });
+});
+
+// Operators record outcomes agents cannot observe (inbound email is human-read):
+// replies, conversions, unsubscribes — plus re-staging. "contacted" is reserved
+// for the governed send action so contact bookkeeping stays truthful.
+const OPERATOR_PROSPECT_STATUSES = [
+  "new",
+  "qualified",
+  "replied",
+  "converted",
+  "unsubscribed",
+  "disqualified",
+] as const;
+
+// POST /control/prospects/{id}/status — record a prospect outcome.
+router.post("/control/prospects/:id/status", async (req, res): Promise<void> => {
+  if (!requireOwnerMutationOrigin(req, res)) return;
+  const operator = await requireOperator(req, res);
+  if (!operator) return;
+
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid prospect id" });
+    return;
+  }
+  const parsed = SetControlProspectStatusBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const status = parsed.data.status;
+  if (!OPERATOR_PROSPECT_STATUSES.includes(status)) {
+    res.status(400).json({ error: `status must be one of ${OPERATOR_PROSPECT_STATUSES.join(", ")}` });
+    return;
+  }
+
+  const [prospect] = await db
+    .update(controlProspectsTable)
+    .set({ status, statusChangedBy: operator.email, updatedAt: new Date() })
+    .where(eq(controlProspectsTable.id, id))
+    .returning();
+  if (!prospect) {
+    res.status(404).json({ error: "Prospect not found" });
+    return;
+  }
+
+  await recordAuditEvent({
+    actorType: "operator",
+    actor: operator.email,
+    eventType: "prospect_status_changed",
+    subjectType: "prospect",
+    subjectId: id,
+    detail: { status },
+  });
+  res.json({ prospect });
+});
+
+// GET /control/campaigns — outreach campaigns with per-status prospect counts.
+router.get("/control/campaigns", async (req, res): Promise<void> => {
+  const operator = await requireOperator(req, res);
+  if (!operator) return;
+
+  const limit = parseLimit(req.query.limit, 50, 100);
+  const [campaigns, counts] = await Promise.all([
+    db
+      .select()
+      .from(controlCampaignsTable)
+      .orderBy(desc(controlCampaignsTable.createdAt))
+      .limit(limit),
+    db
+      .select({
+        campaignId: controlProspectsTable.campaignId,
+        status: controlProspectsTable.status,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(controlProspectsTable)
+      .where(sql`${controlProspectsTable.campaignId} is not null`)
+      .groupBy(controlProspectsTable.campaignId, controlProspectsTable.status),
+  ]);
+  res.json({
+    campaigns: campaigns.map((campaign) => ({
+      ...campaign,
+      prospectCounts: Object.fromEntries(
+        counts.filter((row) => row.campaignId === campaign.id).map((row) => [row.status, row.total]),
+      ),
+    })),
+  });
 });
 
 // GET /control/metrics/history — KPI snapshots for trend charts.
