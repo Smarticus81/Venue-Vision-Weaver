@@ -682,7 +682,7 @@ const TOOLS: Record<string, ControlPlaneTool> = {
           },
           category: {
             type: "string",
-            description: "Free-form category, e.g. growth, support, engineering, finance.",
+            description: "Free-form category, e.g. sales, prospecting, support, engineering, finance.",
           },
           priority: { type: "string", enum: [...AGENT_TASK_PRIORITIES] },
         },

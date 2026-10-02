@@ -23,11 +23,12 @@ tags:
       credits granted by the Stripe webhook. One organization owns many venues.
   - name: control-plane
     description: |
-      Autonomous Business Control Plane. A multi-agent operating system
-      (growth, support, product, finance, experiments, sales, activation,
-      governance) runs the business on a schedule; operators supervise it here:
-      trigger/pause agents, approve or reject governed actions, work agent
-      tasks, and audit everything. Auth is a Clerk session whose email is in
+      Autonomous Business Control Plane. A Grok-backed multi-agent operating
+      system (prospecting, outreach, campaigns, support, product, finance,
+      experiments, activation, governance) runs the business on a schedule;
+      operators supervise it here: trigger/pause agents, approve or reject
+      governed actions, record prospect outcomes, work agent tasks, and audit
+      everything. Auth is a Clerk session whose email is in
       CONTROL_PLANE_OPERATOR_EMAILS.
 paths:
   /healthz:

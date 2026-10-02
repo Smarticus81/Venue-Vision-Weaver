@@ -176,10 +176,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS credit_transactions_stripe_event_id_unique
   WHERE stripe_event_id IS NOT NULL;
 
 -- ————— Autonomous Business Control Plane —————
--- A multi-agent operating system (growth, support, product, finance,
--- experiments, sales, activation, governance) runs the business; these tables
--- persist agent scheduling state, runs, tasks, governed actions, experiments,
--- KPI snapshots, the audit trail, and governance policies.
+-- A multi-agent operating system (prospecting, outreach, campaigns, support,
+-- product, finance, experiments, activation, governance) runs the business;
+-- these tables persist agent scheduling state, runs, tasks, governed actions,
+-- the prospect pipeline, outreach campaigns, experiments, KPI snapshots, the
+-- audit trail, and governance policies.
 
 CREATE TABLE IF NOT EXISTS control_agents (
   id SERIAL PRIMARY KEY,
@@ -287,6 +288,51 @@ CREATE TABLE IF NOT EXISTS control_audit_events (
 
 CREATE INDEX IF NOT EXISTS control_audit_events_created_idx
   ON control_audit_events (created_at);
+
+CREATE TABLE IF NOT EXISTS control_campaigns (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  audience TEXT,
+  steps JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_by_agent TEXT,
+  launched_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS control_prospects (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  contact_name TEXT,
+  email TEXT NOT NULL,
+  phone TEXT,
+  website TEXT,
+  region TEXT,
+  source TEXT NOT NULL DEFAULT 'agent_research',
+  score INTEGER NOT NULL DEFAULT 0,
+  qualification TEXT,
+  status TEXT NOT NULL DEFAULT 'new',
+  campaign_id INTEGER REFERENCES control_campaigns(id) ON DELETE SET NULL,
+  campaign_step INTEGER NOT NULL DEFAULT 0,
+  contact_count INTEGER NOT NULL DEFAULT 0,
+  last_contacted_at TIMESTAMP,
+  status_changed_by TEXT,
+  created_by_agent TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS control_prospects_email_unique
+  ON control_prospects (email);
+
+CREATE INDEX IF NOT EXISTS control_prospects_status_idx
+  ON control_prospects (status, updated_at);
+
+CREATE INDEX IF NOT EXISTS control_prospects_campaign_idx
+  ON control_prospects (campaign_id);
 
 CREATE TABLE IF NOT EXISTS control_policies (
   id SERIAL PRIMARY KEY,
