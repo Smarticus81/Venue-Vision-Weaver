@@ -1474,3 +1474,723 @@ export const ListControlCampaignsResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Outreach studio emails with prospect and approval state
+ */
+export const ListControlOutreachEmailsQueryParams = zod.object({
+  status: zod
+    .enum([
+      "draft",
+      "sent",
+      "delivered",
+      "bounced",
+      "complained",
+      "failed",
+      "rejected",
+    ])
+    .optional(),
+  prospectId: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListControlOutreachEmailsResponse = zod.object({
+  emails: zod.array(
+    zod.object({
+      email: zod.object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        actionId: zod.number().nullish(),
+        campaignId: zod.number().nullish(),
+        step: zod.number().nullish(),
+        status: zod.enum([
+          "draft",
+          "sent",
+          "delivered",
+          "bounced",
+          "complained",
+          "failed",
+          "rejected",
+        ]),
+        subjectOptions: zod.array(zod.string()),
+        subject: zod.string(),
+        body: zod.string(),
+        greeting: zod.string(),
+        signOff: zod.string(),
+        ctaLabel: zod.string(),
+        ctaUrl: zod.string(),
+        imageAssetIds: zod.array(zod.number()),
+        draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
+        providerMessageId: zod.string().nullish(),
+        sentTo: zod.string().nullish(),
+        sentAt: zod.coerce.date().nullish(),
+        deliveredAt: zod.coerce.date().nullish(),
+        bouncedAt: zod.coerce.date().nullish(),
+        bounceReason: zod.string().nullish(),
+        lastError: zod.string().nullish(),
+        createdByAgent: zod.string().nullish(),
+        editedBy: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      }),
+      prospect: zod.object({
+        id: zod.number(),
+        name: zod.string(),
+        email: zod.string(),
+        contactName: zod.string().nullish(),
+        status: zod.string(),
+        website: zod.string().nullish(),
+        region: zod.string().nullish(),
+      }),
+      actionStatus: zod.string().nullish(),
+      imageCount: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Full review payload for one studio email (previews, images, sources, facts)
+ */
+export const GetControlOutreachEmailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetControlOutreachEmailResponse = zod.object({
+  detail: zod.object({
+    email: zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      actionId: zod.number().nullish(),
+      campaignId: zod.number().nullish(),
+      step: zod.number().nullish(),
+      status: zod.enum([
+        "draft",
+        "sent",
+        "delivered",
+        "bounced",
+        "complained",
+        "failed",
+        "rejected",
+      ]),
+      subjectOptions: zod.array(zod.string()),
+      subject: zod.string(),
+      body: zod.string(),
+      greeting: zod.string(),
+      signOff: zod.string(),
+      ctaLabel: zod.string(),
+      ctaUrl: zod.string(),
+      imageAssetIds: zod.array(zod.number()),
+      draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
+      providerMessageId: zod.string().nullish(),
+      sentTo: zod.string().nullish(),
+      sentAt: zod.coerce.date().nullish(),
+      deliveredAt: zod.coerce.date().nullish(),
+      bouncedAt: zod.coerce.date().nullish(),
+      bounceReason: zod.string().nullish(),
+      lastError: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      editedBy: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    prospect: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      contactName: zod.string().nullish(),
+      email: zod.string(),
+      phone: zod.string().nullish(),
+      website: zod.string().nullish(),
+      region: zod.string().nullish(),
+      source: zod.enum(["agent_research", "operator_import", "inbound"]),
+      score: zod.number(),
+      qualification: zod.string().nullish(),
+      status: zod.enum([
+        "new",
+        "qualified",
+        "contacted",
+        "replied",
+        "converted",
+        "unsubscribed",
+        "disqualified",
+      ]),
+      campaignId: zod.number().nullish(),
+      campaignStep: zod.number(),
+      contactCount: zod.number(),
+      lastContactedAt: zod.coerce.date().nullish(),
+      statusChangedBy: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    action: zod
+      .object({
+        id: zod.number(),
+        status: zod.string(),
+        decidedBy: zod.string().nullish(),
+        decisionNote: zod.string().nullish(),
+        error: zod.string().nullish(),
+      })
+      .nullish(),
+    research: zod
+      .object({
+        status: zod.enum(["ok", "no_images", "fetch_failed"]),
+        facts: zod.object({
+          name: zod.string().nullish(),
+          location: zod.string().nullish(),
+          spaces: zod.array(zod.string()),
+          style: zod.string().nullish(),
+          capacity: zod.number().nullish(),
+          summary: zod.string().nullish(),
+        }),
+        sourceUrls: zod.array(zod.string()),
+        warnings: zod.array(zod.string()),
+        fetchedAt: zod.coerce.date(),
+      })
+      .nullish(),
+    assets: zod.array(
+      zod.object({
+        id: zod.number(),
+        kind: zod.enum(["venue_image", "sample_preview"]),
+        url: zod.string(),
+        sourceUrl: zod.string().nullish(),
+        pageUrl: zod.string().nullish(),
+        width: zod.number(),
+        height: zod.number(),
+        bytes: zod.number(),
+        altText: zod.string(),
+        score: zod.number(),
+        selected: zod.boolean(),
+        inEmail: zod.boolean(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    preview: zod.object({
+      html: zod.string(),
+      htmlDark: zod.string(),
+      text: zod.string(),
+      headers: zod.record(zod.string(), zod.string()),
+    }),
+    warnings: zod.object({
+      research: zod.array(zod.string()),
+      config: zod.array(zod.string()),
+    }),
+    editable: zod.boolean(),
+    samplePreviewsEnabled: zod.boolean(),
+  }),
+});
+
+/**
+ * @summary Edit a studio email while it awaits approval (subject, copy, images, call to action)
+ */
+export const UpdateControlOutreachEmailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateControlOutreachEmailBodySubjectMin = 3;
+export const updateControlOutreachEmailBodySubjectMax = 80;
+
+export const updateControlOutreachEmailBodyBodyMin = 20;
+export const updateControlOutreachEmailBodyBodyMax = 2000;
+
+export const updateControlOutreachEmailBodyGreetingMin = 2;
+export const updateControlOutreachEmailBodyGreetingMax = 80;
+
+export const updateControlOutreachEmailBodySignOffMin = 2;
+export const updateControlOutreachEmailBodySignOffMax = 160;
+
+export const updateControlOutreachEmailBodyCtaLabelMin = 2;
+export const updateControlOutreachEmailBodyCtaLabelMax = 40;
+
+export const updateControlOutreachEmailBodyCtaUrlMin = 5;
+export const updateControlOutreachEmailBodyCtaUrlMax = 500;
+
+export const updateControlOutreachEmailBodyImageAssetIdsMax = 3;
+
+export const UpdateControlOutreachEmailBody = zod.object({
+  subject: zod
+    .string()
+    .min(updateControlOutreachEmailBodySubjectMin)
+    .max(updateControlOutreachEmailBodySubjectMax)
+    .optional(),
+  body: zod
+    .string()
+    .min(updateControlOutreachEmailBodyBodyMin)
+    .max(updateControlOutreachEmailBodyBodyMax)
+    .optional(),
+  greeting: zod
+    .string()
+    .min(updateControlOutreachEmailBodyGreetingMin)
+    .max(updateControlOutreachEmailBodyGreetingMax)
+    .optional(),
+  signOff: zod
+    .string()
+    .min(updateControlOutreachEmailBodySignOffMin)
+    .max(updateControlOutreachEmailBodySignOffMax)
+    .optional(),
+  ctaLabel: zod
+    .string()
+    .min(updateControlOutreachEmailBodyCtaLabelMin)
+    .max(updateControlOutreachEmailBodyCtaLabelMax)
+    .optional(),
+  ctaUrl: zod
+    .string()
+    .min(updateControlOutreachEmailBodyCtaUrlMin)
+    .max(updateControlOutreachEmailBodyCtaUrlMax)
+    .optional(),
+  imageAssetIds: zod
+    .array(zod.number())
+    .max(updateControlOutreachEmailBodyImageAssetIdsMax)
+    .optional(),
+});
+
+export const UpdateControlOutreachEmailResponse = zod.object({
+  detail: zod.object({
+    email: zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      actionId: zod.number().nullish(),
+      campaignId: zod.number().nullish(),
+      step: zod.number().nullish(),
+      status: zod.enum([
+        "draft",
+        "sent",
+        "delivered",
+        "bounced",
+        "complained",
+        "failed",
+        "rejected",
+      ]),
+      subjectOptions: zod.array(zod.string()),
+      subject: zod.string(),
+      body: zod.string(),
+      greeting: zod.string(),
+      signOff: zod.string(),
+      ctaLabel: zod.string(),
+      ctaUrl: zod.string(),
+      imageAssetIds: zod.array(zod.number()),
+      draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
+      providerMessageId: zod.string().nullish(),
+      sentTo: zod.string().nullish(),
+      sentAt: zod.coerce.date().nullish(),
+      deliveredAt: zod.coerce.date().nullish(),
+      bouncedAt: zod.coerce.date().nullish(),
+      bounceReason: zod.string().nullish(),
+      lastError: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      editedBy: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    prospect: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      contactName: zod.string().nullish(),
+      email: zod.string(),
+      phone: zod.string().nullish(),
+      website: zod.string().nullish(),
+      region: zod.string().nullish(),
+      source: zod.enum(["agent_research", "operator_import", "inbound"]),
+      score: zod.number(),
+      qualification: zod.string().nullish(),
+      status: zod.enum([
+        "new",
+        "qualified",
+        "contacted",
+        "replied",
+        "converted",
+        "unsubscribed",
+        "disqualified",
+      ]),
+      campaignId: zod.number().nullish(),
+      campaignStep: zod.number(),
+      contactCount: zod.number(),
+      lastContactedAt: zod.coerce.date().nullish(),
+      statusChangedBy: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    action: zod
+      .object({
+        id: zod.number(),
+        status: zod.string(),
+        decidedBy: zod.string().nullish(),
+        decisionNote: zod.string().nullish(),
+        error: zod.string().nullish(),
+      })
+      .nullish(),
+    research: zod
+      .object({
+        status: zod.enum(["ok", "no_images", "fetch_failed"]),
+        facts: zod.object({
+          name: zod.string().nullish(),
+          location: zod.string().nullish(),
+          spaces: zod.array(zod.string()),
+          style: zod.string().nullish(),
+          capacity: zod.number().nullish(),
+          summary: zod.string().nullish(),
+        }),
+        sourceUrls: zod.array(zod.string()),
+        warnings: zod.array(zod.string()),
+        fetchedAt: zod.coerce.date(),
+      })
+      .nullish(),
+    assets: zod.array(
+      zod.object({
+        id: zod.number(),
+        kind: zod.enum(["venue_image", "sample_preview"]),
+        url: zod.string(),
+        sourceUrl: zod.string().nullish(),
+        pageUrl: zod.string().nullish(),
+        width: zod.number(),
+        height: zod.number(),
+        bytes: zod.number(),
+        altText: zod.string(),
+        score: zod.number(),
+        selected: zod.boolean(),
+        inEmail: zod.boolean(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    preview: zod.object({
+      html: zod.string(),
+      htmlDark: zod.string(),
+      text: zod.string(),
+      headers: zod.record(zod.string(), zod.string()),
+    }),
+    warnings: zod.object({
+      research: zod.array(zod.string()),
+      config: zod.array(zod.string()),
+    }),
+    editable: zod.boolean(),
+    samplePreviewsEnabled: zod.boolean(),
+  }),
+});
+
+/**
+ * @summary Rewrite the copy with Grok and/or re-run the venue website research
+ */
+export const RegenerateControlOutreachEmailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RegenerateControlOutreachEmailBody = zod.object({
+  mode: zod.enum(["copy", "research", "both"]),
+  ask: zod.enum(["preview", "call"]).optional(),
+});
+
+export const RegenerateControlOutreachEmailResponse = zod.object({
+  detail: zod.object({
+    email: zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      actionId: zod.number().nullish(),
+      campaignId: zod.number().nullish(),
+      step: zod.number().nullish(),
+      status: zod.enum([
+        "draft",
+        "sent",
+        "delivered",
+        "bounced",
+        "complained",
+        "failed",
+        "rejected",
+      ]),
+      subjectOptions: zod.array(zod.string()),
+      subject: zod.string(),
+      body: zod.string(),
+      greeting: zod.string(),
+      signOff: zod.string(),
+      ctaLabel: zod.string(),
+      ctaUrl: zod.string(),
+      imageAssetIds: zod.array(zod.number()),
+      draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
+      providerMessageId: zod.string().nullish(),
+      sentTo: zod.string().nullish(),
+      sentAt: zod.coerce.date().nullish(),
+      deliveredAt: zod.coerce.date().nullish(),
+      bouncedAt: zod.coerce.date().nullish(),
+      bounceReason: zod.string().nullish(),
+      lastError: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      editedBy: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    prospect: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      contactName: zod.string().nullish(),
+      email: zod.string(),
+      phone: zod.string().nullish(),
+      website: zod.string().nullish(),
+      region: zod.string().nullish(),
+      source: zod.enum(["agent_research", "operator_import", "inbound"]),
+      score: zod.number(),
+      qualification: zod.string().nullish(),
+      status: zod.enum([
+        "new",
+        "qualified",
+        "contacted",
+        "replied",
+        "converted",
+        "unsubscribed",
+        "disqualified",
+      ]),
+      campaignId: zod.number().nullish(),
+      campaignStep: zod.number(),
+      contactCount: zod.number(),
+      lastContactedAt: zod.coerce.date().nullish(),
+      statusChangedBy: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    action: zod
+      .object({
+        id: zod.number(),
+        status: zod.string(),
+        decidedBy: zod.string().nullish(),
+        decisionNote: zod.string().nullish(),
+        error: zod.string().nullish(),
+      })
+      .nullish(),
+    research: zod
+      .object({
+        status: zod.enum(["ok", "no_images", "fetch_failed"]),
+        facts: zod.object({
+          name: zod.string().nullish(),
+          location: zod.string().nullish(),
+          spaces: zod.array(zod.string()),
+          style: zod.string().nullish(),
+          capacity: zod.number().nullish(),
+          summary: zod.string().nullish(),
+        }),
+        sourceUrls: zod.array(zod.string()),
+        warnings: zod.array(zod.string()),
+        fetchedAt: zod.coerce.date(),
+      })
+      .nullish(),
+    assets: zod.array(
+      zod.object({
+        id: zod.number(),
+        kind: zod.enum(["venue_image", "sample_preview"]),
+        url: zod.string(),
+        sourceUrl: zod.string().nullish(),
+        pageUrl: zod.string().nullish(),
+        width: zod.number(),
+        height: zod.number(),
+        bytes: zod.number(),
+        altText: zod.string(),
+        score: zod.number(),
+        selected: zod.boolean(),
+        inEmail: zod.boolean(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    preview: zod.object({
+      html: zod.string(),
+      htmlDark: zod.string(),
+      text: zod.string(),
+      headers: zod.record(zod.string(), zod.string()),
+    }),
+    warnings: zod.object({
+      research: zod.array(zod.string()),
+      config: zod.array(zod.string()),
+    }),
+    editable: zod.boolean(),
+    samplePreviewsEnabled: zod.boolean(),
+  }),
+});
+
+/**
+ * @summary Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
+ */
+export const RequestControlSamplePreviewParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RequestControlSamplePreviewResponse = zod.object({
+  detail: zod.object({
+    email: zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      actionId: zod.number().nullish(),
+      campaignId: zod.number().nullish(),
+      step: zod.number().nullish(),
+      status: zod.enum([
+        "draft",
+        "sent",
+        "delivered",
+        "bounced",
+        "complained",
+        "failed",
+        "rejected",
+      ]),
+      subjectOptions: zod.array(zod.string()),
+      subject: zod.string(),
+      body: zod.string(),
+      greeting: zod.string(),
+      signOff: zod.string(),
+      ctaLabel: zod.string(),
+      ctaUrl: zod.string(),
+      imageAssetIds: zod.array(zod.number()),
+      draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
+      providerMessageId: zod.string().nullish(),
+      sentTo: zod.string().nullish(),
+      sentAt: zod.coerce.date().nullish(),
+      deliveredAt: zod.coerce.date().nullish(),
+      bouncedAt: zod.coerce.date().nullish(),
+      bounceReason: zod.string().nullish(),
+      lastError: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      editedBy: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    prospect: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      contactName: zod.string().nullish(),
+      email: zod.string(),
+      phone: zod.string().nullish(),
+      website: zod.string().nullish(),
+      region: zod.string().nullish(),
+      source: zod.enum(["agent_research", "operator_import", "inbound"]),
+      score: zod.number(),
+      qualification: zod.string().nullish(),
+      status: zod.enum([
+        "new",
+        "qualified",
+        "contacted",
+        "replied",
+        "converted",
+        "unsubscribed",
+        "disqualified",
+      ]),
+      campaignId: zod.number().nullish(),
+      campaignStep: zod.number(),
+      contactCount: zod.number(),
+      lastContactedAt: zod.coerce.date().nullish(),
+      statusChangedBy: zod.string().nullish(),
+      createdByAgent: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+    action: zod
+      .object({
+        id: zod.number(),
+        status: zod.string(),
+        decidedBy: zod.string().nullish(),
+        decisionNote: zod.string().nullish(),
+        error: zod.string().nullish(),
+      })
+      .nullish(),
+    research: zod
+      .object({
+        status: zod.enum(["ok", "no_images", "fetch_failed"]),
+        facts: zod.object({
+          name: zod.string().nullish(),
+          location: zod.string().nullish(),
+          spaces: zod.array(zod.string()),
+          style: zod.string().nullish(),
+          capacity: zod.number().nullish(),
+          summary: zod.string().nullish(),
+        }),
+        sourceUrls: zod.array(zod.string()),
+        warnings: zod.array(zod.string()),
+        fetchedAt: zod.coerce.date(),
+      })
+      .nullish(),
+    assets: zod.array(
+      zod.object({
+        id: zod.number(),
+        kind: zod.enum(["venue_image", "sample_preview"]),
+        url: zod.string(),
+        sourceUrl: zod.string().nullish(),
+        pageUrl: zod.string().nullish(),
+        width: zod.number(),
+        height: zod.number(),
+        bytes: zod.number(),
+        altText: zod.string(),
+        score: zod.number(),
+        selected: zod.boolean(),
+        inEmail: zod.boolean(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    preview: zod.object({
+      html: zod.string(),
+      htmlDark: zod.string(),
+      text: zod.string(),
+      headers: zod.record(zod.string(), zod.string()),
+    }),
+    warnings: zod.object({
+      research: zod.array(zod.string()),
+      config: zod.array(zod.string()),
+    }),
+    editable: zod.boolean(),
+    samplePreviewsEnabled: zod.boolean(),
+  }),
+});
+
+/**
+ * @summary Research the prospect's venue, write a studio draft, and queue it for approval
+ */
+export const DraftControlOutreachEmailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const draftControlOutreachEmailBodyStepMax = 10;
+
+export const DraftControlOutreachEmailBody = zod.object({
+  ask: zod.enum(["preview", "call"]).optional(),
+  campaignId: zod.number().optional(),
+  step: zod
+    .number()
+    .min(1)
+    .max(draftControlOutreachEmailBodyStepMax)
+    .optional(),
+  refreshResearch: zod.boolean().optional(),
+});
+
+/**
+ * @summary Re-run the venue website research (facts and photos) for a prospect
+ */
+export const ResearchControlProspectParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResearchControlProspectResponse = zod.object({
+  research: zod.object({
+    status: zod.enum(["ok", "no_images", "fetch_failed"]),
+    facts: zod.object({
+      name: zod.string().nullish(),
+      location: zod.string().nullish(),
+      spaces: zod.array(zod.string()),
+      style: zod.string().nullish(),
+      capacity: zod.number().nullish(),
+      summary: zod.string().nullish(),
+    }),
+    sourceUrls: zod.array(zod.string()),
+    warnings: zod.array(zod.string()),
+    fetchedAt: zod.coerce.date(),
+  }),
+  assets: zod.array(
+    zod.object({
+      id: zod.number(),
+      kind: zod.enum(["venue_image", "sample_preview"]),
+      url: zod.string(),
+      sourceUrl: zod.string().nullish(),
+      pageUrl: zod.string().nullish(),
+      width: zod.number(),
+      height: zod.number(),
+      bytes: zod.number(),
+      altText: zod.string(),
+      score: zod.number(),
+      selected: zod.boolean(),
+      inEmail: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
