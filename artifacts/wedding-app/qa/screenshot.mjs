@@ -33,7 +33,8 @@ await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch();
 try {
   for (const vp of viewports) {
-    const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1 });
+    // ignoreHTTPSErrors: sandboxed CI often sits behind a TLS-inspecting proxy; without it Google Fonts never load.
+    const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
     const page = await context.newPage();
     for (const entry of pages) {
       await page.goto(base + entry.path, { waitUntil: "networkidle" });
@@ -41,6 +42,8 @@ try {
         await entry.action(page);
         await page.waitForTimeout(400);
       }
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(300);
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(600);
       const file = path.join(outDir, `${entry.name}-${vp.name}.png`);

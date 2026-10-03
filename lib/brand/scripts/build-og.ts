@@ -46,9 +46,10 @@ writeFileSync(htmlPath, html);
 
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
+  // ignoreHTTPSErrors: lets the Google Fonts stylesheet load behind TLS-inspecting proxies.
+  const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
   await page.goto(`file://${htmlPath}`, { waitUntil: "networkidle" });
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => Promise.all([document.fonts.load("600 92px Outfit"), document.fonts.load("400 30px Figtree"), document.fonts.ready]));
   const out = path.join(assetDir, "og-image.png");
   await page.screenshot({ path: out, type: "png" });
   copyFileSync(out, path.join(publicDir, "og-image.png"));
