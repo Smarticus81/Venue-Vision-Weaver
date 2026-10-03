@@ -18,6 +18,34 @@ const venue = {
   media,
   isReady: true,
 };
+const controlOverview = {
+  operatorEmail: "operator@example.test",
+  aiConfigured: true,
+  model: "grok-4.7",
+  metrics: {
+    capturedAt: new Date().toISOString(),
+    organizations: { total: 14, byPlan: { trial: 9, starter: 4, growth: 1 }, totalCreditsBalance: 212, lowCreditCount: 3, paidCount: 5 },
+    venues: { total: 19, new7d: 2, new30d: 6, withMedia: 15, withSessions: 11, unadoptedLegacy: 1, activationRate: 57.9 },
+    sessions: { total: 143, byStatus: { ready: 128, processing: 3, failed: 12 }, created7d: 21, created30d: 64, ready7d: 19, failed7d: 2, failureRate7d: 9.5, avgCompletionMinutes7d: 4.2 },
+    credits: { granted30d: 160, consumed30d: 64, refunded30d: 2, purchased30d: 90, grantsByReason30d: { purchase: 90, trial: 45, subscription: 25 } },
+    assets: { generated7d: 95 },
+  },
+  agents: [
+    ["prospecting", "Prospecting", "prospecting", "Finds and scores venue prospects from public sources."],
+    ["outreach", "Outreach", "outreach", "Drafts first-touch and follow-up emails for operator approval."],
+    ["campaigns", "Campaigns", "campaigns", "Runs multi-step sequences and reports the funnel."],
+    ["support", "Support", "support", "Watches failed sessions and venue questions."],
+    ["product", "Product repair", "product", "Flags generation quality regressions."],
+    ["finance", "Finance", "finance", "Tracks credits, plans, and revenue."],
+  ].map(([key, name, domain, description], i) => ({
+    key, name, domain, description,
+    status: i === 3 ? "paused" : "active",
+    intervalMinutes: 360,
+    lastRunAt: new Date(Date.now() - (i + 1) * 3600e3).toISOString(),
+    lastRunStatus: i === 4 ? "failed" : "succeeded",
+  })),
+  counts: { pendingActions: 4, openTasks: 7, runningExperiments: 2, runs24h: 18 },
+};
 const session = {
   id: 1,
   shareToken: "demo",
@@ -76,7 +104,8 @@ const qaConfig = mergeConfig(config, {
             return;
           }
           let data;
-          if (u === "/org")
+          if (u.startsWith("/control/overview")) data = controlOverview;
+          else if (u === "/org")
             data = {
               organization: {
                 id: 1,
