@@ -53,8 +53,8 @@ const ALLOWED_COUPLE_PHOTO_TYPES = new Set([
 const COUPLE_REFERENCE_ROLES = ["Together", "Partner A", "Partner B"] as const;
 const COUPLE_REFERENCE_GUIDANCE = [
   "Both faces visible",
-  "Face-forward close view",
-  "Face-forward close view",
+  "Face forward, close up",
+  "Face forward, close up",
 ] as const;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -231,11 +231,11 @@ export default function CouplePage() {
             toast({
               title:
                 err.status === 402
-                  ? "The studio is paused"
+                  ? "This venue is paused"
                   : "We couldn't begin",
               description:
                 err.status === 402
-                  ? "This venue is temporarily unavailable for new galleries. Please check with the venue team."
+                  ? "This venue isn’t taking new galleries right now. Please check with the venue team."
                   : msg,
               variant: "destructive",
             });
@@ -247,7 +247,7 @@ export default function CouplePage() {
       toast({
         title: "Photos didn't upload",
         description:
-          "Check your connection and tap Compose my gallery again — everything you entered is still here.",
+          "Check your connection and tap Make my gallery again. Everything you entered is still here.",
         variant: "destructive",
       });
     }
@@ -258,9 +258,9 @@ export default function CouplePage() {
   if (venueQuery.isError || !venueQuery.data)
     return (
       <FormLayout
-        label="Your venue invitation"
-        title="Let’s find your place."
-        description="Your venue’s link opens the door to a wedding vision made for you."
+        label="Venue code"
+        title="We couldn’t find that venue."
+        description="Check the code or link your venue gave you, then try again."
       >
         <h2>We couldn’t open this venue</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
@@ -283,16 +283,14 @@ export default function CouplePage() {
   if (!venue.isReady)
     return (
       <FormLayout
-        label="An invitation is on its way"
-        title="A little more preparation."
-        description={
-          venue.name + " is getting ready to welcome your wedding vision."
-        }
+        label="Almost ready"
+        title="This venue is still setting up."
+        description={venue.name + " hasn’t finished adding photos yet."}
       >
         <h2>This venue isn’t ready yet</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          The venue team is finishing your preview. Please
-          check back after they finish setting up.
+          The venue team is still adding photos of their spaces. Check back
+          soon.
         </p>
         <Button className="mt-6" onClick={() => void venueQuery.refetch()}>
           Check again
@@ -395,7 +393,7 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
         </div>
       </div>
       <div>
-        <p className="eyebrow text-primary">An invitation to imagine</p>
+        <p className="eyebrow">Your gallery at</p>
         <h1>
           Your day at
           <br />
@@ -404,17 +402,17 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
         <p className="text-muted-foreground">
           {venue.description ||
             venue.tagline ||
-            "See the two of you, in the place where it could all begin."}
+            "See the two of you, married here."}
         </p>
         <p className="text-sm">
-          Add your photos, choose a style, and receive four AI portraits plus a
-          motion reel.
+          Add a few photos, pick a style, and get four images and a short reel
+          by email in a few minutes.
         </p>
         <Button onClick={onNext} data-testid="visualize-cta">
-          Create our wedding vision <ArrowRight />
+          Start our gallery <ArrowRight />
         </Button>
         <p className="caption">
-          An imagined wedding day, created from your photos.
+          Images are AI-generated from your photos and the venue’s photos.
         </p>
       </div>
     </section>
@@ -468,10 +466,10 @@ function UploadStep({
 
       <div className="step-heading">
         <p className="eyebrow text-brand mb-4">Your photos</p>
-        <h1 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">
+        <h1 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-4">
           You and your partner
         </h1>
-        <p className="text-muted-foreground font-light text-lg max-w-lg mx-auto">
+        <p className="text-muted-foreground text-lg max-w-lg mx-auto">
           Upload clear, well-lit photos in this order: together, Partner A, then
           Partner B.
         </p>
@@ -493,7 +491,7 @@ function UploadStep({
                 0{index + 1} — {role}
               </p>
               <p
-                className={`font-light text-sm ${isFilled ? "text-muted-foreground" : "text-muted-foreground"}`}
+                className={` text-sm ${isFilled ? "text-muted-foreground" : "text-muted-foreground"}`}
               >
                 {COUPLE_REFERENCE_GUIDANCE[index]}
               </p>
@@ -519,13 +517,13 @@ function UploadStep({
           accept="image/jpeg,image/png,image/webp"
           data-testid="couple-photo-input"
         />
-        <div className="relative w-16 h-16 bg-card flex items-center justify-center mb-6 border border-border text-brand">
+        <div className="relative w-16 h-16 rounded-lg bg-card flex items-center justify-center mb-6 border border-border text-brand">
           <Camera className="h-7 w-7" />
         </div>
-        <p className="font-display text-xl font-medium text-foreground mb-3">
-          Tap to add photographs
+        <p className="font-display text-xl font-semibold text-foreground mb-3">
+          Add your photos
         </p>
-        <p className="text-base text-muted-foreground font-light max-w-md mx-auto">
+        <p className="text-base text-muted-foreground max-w-md mx-auto">
           One to three JPG, PNG, or WebP photos under 50MB — distinct angles or
           expressions, at least 256px wide.
         </p>
@@ -544,14 +542,14 @@ function UploadStep({
               key={i}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="relative group aspect-square overflow-hidden border border-border"
+              className="relative group aspect-square overflow-hidden rounded-lg border border-border"
             >
               <img
                 src={src}
                 className="w-full h-full object-cover"
                 alt={`${COUPLE_REFERENCE_ROLES[i] ?? "Reference"} preview`}
               />
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-ink/60 via-transparent to-transparent" />
               <p className="absolute left-4 bottom-4 eyebrow text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                 {COUPLE_REFERENCE_ROLES[i] ?? `Reference ${i + 1}`}
               </p>
@@ -564,7 +562,7 @@ function UploadStep({
                 disabled={isUploading}
                 aria-label={`Remove photo ${i + 1}`}
                 data-testid={`remove-couple-photo-${i}`}
-                className="absolute top-4 right-4 h-11 w-11 bg-black/60 text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive backdrop-blur-sm"
+                className="absolute top-4 right-4 h-11 w-11 rounded-md bg-ink/70 text-ink-foreground flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive backdrop-blur-sm"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -649,12 +647,12 @@ function StyleStep({
       </div>
 
       <div className="step-heading">
-        <p className="eyebrow text-brand mb-4">Style & delivery</p>
-        <h1 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-4">
-          Set the scene
+        <p className="eyebrow text-brand mb-4">Style &amp; delivery</p>
+        <h1 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-4">
+          Pick a style
         </h1>
-        <p className="text-muted-foreground font-light text-lg max-w-xl mx-auto">
-          Choose the editorial direction for your venue-branded glimpse gallery.
+        <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+          Choose the look for your images, then tell us where to send them.
         </p>
       </div>
 
@@ -692,18 +690,18 @@ function StyleStep({
                     >
                       Style {String(index + 1).padStart(2, "0")}
                     </p>
-                    <h3 className="font-display font-medium text-xl md:text-2xl mb-2 tracking-tight text-foreground">
+                    <h3 className="font-display font-semibold text-xl md:text-2xl mb-2 tracking-tight text-foreground">
                       {style.name}
                     </h3>
-                    <p className="text-sm md:text-base text-muted-foreground font-light leading-relaxed">
+                    <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
                       {style.description}
                     </p>
                   </div>
                   <div
                     aria-hidden
-                    className={`shrink-0 h-6 w-6 border flex items-center justify-center transition-colors mt-1 ${
+                    className={`shrink-0 h-6 w-6 rounded-sm border flex items-center justify-center transition-colors mt-1 ${
                       isSelected
-                        ? "bg-brand border-brand text-brand-foreground"
+                        ? "bg-primary border-primary text-primary-foreground"
                         : "border-border text-transparent"
                     }`}
                   >
@@ -731,7 +729,7 @@ function StyleStep({
             >
               <Mail className="h-4 w-4" /> Your email
             </label>
-            <p className="text-sm text-muted-foreground font-light mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               Required so we can send your gallery link and you can find it
               again later.
             </p>
@@ -773,14 +771,14 @@ function StyleStep({
           <div className="delivery-summary">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="h-5 w-5 text-brand" />
-              <p className="eyebrow text-brand">Gallery Delivery</p>
+              <p className="eyebrow text-brand">What you’ll get</p>
             </div>
-            <div className="font-display text-xl md:text-2xl font-medium text-foreground mb-2">
-              4 portraits + motion reel
+            <div className="font-display text-xl md:text-2xl font-semibold text-foreground mb-2">
+              Four images and a short reel
             </div>
-            <div className="text-base text-muted-foreground font-light leading-relaxed">
-              Editorial portraits anchored to this venue, compiled into a gentle
-              branded reel. Usually ready in a few minutes.
+            <div className="text-base text-muted-foreground leading-relaxed">
+              Made at this venue from your photos, sent to your email. Usually
+              ready in a few minutes.
             </div>
           </div>
         </div>
@@ -808,7 +806,7 @@ function StyleStep({
             ) : (
               <Images className="mr-2 h-5 w-5" />
             )}
-            Compose my gallery
+            Make my gallery
           </Button>
         </div>
       </form>
@@ -824,16 +822,16 @@ function SubmittingStep() {
       exit={{ opacity: 0 }}
       className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto"
     >
-      <div className="relative w-20 h-20 bg-card border border-border flex items-center justify-center mb-8">
+      <div className="relative w-20 h-20 rounded-lg bg-card border border-border flex items-center justify-center mb-8">
         <Loader2 className="h-8 w-8 animate-spin text-brand" />
       </div>
-      <p className="eyebrow text-brand mb-4">Developing…</p>
-      <h2 className="font-display text-2xl md:text-3xl font-medium text-foreground mb-6">
-        Sending your photographs...
+      <p className="eyebrow text-brand mb-4">Working on it</p>
+      <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-6">
+        Uploading your photos…
       </h2>
-      <p className="text-lg text-muted-foreground font-light leading-relaxed">
-        Keep this page open. We are preparing to place you inside your venue for
-        review.
+      <p className="text-lg text-muted-foreground leading-relaxed">
+        Keep this page open. We’re uploading your photos and starting your
+        gallery.
       </p>
     </motion.div>
   );

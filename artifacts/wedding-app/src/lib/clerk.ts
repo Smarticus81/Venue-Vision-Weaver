@@ -1,4 +1,5 @@
 import type { Appearance } from "@clerk/types";
+import { font, semantic } from "@workspace/brand";
 
 // The server injects the key into index.html at request time (see the
 // api-server's serveIndexHtml), so a bundle built without
@@ -73,25 +74,27 @@ export const CLERK_PUBLISHABLE_KEY = clerkStatus === "ready" ? rawKey : null;
 
 export const clerkConfigured = clerkStatus === "ready";
 
-/** Shared light theme for hosted authentication components. */
-export const gardenAppearance: Appearance = {
+/** Hosted Clerk components themed from the shared brand tokens. */
+export const brandAppearance: Appearance = {
   variables: {
-    colorBackground: "#ffffff",
-    colorInputBackground: "#fafaf6",
-    colorText: "#24332b",
-    colorInputText: "#24332b",
-    colorTextSecondary: "#5f6d63",
-    colorPrimary: "#326047",
-    colorTextOnPrimaryBackground: "#ffffff",
-    colorDanger: "#a62b26",
-    colorSuccess: "#326047",
-    colorNeutral: "#24332b",
-    borderRadius: "0.5rem",
-    fontFamily: "'DM Sans', sans-serif",
+    colorBackground: semantic.surface,
+    colorInputBackground: semantic.surfaceRaised,
+    colorText: semantic.text,
+    colorInputText: semantic.text,
+    colorTextSecondary: semantic.textMuted,
+    colorPrimary: semantic.accent,
+    colorTextOnPrimaryBackground: semantic.textOnAccent,
+    colorDanger: semantic.errorText,
+    colorSuccess: semantic.successText,
+    colorWarning: semantic.warningText,
+    colorNeutral: semantic.text,
+    borderRadius: "8px",
+    fontFamily: font.body,
   },
   elements: {
     card: "border border-border shadow-none",
     formButtonPrimary:
-      "bg-primary text-primary-foreground hover:bg-brand-hover text-sm normal-case",
+      "bg-primary text-primary-foreground hover:bg-brand-hover text-sm normal-case shadow-none",
+    footerActionLink: "text-secondary hover:text-secondary",
   },
 };

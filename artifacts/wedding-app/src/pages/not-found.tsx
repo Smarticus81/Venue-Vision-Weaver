@@ -1,16 +1,17 @@
 import { Link } from "wouter";
 import { FormLayout } from "@/components/layout/SiteChrome";
+
 export default function NotFound() {
   return (
     <FormLayout
-      label="404 · A little off course"
-      title="Let’s find your way back."
-      description="This page has moved, or the link isn’t quite right."
+      label="404"
+      title="That page isn't here."
+      description="The link may have changed, or it was typed in wrong."
     >
-      <h2>Where would you like to go?</h2>
+      <h2>Where to next?</h2>
       <div className="grid gap-3">
         <Link href="/" className="action-primary" data-testid="notfound-home">
-          Explore glimpse
+          Dreemer for venues
         </Link>
         <Link
           href="/find-my-gallery"

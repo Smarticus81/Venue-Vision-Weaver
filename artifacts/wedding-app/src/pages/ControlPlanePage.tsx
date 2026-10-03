@@ -40,7 +40,7 @@ import {
   type ErrorType,
 } from "@workspace/api-client-react";
 import { Loader2, Play, Pause, ChevronDown, ChevronUp } from "lucide-react";
-import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { DreemerLogo } from "@/components/brand/DreemerLogo";
 import { ClerkSetupNotice } from "@/components/auth/OrgGate";
 import { clerkConfigured } from "@/lib/clerk";
 import { useToast } from "@/hooks/use-toast";
@@ -67,34 +67,34 @@ function apiErrorMessage(err: unknown): string {
 }
 
 const PILL: Record<string, string> = {
-  active: "text-emerald-300",
-  succeeded: "text-emerald-300",
-  executed: "text-emerald-300",
-  approved: "text-emerald-300",
-  done: "text-emerald-300",
-  completed: "text-emerald-300",
-  running: "text-rose",
-  in_progress: "text-rose",
-  pending: "text-amber-300",
-  proposed: "text-amber-300",
-  open: "text-amber-300",
+  active: "text-success",
+  succeeded: "text-success",
+  executed: "text-success",
+  approved: "text-success",
+  done: "text-success",
+  completed: "text-success",
+  running: "text-brand",
+  in_progress: "text-brand",
+  pending: "text-warning",
+  proposed: "text-warning",
+  open: "text-warning",
   paused: "text-muted-foreground",
   dismissed: "text-muted-foreground",
   rejected: "text-muted-foreground",
   aborted: "text-muted-foreground",
-  failed: "text-red-300",
-  critical: "text-red-300",
-  high: "text-amber-300",
+  failed: "text-danger",
+  critical: "text-danger",
+  high: "text-warning",
   medium: "text-foreground/70",
   low: "text-muted-foreground",
-  new: "text-amber-300",
-  qualified: "text-emerald-300",
-  contacted: "text-rose",
-  replied: "text-emerald-300",
-  converted: "text-emerald-300",
+  new: "text-warning",
+  qualified: "text-success",
+  contacted: "text-brand",
+  replied: "text-success",
+  converted: "text-success",
   unsubscribed: "text-muted-foreground",
   disqualified: "text-muted-foreground",
-  draft: "text-amber-300",
+  draft: "text-warning",
 };
 
 function Pill({ value, className }: { value: string; className?: string }) {
@@ -114,7 +114,7 @@ function Pill({ value, className }: { value: string; className?: string }) {
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("border border-border bg-card p-5", className)}>{children}</div>
+    <div className={cn("rounded-lg border border-border bg-card p-5", className)}>{children}</div>
   );
 }
 
@@ -143,11 +143,10 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        tone === "primary" && "bg-rose text-rose-foreground hover:bg-rose-hover",
-        tone === "neutral" &&
-          "border border-border text-foreground/80 hover:border-foreground/40 hover:text-foreground",
-        tone === "danger" && "border border-red-400/40 text-red-300 hover:border-red-400/70",
+        "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        tone === "primary" && "bg-primary text-primary-foreground hover:bg-brand-hover",
+        tone === "neutral" && "border border-border bg-background text-foreground hover:bg-soft",
+        tone === "danger" && "border border-danger/40 text-danger hover:bg-danger-soft",
       )}
     >
       {children}
@@ -161,7 +160,7 @@ function MetricBlock({ label, value, sub }: { label: string; value: string; sub?
   return (
     <Card>
       <p className="mono-label text-muted-foreground">{label}</p>
-      <p className="mt-2 font-display text-3xl font-medium text-foreground">{value}</p>
+      <p className="mt-2 font-display text-3xl font-semibold text-foreground">{value}</p>
       {sub ? <p className="mt-1 text-xs text-muted-foreground">{sub}</p> : null}
     </Card>
   );
@@ -337,15 +336,15 @@ function ActionRow({ action }: { action: ControlAction }) {
       {action.reasoning ? (
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{action.reasoning}</p>
       ) : null}
-      <pre className="mt-3 overflow-x-auto border border-border bg-background/60 p-3 text-xs text-foreground/80">
+      <pre className="mt-3 overflow-x-auto rounded-md border border-border bg-background/60 p-3 text-xs text-foreground/80">
         {JSON.stringify(action.params, null, 2)}
       </pre>
       {action.result ? (
-        <pre className="mt-2 overflow-x-auto border border-emerald-400/20 bg-background/60 p-3 text-xs text-emerald-200/80">
+        <pre className="mt-2 overflow-x-auto rounded-md border border-success/30 bg-success-soft p-3 text-xs text-success">
           {JSON.stringify(action.result, null, 2)}
         </pre>
       ) : null}
-      {action.error ? <p className="mt-2 text-xs text-red-300">{action.error}</p> : null}
+      {action.error ? <p className="mt-2 text-xs text-danger">{action.error}</p> : null}
       {action.decidedBy ? (
         <p className="mt-2 text-xs text-muted-foreground">
           Decided by {action.decidedBy} at {fmt(action.decidedAt)}
@@ -358,7 +357,7 @@ function ActionRow({ action }: { action: ControlAction }) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Decision note (optional)"
-            className="h-8 min-w-0 flex-1 border border-border bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
           <ActionButton
             tone="primary"
@@ -498,9 +497,9 @@ function TasksTab() {
             type="button"
             onClick={() => setFilter(value)}
             className={cn(
-              "mono-label h-8 border px-3 transition-colors",
+              "mono-label h-8 rounded-md border px-3 transition-colors",
               filter === value
-                ? "border-rose/60 text-rose"
+                ? "border-primary text-foreground"
                 : "border-border text-muted-foreground hover:text-foreground",
             )}
           >
@@ -527,19 +526,19 @@ function RunTranscript({ runId }: { runId: number }) {
   });
   if (runQuery.isLoading) return <TabLoading />;
   const run = runQuery.data?.run;
-  if (!run) return <p className="text-xs text-red-300">Could not load run detail.</p>;
+  if (!run) return <p className="text-xs text-danger">Could not load run detail.</p>;
   const transcript = (run.transcript ?? []) as Array<Record<string, unknown>>;
   return (
     <div className="space-y-2">
       {run.summary ? (
-        <div className="border border-border bg-background/60 p-3">
+        <div className="rounded-md border border-border bg-background/60 p-3">
           <p className="mono-label mb-1.5 text-muted-foreground">Operator report</p>
           <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{run.summary}</p>
         </div>
       ) : null}
-      {run.error ? <p className="text-xs text-red-300">{run.error}</p> : null}
+      {run.error ? <p className="text-xs text-danger">{run.error}</p> : null}
       {transcript.length > 0 ? (
-        <div className="border border-border bg-background/60 p-3">
+        <div className="rounded-md border border-border bg-background/60 p-3">
           <p className="mono-label mb-2 text-muted-foreground">
             Transcript ({transcript.length} steps)
           </p>
@@ -551,11 +550,11 @@ function RunTranscript({ runId }: { runId: number }) {
                     {String(step.text ?? "")}
                   </p>
                 ) : step.type === "tool_call" ? (
-                  <p className="font-mono text-rose/90">
+                  <p className="font-mono text-brand">
                     → {String(step.name ?? "")}({JSON.stringify(step.args ?? {})})
                   </p>
                 ) : (
-                  <p className={cn("font-mono", step.error ? "text-red-300" : "text-muted-foreground")}>
+                  <p className={cn("font-mono", step.error ? "text-danger" : "text-muted-foreground")}>
                     ← {String(step.name ?? "")}:{" "}
                     {step.error
                       ? String(step.error)
@@ -730,7 +729,7 @@ function ProspectRow({ prospect, campaigns }: { prospect: ControlProspect; campa
             <span className="mono-label text-muted-foreground">{prospect.region}</span>
           ) : null}
         </div>
-        <span className="mono-label text-rose/90">score {prospect.score}</span>
+        <span className="mono-label text-brand">score {prospect.score}</span>
       </div>
       {prospect.qualification ? (
         <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
@@ -798,7 +797,7 @@ function CampaignCard({ campaign }: { campaign: ControlCampaign }) {
         <ol className="mt-3 space-y-1.5 border-t border-border pt-3">
           {steps.map((step, index) => (
             <li key={index} className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
-              <span className="mono-label shrink-0 text-rose/80">
+              <span className="mono-label shrink-0 text-brand">
                 {index + 1}
                 {Number(step.waitDays) > 0 ? ` · +${Number(step.waitDays)}d` : ""}
               </span>
@@ -810,8 +809,8 @@ function CampaignCard({ campaign }: { campaign: ControlCampaign }) {
       <div className="mono-label mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-muted-foreground">
         <span className="text-foreground/80">{enrolled} enrolled</span>
         <span>{counts.contacted ?? 0} contacted</span>
-        <span className="text-emerald-300">{counts.replied ?? 0} replied</span>
-        <span className="text-emerald-300">{counts.converted ?? 0} converted</span>
+        <span className="text-success">{counts.replied ?? 0} replied</span>
+        <span className="text-success">{counts.converted ?? 0} converted</span>
         <span>{counts.unsubscribed ?? 0} unsubscribed</span>
       </div>
     </Card>
@@ -863,9 +862,9 @@ function PipelineTab() {
               type="button"
               onClick={() => setFilter(value)}
               className={cn(
-                "mono-label h-8 border px-3 transition-colors",
+                "mono-label h-8 rounded-md border px-3 transition-colors",
                 filter === value
-                  ? "border-rose/60 text-rose"
+                  ? "border-primary text-foreground"
                   : "border-border text-muted-foreground hover:text-foreground",
               )}
             >
@@ -910,7 +909,7 @@ function AuditTab() {
           <div className="grid gap-3 sm:grid-cols-2">
             {policies.map((policy) => (
               <Card key={policy.id}>
-                <p className="font-mono text-xs text-rose/90">{policy.key}</p>
+                <p className="font-mono text-xs text-brand">{policy.key}</p>
                 <p className="mt-1 font-mono text-xs text-foreground/85">
                   {JSON.stringify(policy.value)}
                 </p>
@@ -938,7 +937,7 @@ function AuditTab() {
                   <span className="mono-label w-32 shrink-0 text-muted-foreground">
                     {fmt(event.createdAt)}
                   </span>
-                  <span className="mono-label text-rose/80">{event.actorType}:{event.actor}</span>
+                  <span className="mono-label text-brand">{event.actorType}:{event.actor}</span>
                   <span className="text-xs font-medium text-foreground/90">
                     {event.eventType.replace(/_/g, " ")}
                   </span>
@@ -967,7 +966,7 @@ function AuditTab() {
 function TabLoading() {
   return (
     <div className="flex items-center justify-center py-16">
-      <Loader2 className="h-6 w-6 animate-spin text-rose" />
+      <Loader2 className="h-6 w-6 animate-spin text-brand" />
     </div>
   );
 }
@@ -1004,7 +1003,7 @@ function ControlConsole() {
   if (overviewQuery.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-rose" />
+        <Loader2 className="h-8 w-8 animate-spin text-brand" />
       </div>
     );
   }
@@ -1012,12 +1011,12 @@ function ControlConsole() {
   if (overviewQuery.isError || !overview) {
     const message = apiErrorMessage(overviewQuery.error);
     return (
-      <div className="grain relative flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
-        <div className="w-full max-w-md border border-border bg-card p-8">
-          <p className="mono-label mb-4 text-rose">
+      <div className="relative flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="w-full max-w-md rounded-lg border border-border bg-card p-8">
+          <p className="mono-label mb-4 text-brand">
             {errorStatus === 401 ? "Sign in required" : "Access"}
           </p>
-          <h1 className="font-display text-2xl font-medium">
+          <h1 className="font-display text-2xl font-semibold">
             {errorStatus === 401
               ? "Sign in to open the control plane"
               : errorStatus === 403
@@ -1028,7 +1027,7 @@ function ControlConsole() {
           {errorStatus === 401 ? (
             <Link
               href="/login"
-              className="mt-6 inline-flex h-11 items-center justify-center bg-rose px-6 text-sm font-medium text-rose-foreground transition-colors hover:bg-rose-hover"
+              className="mt-6 inline-flex h-11 items-center justify-center rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground transition-colors hover:bg-brand-hover"
             >
               Go to sign in
             </Link>
@@ -1039,20 +1038,20 @@ function ControlConsole() {
   }
 
   return (
-    <div className="grain relative min-h-screen bg-background text-foreground">
+    <div className="relative min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <GlimpseLogo href="/" className="text-[1.1rem] sm:text-[1.2rem]" />
+            <DreemerLogo href="/" className="text-[1.1rem] sm:text-[1.2rem]" />
             <span aria-hidden className="h-4 w-px bg-border" />
-            <span className="mono-label truncate text-muted-foreground">Business control plane</span>
+            <span className="mono-label truncate text-muted-foreground">Control plane</span>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="hidden sm:inline">{overview.operatorEmail}</span>
             <span
               className={cn(
                 "mono-label inline-flex items-center gap-1.5",
-                overview.aiConfigured ? "text-emerald-300" : "text-amber-300",
+                overview.aiConfigured ? "text-success" : "text-warning",
               )}
             >
               <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -1076,13 +1075,13 @@ function ControlConsole() {
                 className={cn(
                   "mono-label flex h-8 shrink-0 items-center gap-1.5 border-b-2 px-3 transition-colors",
                   tab === entry.id
-                    ? "border-rose text-rose"
+                    ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 {entry.label}
                 {badge > 0 ? (
-                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-rose px-1 text-[10px] font-semibold text-rose-foreground">
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
                     {badge}
                   </span>
                 ) : null}
@@ -1136,17 +1135,17 @@ function SignedInGate() {
   if (!isLoaded) return <TabLoading />;
   if (!isSignedIn) {
     return (
-      <div className="grain relative flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
-        <div className="w-full max-w-md border border-border bg-card p-8">
-          <p className="mono-label mb-4 text-rose">Sign in required</p>
-          <h1 className="font-display text-2xl font-medium">Operator sign-in</h1>
+      <div className="relative flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="w-full max-w-md rounded-lg border border-border bg-card p-8">
+          <p className="mono-label mb-4 text-brand">Sign in required</p>
+          <h1 className="font-display text-2xl font-semibold">Operator sign-in</h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             The control plane is restricted to platform operators. Sign in with your operator
             account to continue.
           </p>
           <Link
             href="/login"
-            className="mt-6 inline-flex h-11 items-center justify-center bg-rose px-6 text-sm font-medium text-rose-foreground transition-colors hover:bg-rose-hover"
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground transition-colors hover:bg-brand-hover"
           >
             Go to sign in
           </Link>
@@ -1163,7 +1162,7 @@ export default function ControlPlanePage() {
     <>
       <ClerkLoading>
         <div className="flex min-h-screen items-center justify-center bg-background">
-          <Loader2 className="h-8 w-8 animate-spin text-rose" />
+          <Loader2 className="h-8 w-8 animate-spin text-brand" />
         </div>
       </ClerkLoading>
       <ClerkLoaded>

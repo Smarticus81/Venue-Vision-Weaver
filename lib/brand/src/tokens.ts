@@ -8,7 +8,9 @@
  *    focus ring, and small moments of emphasis — never for body text on
  *    ivory (it fails AA). Text that needs to read as coral uses `coral[700]`.
  *  - Ink is for text and icons.
- *  - Ivory is for surfaces. Cards step up to the lighter ivory values.
+ *  - Ivory is for surfaces. The brand ivory (`ivory[200]`) is the band color
+ *    (hero backdrop, sidebar, email body); product pages sit on `ivory[100]`
+ *    with cards one step lighter so dense screens stay legible.
  *  - Sea is the secondary color: links inside running text, informational
  *    states, charts. Calm and cool against the warm page.
  *  - success / warning / error carry meaning only. Each has a text value that
@@ -57,9 +59,9 @@ export const ink = {
 
 export const ivory = {
   0: "#FFFFFF",
-  50: "#FCFBF8", // raised surface (modals, inputs)
-  100: "#F6F4EE", // card surface
-  200: "#E9E6DB", // brand ivory — the page canvas
+  50: "#FCFBF8", // cards, inputs, modals
+  100: "#F6F4EE", // the page canvas for dense product screens
+  200: "#E9E6DB", // brand ivory — bands, sidebars, hero backdrops, email body
   300: "#DCD8CA", // hairlines
   400: "#C9C4B2", // strong borders, dividers on cards
   500: "#AFA996", // disabled text on ivory (decorative only)
@@ -106,9 +108,10 @@ export const color = { coral, ink, ivory, sea, success, warning, error } as cons
  * than a raw scale value, so a surface can be re-themed in one place.
  */
 export const semantic = {
-  canvas: ivory[200],
-  surface: ivory[100],
-  surfaceRaised: ivory[50],
+  canvas: ivory[100],
+  band: ivory[200],
+  surface: ivory[50],
+  surfaceRaised: ivory[0],
   surfaceSunken: ivory[300],
   border: ivory[300],
   borderStrong: ivory[400],

@@ -17,7 +17,7 @@ const textOnSurfaces: Array<[string, string]> = [
   ["errorText", error.text],
 ];
 
-for (const surface of [semantic.canvas, semantic.surface, semantic.surfaceRaised, ivory[0]]) {
+for (const surface of [semantic.band, semantic.canvas, semantic.surface, semantic.surfaceRaised]) {
   for (const [name, fg] of textOnSurfaces) {
     test(`${name} ${fg} reads at AA on ${surface}`, () => {
       assert.ok(contrastRatio(fg, surface) >= AA_TEXT, `${contrastRatio(fg, surface).toFixed(2)}:1`);
@@ -56,7 +56,7 @@ test("white text on status fills is at least AA-large (fills carry icons and sho
 });
 
 test("focus ring is visible against every surface (3:1 non-text)", () => {
-  for (const surface of [semantic.canvas, semantic.surface, semantic.surfaceRaised, ivory[0]]) {
+  for (const surface of [semantic.band, semantic.canvas, semantic.surface, semantic.surfaceRaised]) {
     assert.ok(contrastRatio(semantic.focusRing, surface) >= AA_LARGE, surface);
   }
 });

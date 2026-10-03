@@ -19,7 +19,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[80] bg-black/70 backdrop-blur-[2px]",
+      "fixed inset-0 z-[80] bg-ink/70 backdrop-blur-[2px]",
       "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       className,
     )}
@@ -39,14 +39,14 @@ const DialogContent = React.forwardRef<
   DialogContentProps
 >(({ className, children, variant = "panel", hideClose = false, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay className={variant === "bare" ? "bg-black/90 backdrop-blur-none" : undefined} />
+    <DialogOverlay className={variant === "bare" ? "bg-ink/90 backdrop-blur-none" : undefined} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
         "fixed left-1/2 top-1/2 z-[90] -translate-x-1/2 -translate-y-1/2 focus:outline-none",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-[0.98] data-[state=closed]:zoom-out-[0.98] duration-200",
         variant === "panel" &&
-          "w-[calc(100%-2rem)] max-w-md border border-card-border bg-card p-6 text-foreground sm:p-8",
+          "w-[calc(100%-2rem)] max-w-md rounded-lg border border-card-border bg-card p-6 text-foreground shadow-lg sm:p-8",
         variant === "bare" && "w-[calc(100%-1rem)] max-w-6xl",
         className,
       )}
@@ -72,7 +72,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("font-display text-2xl font-medium leading-tight tracking-tight", className)}
+    className={cn("font-display text-2xl font-semibold leading-tight tracking-tight", className)}
     {...props}
   />
 ));

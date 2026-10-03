@@ -8,7 +8,7 @@ interface SavedSession {
 }
 
 /** Session-scoped only - cleared when the browser tab closes (kiosk privacy). */
-const STORAGE_KEY = "glimpse-my-sessions";
+const STORAGE_KEY = "dreemer-my-sessions";
 
 interface LegacySavedSession {
   sessionId: number;

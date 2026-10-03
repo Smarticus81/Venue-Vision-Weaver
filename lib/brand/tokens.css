@@ -49,9 +49,10 @@
   --dm-error-fill: #C9403A;
   --dm-error-text: #A82E28;
   --dm-error-strong: #7D1F1B;
-  --dm-canvas: #E9E6DB;
-  --dm-surface: #F6F4EE;
-  --dm-surface-raised: #FCFBF8;
+  --dm-canvas: #F6F4EE;
+  --dm-band: #E9E6DB;
+  --dm-surface: #FCFBF8;
+  --dm-surface-raised: #FFFFFF;
   --dm-surface-sunken: #DCD8CA;
   --dm-border: #DCD8CA;
   --dm-border-strong: #C9C4B2;

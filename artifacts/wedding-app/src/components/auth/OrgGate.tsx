@@ -15,21 +15,39 @@ import {
   clerkConfigured,
   clerkExpectedDomain,
   clerkStatus,
-  gardenAppearance,
+  brandAppearance,
 } from "@/lib/clerk";
 
 export function ClerkSetupNotice() {
   const mismatch = clerkStatus === "domain-mismatch";
-  return <FormLayout label="Venue sign-in" title={mismatch ? "Continue to your workspace." : "Sign-in is temporarily unavailable."} description={mismatch ? "Your venue workspace is available at the address below." : "We're getting your workspace ready. Please try again shortly."}>
-    {mismatch ? <a className="nav-cta" href={`https://${clerkExpectedDomain}${window.location.pathname}`}>Continue on {clerkExpectedDomain}</a> : <p role="status" className="text-muted-foreground">Please contact your venue support team if this continues.</p>}
-  </FormLayout>;
+  return (
+    <FormLayout
+      label="Venue sign-in"
+      title={mismatch ? "Continue to your dashboard." : "Sign-in is temporarily unavailable."}
+      description={
+        mismatch
+          ? "Your dashboard is served from the address below."
+          : "We're finishing setup on our side. Please try again shortly."
+      }
+    >
+      {mismatch ? (
+        <a className="action-primary" href={`https://${clerkExpectedDomain}${window.location.pathname}`}>
+          Continue on {clerkExpectedDomain}
+        </a>
+      ) : (
+        <p role="status" className="text-muted-foreground">
+          If this keeps happening, reply to any Dreemer email and we will sort it out.
+        </p>
+      )}
+    </FormLayout>
+  );
 }
 
 function ClerkConnectionFailed() {
   return (
-    <div className="relative w-full max-w-md bg-card p-8 text-center">
+    <div className="relative w-full max-w-md rounded-lg border border-border bg-card p-8 text-center">
       <p className="eyebrow mb-4 text-brand">Connection issue</p>
-      <h2 className="font-display text-xl font-medium mb-3">Sign-in couldn't load</h2>
+      <h2 className="font-display text-xl font-semibold mb-3">Sign-in couldn't load</h2>
       <p className="text-sm leading-relaxed text-muted-foreground">
         We couldn't reach the sign-in service. Check your connection or any
         content blockers, then reload.
@@ -37,7 +55,7 @@ function ClerkConnectionFailed() {
       <button
         type="button"
         onClick={() => window.location.reload()}
-        className="mt-6 inline-flex h-11 items-center justify-center bg-brand px-6 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-hover"
+        className="mt-6 inline-flex h-11 items-center justify-center rounded-md bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors hover:bg-brand-hover"
       >
         Reload
       </button>
@@ -149,15 +167,15 @@ export function OrgGate({ children }: { children: ReactNode }) {
     return (
       <div className="relative min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-8 px-6 py-16">
         <div className="text-center max-w-md">
-          <p className="eyebrow mb-4 text-brand">One last step</p>
-          <h1 className="font-display text-3xl font-medium mb-3">Name your organization</h1>
+          <p className="eyebrow mb-4 text-brand">Step 2 of 3</p>
+          <h1 className="font-display text-3xl font-semibold mb-3">Name your business</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Your organization owns billing and credits for every venue you add.
-            Teammates you invite sign in with their own profiles under it.
+            Billing and credits belong to the business, not to one person, so
+            teammates you invite can sign in with their own accounts.
           </p>
         </div>
         <CreateOrganization
-          appearance={gardenAppearance}
+          appearance={brandAppearance}
           skipInvitationScreen
           hideSlug
         />

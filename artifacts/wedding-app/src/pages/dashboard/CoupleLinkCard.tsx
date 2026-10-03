@@ -3,6 +3,7 @@ import { Check, Copy, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/copy";
 import { cn } from "@/lib/utils";
+import { semantic } from "@workspace/brand";
 
 /**
  * The hand-off. Every gallery starts with a couple opening this link, so it
@@ -22,7 +23,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
           type: "svg",
           margin: 4,
           errorCorrectionLevel: "M",
-          color: { dark: "#23392c", light: "#ffffff" },
+          color: { dark: semantic.text, light: semantic.surfaceRaised },
         }),
         QRCode.toDataURL(url, {
           width: 1024,
@@ -52,10 +53,10 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
   return (
     <section
       aria-labelledby="couple-link-title"
-      className="relative flex flex-col gap-5 border border-card-border bg-card p-5 sm:flex-row sm:items-start sm:p-6"
+      className="relative flex flex-col gap-5 rounded-lg border border-card-border bg-card p-5 sm:flex-row sm:items-start sm:p-6"
     >
       <div
-        className="relative mx-auto grid h-32 w-32 shrink-0 place-items-center bg-background p-2.5 sm:mx-0"
+        className="relative mx-auto grid h-32 w-32 shrink-0 place-items-center rounded-md bg-popover p-2.5 sm:mx-0"
         role="img"
         aria-label={`QR code for ${url}`}
       >
@@ -75,15 +76,15 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {venueReady
-            ? "Print the code for tour cards, or paste the link into your follow-up email."
-            : "Add a venue photo and this link opens for couples."}
+            ? "Put the QR code on your tour card, or paste the link into your follow-up email. Couples open it, add their photos, and get their gallery."
+            : "Add at least one venue photo and this link opens for couples."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             type="button"
             variant="brand"
             onClick={async () => setCopied(await copyText(url))}
-            className={cn("h-10 px-4", copied && "border-emerald-400/30 bg-emerald-400/15 text-emerald-700 hover:bg-emerald-400/15")}
+            className={cn("h-10 px-4", copied && "bg-success-soft text-success hover:bg-success-soft")}
             data-testid="couple-link-copy"
           >
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -97,7 +98,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
           {png && (
             <a
               href={png}
-              download="glimpse-couple-qr.png"
+              download="dreemer-couple-qr.png"
               className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Download className="h-4 w-4" /> QR as PNG

@@ -16,22 +16,22 @@ export default function LandingPage() {
         <div className="entry-photo">
           <img
             src={BRAND_ASSETS.heroAtmosphere}
-            alt="A wedding day imagined in a sunlit garden"
+            alt="A couple in a sunlit garden venue, generated from the venue’s photos"
             width="1200"
             height="900"
           />
-          <span>Your day starts with a possibility.</span>
+          <span>See yourselves married at the venue you just toured.</span>
         </div>
         <section>
-          <p className="eyebrow">For the two of you</p>
+          <p className="eyebrow">For couples</p>
           <h1>
-            What if
+            Picture your day
             <br />
-            <em>this was your day?</em>
+            in the real place.
           </h1>
           <p>
-            See yourselves in the venue you’ve been dreaming about. Start with
-            the code or link your venue shared.
+            Your venue shared a code or link with you. Enter it to make four
+            images and a short reel of the two of you, there.
           </p>
           <form
             onSubmit={(e) => {
@@ -40,7 +40,7 @@ export default function LandingPage() {
               if (slug) navigate(`/preview/${slug}`);
             }}
           >
-            <label htmlFor="venue-code">Your venue code or link</label>
+            <label htmlFor="venue-code">Venue code or link</label>
             <Input
               id="venue-code"
               value={code}
@@ -50,7 +50,7 @@ export default function LandingPage() {
               aria-describedby="code-help"
             />
             <p id="code-help" className="caption">
-              Find it on your venue’s QR card or welcome email.
+              It is on the venue’s QR card or in the email they sent you.
             </p>
             <Button
               type="submit"
@@ -75,7 +75,7 @@ export default function LandingPage() {
               <span>02</span> Choose your style
             </li>
             <li>
-              <span>03</span> Meet your wedding day
+              <span>03</span> Get your gallery by email
             </li>
           </ol>
         </section>

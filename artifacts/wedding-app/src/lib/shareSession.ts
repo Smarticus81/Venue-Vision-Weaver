@@ -23,11 +23,11 @@ export async function shareSession(
   if (!url) return "failed";
 
   const title = session.coupleName
-    ? `${session.coupleName}'s Wedding Gallery`
-    : "Our Wedding Gallery";
+    ? `${session.coupleName}'s wedding gallery`
+    : "Our wedding gallery";
   const text = session.venue?.name
-    ? `See our glimpse gallery at ${session.venue.name}`
-    : "See our glimpse gallery";
+    ? `See us married at ${session.venue.name}`
+    : "See our Dreemer gallery";
 
   if (navigator.share) {
     try {
