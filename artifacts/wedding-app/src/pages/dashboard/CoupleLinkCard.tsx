@@ -63,7 +63,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         {svg ? (
           <div className="h-full w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
         ) : (
-          <div className="h-full w-full animate-pulse bg-secondary" />
+          <div className="h-full w-full animate-pulse bg-soft" />
         )}
       </div>
 

@@ -3,6 +3,56 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-10-03 (seventeenth pass) — Dreemer rebrand
+
+Full rebrand from the old name to **Dreemer** (dreemer.co). Brief: coral
+mark, ink wordmark, ivory ground; business-tool feel; venue-owner copy with
+one value — more tours turn into booked dates.
+
+**Direction (one line):** warm ivory paper, ink type, one coral action.
+Geometric everything: the constructed wordmark, Outfit for display, Figtree
+for body, 8/12/20px radii, squircle mark.
+
+**Tokens:** one shared module, `lib/brand` (`BRAND.md` documents it). The web
+app maps `--dm-*` into Tailwind in `index.css`; the API server imports the
+same module for emails, the reel title card and the QA page. Contrast is
+asserted by tests (39 pairs), not eyeballed: coral as text is `coral.700`,
+never `coral.500` (2.2:1 on ivory); primary buttons are ink-on-coral
+(7:1), never white-on-coral (2.7:1); the focus ring is `coral.700`
+because `coral.500` fails 3:1 on ivory.
+
+**Logo:** the brief's PNG was not attached, so the mark and wordmark were
+constructed from the written description — monoline geometric lowercase
+from circles and stems, soft coral squircle with a thin orbit line and a
+four-point spark. All variants (icon / wordmark / lockup × color / ink /
+reversed), favicons, app icons and the OG card are generated from one
+geometry file; the React logo reads the same paths. Check against the
+original render when it arrives (`lib/brand/assets/logo/README.md`).
+
+**Landing (`/`):** spine unchanged (venue owner → create account), copy
+rewritten plain: "Turn tours into bookings." → how it works in four steps on
+an ink band → sample gallery → **proof placeholders** (two dashed slots:
+"Reserved for a venue quote", "Reserved for booking numbers") → plans
+without invented prices → one closing CTA. Kills: the "a little…" /
+"possibility" / "imagine" vocabulary, the serif display face, the olive
+palette, the ↗ arrow CTAs, italic emphasis in headlines.
+
+**Product screens:** no layout changes; colors, type and radii re-tokenised.
+Dashboard status pills now use success/warning/danger roles instead of
+Tailwind emerald/red; the control plane dropped the undefined `rose`/`grain`
+classes (they were never defined in CSS) for the same roles. Owner-facing
+copy de-jargoned ("Create gallery", "In progress", "Couple").
+
+**Emails:** ivory body, card on `ivory.50`, lockup PNG header, coral button
+with ink text, sea links, "Dreemer · Turn tours into bookings." footer.
+
+**Deliberate leftovers:** the Supabase bucket defaults keep the old name
+(live data). Listed with migration paths in `BRAND.md`.
+
+**Not done / next:** real proof in the two slots; plan prices once set;
+the original logo render for a side-by-side check; a dark theme (tokens
+already carry the ink roles).
+
 ## 2026-10-02 (sixteenth pass) — Dashboard de-clutter (visual only)
 
 Owner brief after a full review: make the owner dashboard cleaner and

@@ -445,7 +445,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                   onChange={(event) => setEmailInput(event.target.value)}
                   placeholder="you@example.com"
                   autoComplete="email"
-                  className="w-full rounded-md bg-secondary border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand transition-colors"
+                  className="w-full rounded-md bg-soft border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand transition-colors"
                   data-testid="email-input"
                   aria-label="Email address for your gallery"
                 />

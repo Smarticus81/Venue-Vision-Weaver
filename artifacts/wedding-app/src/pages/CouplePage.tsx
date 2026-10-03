@@ -235,7 +235,7 @@ export default function CouplePage() {
                   : "We couldn't begin",
               description:
                 err.status === 402
-                  ? "This venue isn’t taking new galleries right now. Please check with the venue team."
+                  ? "This venue is temporarily unavailable for new galleries. Please check with the venue team."
                   : msg,
               variant: "destructive",
             });
@@ -524,8 +524,8 @@ function UploadStep({
           Add your photos
         </p>
         <p className="text-base text-muted-foreground max-w-md mx-auto">
-          One to three JPG, PNG, or WebP photos under 50MB — distinct angles or
-          expressions, at least 256px wide.
+          One to three JPG, PNG, or WebP photos under 50MB, at least 256px
+          wide. Pick distinct angles or expressions.
         </p>
         <p
           className="eyebrow mt-6 text-brand"

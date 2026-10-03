@@ -262,6 +262,9 @@ export default function VenueLandingPage() {
         <p className="caption">
           Five galleries free. Setup is your venue photos and your booking link.
         </p>
+        <Link href="/login" className="text-link" data-testid="venue-trial-sign-in">
+          Already set up? Sign in
+        </Link>
       </section>
       <SiteFooter />
     </div>
