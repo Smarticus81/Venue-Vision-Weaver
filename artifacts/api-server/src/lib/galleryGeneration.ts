@@ -245,7 +245,7 @@ export async function processGallerySession(ctx: GalleryGenerationContext): Prom
         sceneTotal: scenes.length,
         aspectRatio: scene.aspectRatio,
       },
-      "Rendering glimpse gallery still",
+      "Rendering Dreemer gallery still",
     );
 
     const result = await renderGalleryFrameWithQuality({

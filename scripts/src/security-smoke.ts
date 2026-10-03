@@ -488,7 +488,7 @@ try {
     NODE_ENV: "production",
     PORT: "5000",
     DATABASE_URL: "postgresql://user:pass@aws-0-us.pooler.supabase.com:5432/postgres?sslmode=require",
-    APP_BASE_URL: "https://glimpse.examplevenue.com",
+    APP_BASE_URL: "https://dreemer.examplevenue.com",
     UPLOAD_TOKEN_SECRET: "long-upload-token-secret",
     SESSION_SECRET: "long-session-secret",
     SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
@@ -502,7 +502,7 @@ try {
     STRIPE_PRICE_GROWTH_MONTHLY: "price_123growth",
     STRIPE_PRICE_CREDIT_PACK_10: "price_123pack10",
     RESEND_API_KEY: "re_live_real",
-    EMAIL_FROM: "glimpse <noreply@examplevenue.com>",
+    EMAIL_FROM: "Dreemer <noreply@examplevenue.com>",
     OPENAI_API_KEY: "sk-proj-production-like-key-123",
     GOOGLE_AI_API_KEY: "AIzaProductionLikeKey123",
     IMAGE_MODEL: "gpt-image-2.5-sunburst",
@@ -570,7 +570,7 @@ try {
     GEMINI_QUALITY_MODEL: "gemini-2.5-flash",
     GEMINI_IMAGE_SIZE: "2k",
     GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1",
-    EMAIL_FROM: "glimpse <onboarding@resend.dev>",
+    EMAIL_FROM: "Dreemer <onboarding@resend.dev>",
     CLERK_SECRET_KEY: "not-a-clerk-secret",
     CLERK_PUBLISHABLE_KEY: "not-a-clerk-publishable-key",
     STRIPE_SECRET_KEY: "sk_test_placeholder",
@@ -670,22 +670,22 @@ try {
 
   const corsEnv = {
     NODE_ENV: "production",
-    APP_BASE_URL: "https://glimpse.examplevenue.com",
-    RAILWAY_PUBLIC_DOMAIN: "glimpse-production.up.railway.app",
+    APP_BASE_URL: "https://dreemer.examplevenue.com",
+    RAILWAY_PUBLIC_DOMAIN: "dreemer-production.up.railway.app",
     CORS_ALLOWED_ORIGINS: "https://admin.examplevenue.com, https://kiosk.examplevenue.com/path",
   } as NodeJS.ProcessEnv;
   assert.deepEqual(
     [...allowedCorsOrigins(corsEnv)].sort(),
     [
       "https://admin.examplevenue.com",
-      "https://glimpse-production.up.railway.app",
-      "https://glimpse.examplevenue.com",
+      "https://dreemer-production.up.railway.app",
+      "https://dreemer.examplevenue.com",
       "https://kiosk.examplevenue.com",
     ],
     "CORS allowlist normalizes configured production origins",
   );
   assert.equal(
-    isCorsOriginAllowed("https://glimpse.examplevenue.com", corsEnv),
+    isCorsOriginAllowed("https://dreemer.examplevenue.com", corsEnv),
     true,
     "production CORS allows the configured public app origin",
   );
@@ -723,7 +723,7 @@ try {
     "rate limiting normalizes IPv4-mapped IPv6 client addresses",
   );
   assert.equal(
-    trustProxySetting({ NODE_ENV: "production", RAILWAY_PUBLIC_DOMAIN: "glimpse.up.railway.app" } as NodeJS.ProcessEnv),
+    trustProxySetting({ NODE_ENV: "production", RAILWAY_PUBLIC_DOMAIN: "dreemer.up.railway.app" } as NodeJS.ProcessEnv),
     1,
     "Railway production deployments trust exactly one proxy hop for req.ip",
   );
@@ -1123,7 +1123,7 @@ try {
   assert.match(
     railwayEnvTemplate,
     /UPLOAD_TOKEN_SECRET=generate-a-second-long-random-string[\s\S]*SUPABASE_STORAGE_BUCKET=glimpse[\s\S]*SUPABASE_PUBLIC_BUCKET=glimpse-public/s,
-    "Railway env template includes authenticated upload token secret and glimpse storage buckets",
+    "Railway env template includes authenticated upload token secret and the Supabase storage buckets",
   );
   assert.match(
     openApiSpec,

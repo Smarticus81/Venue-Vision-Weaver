@@ -1,4 +1,4 @@
-# glimpse Gallery QA
+# Dreemer Gallery QA
 
 Use the gallery QA harness before calling a model/prompt change production-ready. It runs the same production gallery renderer used by real sessions:
 
@@ -85,7 +85,7 @@ The output folder contains:
 
 - `01-*.raw.jpg` through `04-*.raw.jpg` - unbranded model outputs
 - `01-*.jpg` through `04-*.jpg` - polished gallery stills
-- `glimpse-motion-reel.mp4` - branded motion reel
+- `dreemer-motion-reel.mp4` - branded motion reel
 - `quality-report.json` - model settings, input files with SHA-256 fingerprints, automated summary, scene venue refs, attempts, and judge scores
 - `review.html` - contact sheet with references, raw frames, polished frames, scores, used venue refs, and operator checklist
 

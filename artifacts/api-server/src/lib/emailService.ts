@@ -1,9 +1,10 @@
 import { Resend } from "resend";
+import { brand, font, semantic } from "@workspace/brand";
 import { logger } from "./logger.js";
 import { getAppBaseUrl, shareUrlForToken } from "./appUrl.js";
 
 const resendApiKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.EMAIL_FROM ?? "glimpse <onboarding@resend.dev>";
+const fromEmail = process.env.EMAIL_FROM ?? "Dreemer <onboarding@resend.dev>";
 const usingSandboxSender = fromEmail.includes("onboarding@resend.dev");
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
@@ -35,34 +36,48 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Shared email chrome, built on the brand tokens: ivory band behind a single
+ * card, the lockup up top, one heading, body copy, and a quiet footer. All
+ * styling is inline because email clients ignore most stylesheets.
+ */
 function emailLayout(title: string, bodyHtml: string): string {
   const site = getAppBaseUrl();
+  const safeSite = escapeHtml(site);
+  const safeTitle = escapeHtml(title);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)}</title>
+  <title>${safeTitle}</title>
+  <style>
+    a { color: ${semantic.secondary}; }
+    p { margin: 0 0 16px; }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f7f4ef;font-family:Georgia,'Times New Roman',serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f7f4ef;padding:32px 16px;">
+<body style="margin:0;padding:0;background-color:${semantic.band};font-family:${font.email};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:${semantic.band};padding:32px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#fffdf9;border:1px solid #e8e0d4;border-radius:12px;overflow:hidden;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:${semantic.surface};border:1px solid ${semantic.border};border-radius:12px;overflow:hidden;">
           <tr>
-            <td style="padding:28px 32px 8px;text-align:center;">
-              <p style="margin:0;font-size:13px;letter-spacing:0.28em;text-transform:uppercase;color:#9a8b6e;">glimpse</p>
-              <h1 style="margin:12px 0 0;font-size:26px;font-weight:500;color:#1f1f1f;line-height:1.3;">${escapeHtml(title)}</h1>
+            <td style="padding:28px 32px 0;">
+              <a href="${safeSite}" style="display:inline-block;text-decoration:none;">
+                <img src="${safeSite}/dreemer-lockup-email.png" width="140" height="21" alt="${escapeHtml(brand.name)}" style="display:block;border:0;outline:none;width:140px;height:21px;font-family:${font.email};font-size:16px;font-weight:600;line-height:21px;color:${semantic.text};" />
+              </a>
+              <h1 style="margin:24px 0 0;font-family:${font.email};font-size:24px;font-weight:600;line-height:1.25;color:${semantic.text};">${safeTitle}</h1>
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 32px 28px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#3d3d3d;">
+            <td style="padding:16px 32px 28px;font-family:${font.email};font-size:15px;line-height:1.6;color:${semantic.textSecondary};">
               ${bodyHtml}
             </td>
           </tr>
           <tr>
-            <td style="padding:16px 32px 24px;border-top:1px solid #efe9df;text-align:center;font-family:system-ui,sans-serif;font-size:11px;color:#8a8278;">
-              <a href="${escapeHtml(site)}" style="color:#8a8278;text-decoration:none;">${escapeHtml(site)}</a>
+            <td style="padding:16px 32px 24px;border-top:1px solid ${semantic.border};font-family:${font.email};font-size:12px;line-height:1.6;color:${semantic.textMuted};">
+              <a href="${safeSite}" style="color:${semantic.textMuted};text-decoration:none;">${safeSite}</a><br />
+              ${escapeHtml(brand.name)} · ${escapeHtml(brand.tagline)}
             </td>
           </tr>
         </table>
@@ -76,15 +91,15 @@ function emailLayout(title: string, bodyHtml: string): string {
 function ctaButton(href: string, label: string): string {
   const safeHref = escapeHtml(href);
   const safeLabel = escapeHtml(label);
-  return `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px auto 8px;">
+  return `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px;">
     <tr>
-      <td style="border-radius:999px;background:#b8955a;">
-        <a href="${safeHref}" style="display:inline-block;padding:14px 28px;font-family:system-ui,sans-serif;font-size:15px;font-weight:600;color:#fffdf9;text-decoration:none;">${safeLabel}</a>
+      <td style="border-radius:8px;background:${semantic.accent};">
+        <a href="${safeHref}" style="display:inline-block;padding:14px 28px;border-radius:8px;font-family:${font.email};font-size:15px;font-weight:600;line-height:1.2;color:${semantic.textOnAccent};text-decoration:none;">${safeLabel}</a>
       </td>
     </tr>
   </table>
-  <p style="margin:12px 0 0;font-size:12px;color:#8a8278;text-align:center;word-break:break-all;">
-    <a href="${safeHref}" style="color:#8a8278;">${safeHref}</a>
+  <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:${semantic.textMuted};word-break:break-all;">
+    <a href="${safeHref}" style="color:${semantic.textMuted};">${safeHref}</a>
   </p>`;
 }
 
@@ -139,13 +154,15 @@ export async function sendSessionCreatedNotification(
   venue: { name: string },
 ): Promise<void> {
   if (!ownerEmail) return;
-  const couple = session.coupleName ? ` (${session.coupleName})` : "";
-  const body = `<p>A new couple just started a session at <strong>${escapeHtml(venue.name)}</strong>${escapeHtml(couple)}.</p>
-    <p>Session #${session.id} is now processing.</p>`;
+  const who = session.coupleName
+    ? `<strong>${escapeHtml(session.coupleName)}</strong>`
+    : "A couple";
+  const body = `<p>${who} just started a gallery at <strong>${escapeHtml(venue.name)}</strong>.</p>
+    <p>It's session #${session.id}. We'll email you again when it's ready to review.</p>`;
   await sendEmail(
     ownerEmail,
-    `New session at ${venue.name}`,
-    emailLayout("New couple session", body),
+    `New couple at ${venue.name}`,
+    emailLayout("A couple just started a gallery", body),
   );
 }
 
@@ -157,12 +174,13 @@ export async function sendGalleryReadyNotification(
   if (!ownerEmail) return;
   const couple = session.coupleName ?? "A couple";
   const url = shareUrlForToken(session.shareToken);
-  const body = `<p>The gallery for <strong>${escapeHtml(couple)}</strong> at ${escapeHtml(venue.name)} is ready.</p>
-    ${ctaButton(url, "View the gallery")}`;
+  const body = `<p>The gallery for <strong>${escapeHtml(couple)}</strong> at <strong>${escapeHtml(venue.name)}</strong> is ready.</p>
+    ${ctaButton(url, "Review the gallery")}
+    <p style="margin:20px 0 0;">Check the likeness, then send it to the couple from your dashboard.</p>`;
   await sendEmail(
     ownerEmail,
-    `Gallery ready - ${venue.name}`,
-    emailLayout("A glimpse gallery is ready", body),
+    `Gallery ready to review – ${venue.name}`,
+    emailLayout("A gallery is ready to review", body),
   );
 }
 
@@ -176,13 +194,13 @@ export async function sendGalleryToCouple(
     ? escapeHtml(session.coupleName)
     : "there";
   const body = `<p>Hi ${greeting},</p>
-    <p>Your glimpse gallery at <strong>${escapeHtml(venue.name)}</strong> is ready to view.</p>
+    <p>Here are your images and reel at <strong>${escapeHtml(venue.name)}</strong>.</p>
     ${ctaButton(url, "Open your gallery")}
-    <p style="margin-top:20px;font-size:13px;color:#8a8278;">Bookmark this email - the button above is your private link to view again anytime.</p>`;
+    <p style="margin:20px 0 0;font-size:13px;color:${semantic.textMuted};">Keep this email — the button is your private link.</p>`;
   return sendEmail(
     coupleEmail,
-    `Your glimpse at ${venue.name} is ready`,
-    emailLayout("Your glimpse is ready", body),
+    `Your gallery at ${venue.name} is ready`,
+    emailLayout("Your gallery is ready", body),
   );
 }
 
@@ -198,6 +216,7 @@ export async function sendRecoveryEmail(
   }>,
 ): Promise<EmailSendResult> {
   if (sessions.length === 0) return { sent: false, reason: "No sessions to include." };
+  const cell = `padding:10px 8px;border-bottom:1px solid ${semantic.border};`;
   const rows = sessions
     .filter((s) => !!s.shareToken)
     .map((s) => {
@@ -205,34 +224,34 @@ export async function sendRecoveryEmail(
       const when = new Date(s.createdAt).toLocaleDateString();
       const label = escapeHtml(s.coupleName || `Gallery #${s.id}`);
       return `<tr>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;">${label}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;color:#666;">${escapeHtml(s.venueName)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;color:#666;">${when}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #efe9df;">
-          <a href="${escapeHtml(url)}" style="color:#b8955a;font-weight:600;text-decoration:none;">Open gallery</a>
+        <td style="${cell}color:${semantic.text};">${label}</td>
+        <td style="${cell}color:${semantic.textMuted};">${escapeHtml(s.venueName)}</td>
+        <td style="${cell}color:${semantic.textMuted};">${when}</td>
+        <td style="${cell}">
+          <a href="${escapeHtml(url)}" style="color:${semantic.secondary};font-weight:600;text-decoration:none;">Open gallery</a>
         </td>
       </tr>`;
     })
     .join("");
 
-  const body = `<p>Here are the glimpse galleries we found for this email address:</p>
-     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:16px 0;font-family:system-ui,sans-serif;font-size:14px;">
+  const head = `padding:8px;border-bottom:2px solid ${semantic.border};font-weight:600;color:${semantic.textMuted};`;
+  const body = `<p>Here are the galleries linked to this email address:</p>
+     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:16px 0;font-family:${font.email};font-size:14px;">
        <thead>
-         <tr style="text-align:left;color:#666;">
-           <th style="padding:8px;border-bottom:2px solid #ddd;">Couple</th>
-           <th style="padding:8px;border-bottom:2px solid #ddd;">Venue</th>
-           <th style="padding:8px;border-bottom:2px solid #ddd;">Date</th>
-           <th style="padding:8px;border-bottom:2px solid #ddd;"></th>
+         <tr style="text-align:left;">
+           <th style="${head}">Couple</th>
+           <th style="${head}">Venue</th>
+           <th style="${head}">Date</th>
+           <th style="${head}"></th>
          </tr>
        </thead>
        <tbody>${rows}</tbody>
      </table>
-     <p style="color:#8a8278;font-size:12px;">These links are private. If you did not request this email, you can ignore it.</p>`;
+     <p style="margin:0;color:${semantic.textMuted};font-size:12px;">These links are private. If you did not request this email, you can ignore it.</p>`;
 
   return sendEmail(
     email,
-    "Your glimpse gallery links",
-    emailLayout("Find your galleries", body),
+    "Your Dreemer gallery links",
+    emailLayout("Your galleries", body),
   );
 }
-

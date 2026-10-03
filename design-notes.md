@@ -91,7 +91,7 @@ under the submit. Shared step header with a 3-segment progress bar.
 
 **Cross-page** — one radius for controls (the `Button` primitive's
 `rounded-md`; tiles and photos stay square), 404 / not-found / not-ready /
-failed pages on one centered layout with the logo, `GlimpseShell` deleted
+failed pages on one centered layout with the logo, the old shell wrapper deleted
 (unused), header email dropped, alert icons dropped from state pages.
 
 Killed: whole-page fade on the dashboard main (a paused animation left the
@@ -116,7 +116,7 @@ stable looping background; remove the other video.
   sign-in, credits line) with the same veil gradient and text-shadows.
 - **Reduced motion:** identical layout, poster still instead of the
   playing video.
-- **Media removed:** all `/media/glimpse-venue-transformation*` files
+- **Media removed:** all the old transformation media files
   (original + web mp4/webm derivatives + poster/final stills, ~19MB).
 - **Media added:** `/brand/hero.webm` (VP9 crf34, no audio, 2.0MB)
   listed before the mp4 — Chromium builds without licensed H.264
@@ -148,10 +148,10 @@ cinematic hero; the mountain concept is abandoned entirely.
 - **Copy choreography:** opening editorial lockup bottom-left ("Turn
   tours into bookings." / "Let couples see themselves here." / CTA)
   fades by 48%; final lockup ("Make the tour unforgettable." + "See
-  how glimpse works →") settles in from 86%; scroll cue dies at 6%.
+  how it works →") settles in from 86%; scroll cue dies at 6%.
   Light text-shadows only — no panels, no heavy scrims; the veil is
   the brief's 0.16/0.02/0.14 gradient.
-- **Media:** original kept at /media/glimpse-venue-transformation.mp4;
+- **Media:** original kept as the old transformation media mp4;
   web derivatives per the brief's recipe (H.264 crf17 g12 faststart
   7.9MB + VP9 crf30 g12 5.5MB for Chrome/Firefox — sandbox Chromium
   decodes only VP9), poster + final-frame stills (webp q88).
@@ -308,7 +308,7 @@ petals) behind the whole page; the visitor re-lights it.
 **Signature — the mood dial.** Golden hour / Candlelit / Moonlit toggle
 in the hero re-lights the entire scene (sky shader, disc, bulbs, petals)
 AND the page accent — and the caption says the quiet part: this is
-literally what glimpse does for couples. The reference video's "theme /
+literally what the product does for couples. The reference video's "theme /
 environment control bar" productized as the sales pitch.
 
 **Scene (`venue-landing/venueScene.ts`, vanilla three, lazy chunk):**
@@ -418,7 +418,7 @@ traction numbers, unlike the reference's "+900 venues / +24k galleries".
   `brandAssets.ts` at local `/brand/*` paths permanently. Total imagery ~270KB.
 - The MCP gateway strips `input_images` on every image model, so the four
   frames drifted to different couples. Honest fix for now: mono footnote
-  "Frames from sample glimpse galleries" under the contact sheet. Future fix:
+  "Frames from sample galleries" under the contact sheet. Future fix:
   Soul character pipeline (create character from the ceremony frame, generate
   the other scenes with soul_id) for a true single-couple sheet.
 - Post-login/app surfaces carried into the darkroom editorial language (mono
@@ -511,7 +511,7 @@ venues, the darkroom where the gallery "develops."
 - `.grain` utility: static SVG turbulence tile, screen-blended at 5% — the
   signature texture, applied to hero/final sections only (not body copy).
 
-**Logo:** old bold-sans "Glimpse." wordmark with gold period is gone. New mark:
+**Logo:** the old bold-sans wordmark with gold period is gone. New mark:
 a camera-viewfinder (four corner brackets) with a rose aperture dot, wordmark
 lowercase Fraunces. Same system in `favicon.svg`. Old logo PNGs deleted.
 

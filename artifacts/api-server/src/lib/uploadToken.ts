@@ -11,7 +11,7 @@ function uploadTokenSecret(): string {
   if (process.env.NODE_ENV === "production") {
     throw new Error("UPLOAD_TOKEN_SECRET or SESSION_SECRET must be set in production.");
   }
-  return "glimpse-local-upload-token";
+  return "dreemer-local-upload-token";
 }
 
 function signPayload(payload: string): string {

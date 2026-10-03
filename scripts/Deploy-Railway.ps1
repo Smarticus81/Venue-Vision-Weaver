@@ -1,11 +1,11 @@
 param(
-  [string]$ProjectName = "glimpse"
+  [string]$ProjectName = "dreemer"
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
-Write-Host "glimpse - Railway deploy" -ForegroundColor Cyan
+Write-Host "Dreemer - Railway deploy" -ForegroundColor Cyan
 Write-Host ""
 
 if (-not (Get-Command railway -ErrorAction SilentlyContinue)) {

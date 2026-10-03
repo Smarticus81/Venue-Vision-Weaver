@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { coral, font, ink, ivory, semantic } from "@workspace/brand";
 import { fileURLToPath } from "node:url";
 
 const VENUE_QA_COVERAGE_ORDER = [
@@ -425,38 +426,39 @@ async function writeHtmlReview(params: {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>glimpse gallery QA review</title>
+  <title>Dreemer gallery QA review</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f4ef; color: #24211d; }
+    :root { color-scheme: light; font-family: ${font.body}; background: ${semantic.canvas}; color: ${semantic.text}; }
     body { margin: 0; padding: 32px; }
     main { max-width: 1360px; margin: 0 auto; }
-    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; margin: 0; }
-    h1 { font-size: clamp(32px, 5vw, 64px); line-height: 0.95; }
-    h2 { font-size: 30px; }
+    h1, h2, h3 { font-family: ${font.display}; font-weight: 600; letter-spacing: -0.02em; margin: 0; color: ${semantic.text}; }
+    h1 { font-size: clamp(32px, 5vw, 56px); line-height: 1.05; }
+    h2 { font-size: 28px; }
     h3 { font-size: 18px; }
-    p { color: #665f55; line-height: 1.55; }
-    img { display: block; width: 100%; height: auto; background: #e9e2d7; }
-    figure { margin: 0; border: 1px solid #ded4c6; background: #fffdf9; }
-    figcaption { padding: 10px 12px; color: #665f55; font-size: 13px; }
-    .hero, .panel, .frame { background: #fffdf9; border: 1px solid #ded4c6; padding: 24px; margin-bottom: 24px; }
+    p { color: ${semantic.textSecondary}; line-height: 1.6; }
+    a { color: ${semantic.secondary}; }
+    img { display: block; width: 100%; height: auto; background: ${ivory[200]}; }
+    figure { margin: 0; border: 1px solid ${semantic.border}; border-radius: 8px; overflow: hidden; background: ${semantic.surface}; }
+    figcaption { padding: 10px 12px; color: ${semantic.textSecondary}; font-size: 13px; }
+    .hero, .panel, .frame { background: ${semantic.surface}; border: 1px solid ${semantic.border}; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr); gap: 24px; align-items: start; }
-    .eyebrow { margin: 0 0 8px; color: #b8955a; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; }
-    .meta { display: grid; gap: 8px; font-size: 14px; color: #3d3832; }
+    .eyebrow { margin: 0 0 8px; color: ${coral[700]}; font-family: ${font.body}; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .meta { display: grid; gap: 8px; font-size: 14px; color: ${ink[700]}; }
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-    .summary-grid div { border: 1px solid #e7ded2; background: #fbf8f2; padding: 12px; }
-    .summary-grid strong { display: block; color: #665f55; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
-    .summary-grid span { color: #24211d; font-size: 20px; }
-    .warnings { margin-top: 14px; color: #665f55; }
+    .summary-grid div { border: 1px solid ${semantic.border}; border-radius: 8px; background: ${semantic.canvas}; padding: 12px; }
+    .summary-grid strong { display: block; color: ${semantic.textMuted}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .summary-grid span { color: ${semantic.text}; font-family: ${font.display}; font-size: 20px; }
+    .warnings { margin-top: 14px; color: ${semantic.textSecondary}; }
     .warnings ul { margin: 0; padding-left: 20px; }
     .refs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
     .checklist { display: grid; gap: 10px; }
-    .checklist label { padding: 12px; border: 1px solid #e7ded2; background: #fbf8f2; }
+    .checklist label { padding: 12px; border: 1px solid ${semantic.border}; border-radius: 8px; background: ${semantic.canvas}; }
     .frame header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); gap: 18px; margin-bottom: 18px; }
-    .score { border: 1px solid #e7ded2; background: #fbf8f2; padding: 12px; font-size: 13px; line-height: 1.5; color: #3d3832; }
+    .score { border: 1px solid ${semantic.border}; border-radius: 8px; background: ${semantic.canvas}; padding: 12px; font-size: 13px; line-height: 1.5; color: ${ink[700]}; }
     .frame-grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) minmax(220px, 0.65fr); gap: 14px; align-items: start; }
-    .used-refs { border: 1px solid #ded4c6; background: #fffdf9; padding: 12px; }
+    .used-refs { border: 1px solid ${semantic.border}; border-radius: 8px; background: ${semantic.surface}; padding: 12px; }
     .used-refs div { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin-top: 10px; }
-    video { width: 100%; max-height: 70vh; background: #111; }
+    video { width: 100%; max-height: 70vh; background: ${ink[900]}; }
     @media (max-width: 820px) { body { padding: 16px; } .hero, .frame header, .frame-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -464,7 +466,7 @@ async function writeHtmlReview(params: {
 <main>
   <section class="hero">
     <div>
-      <p class="eyebrow">glimpse gallery QA</p>
+      <p class="eyebrow">Dreemer gallery QA</p>
       <h1>Live likeness and venue review</h1>
       <p>Use this page after a real generation run to judge whether the couple is instantly recognizable and naturally blended into the uploaded venue photographs.</p>
     </div>
@@ -639,7 +641,7 @@ async function main(): Promise<void> {
     }
 
     const reel = await buildKenBurnsSlideshow(polishedFrames, 4);
-    const reelPath = path.join(options.outDir, "glimpse-motion-reel.mp4");
+    const reelPath = path.join(options.outDir, "dreemer-motion-reel.mp4");
     await writeFile(reelPath, reel);
     report.reelPath = rel(reelPath);
   } catch (err) {
