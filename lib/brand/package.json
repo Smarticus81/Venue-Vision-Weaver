@@ -1,0 +1,23 @@
+{
+  "name": "@workspace/brand",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dreemer brand tokens, logo assets, and the generators that keep them in sync.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./tokens.css",
+    "./assets/*": "./assets/*"
+  },
+  "scripts": {
+    "build": "node ./node_modules/tsx/dist/cli.mjs ./scripts/build-css.ts",
+    "build:logo": "node ./node_modules/tsx/dist/cli.mjs ./scripts/build-logo.ts",
+    "build:og": "node ./node_modules/tsx/dist/cli.mjs ./scripts/build-og.ts",
+    "test": "node ./node_modules/tsx/dist/cli.mjs --test ./src/tokens.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "sharp": "^0.35.2",
+    "tsx": "catalog:"
+  }
+}
