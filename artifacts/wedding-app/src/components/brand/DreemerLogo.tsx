@@ -5,10 +5,12 @@ import {
   ICON_LINE_PATHS,
   ICON_LINE_STROKE,
   ICON_SIZE,
-  ICON_SPARK_PATH,
+  ICON_SPARK_PATHS,
+  ICON_SPARK_STROKE,
   LOCKUP_GAP,
   LOCKUP_ICON_OFFSET_Y,
   LOCKUP_ICON_SCALE,
+  LOCKUP_ICON_WIDTH,
   LOCKUP_WIDTH,
   WORDMARK_HEIGHT,
   WORDMARK_PATHS,
@@ -47,7 +49,11 @@ export function DreemerLogo({
           <path key={d} d={d} />
         ))}
       </g>
-      <path d={ICON_SPARK_PATH} fill={markFill} />
+      <g fill="none" stroke={markFill} strokeWidth={ICON_SPARK_STROKE} strokeLinecap="round">
+        {ICON_SPARK_PATHS.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
     </g>
   );
   const word = (
@@ -75,7 +81,7 @@ export function DreemerLogo({
     svg = (
       <svg viewBox={`0 0 ${LOCKUP_WIDTH} ${WORDMARK_HEIGHT}`} className="h-[1em] w-auto" aria-hidden focusable="false">
         <g transform={`translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})`}>{mark}</g>
-        <g transform={`translate(${ICON_SIZE * LOCKUP_ICON_SCALE + LOCKUP_GAP} 0)`}>{word}</g>
+        <g transform={`translate(${LOCKUP_ICON_WIDTH + LOCKUP_GAP} 0)`}>{word}</g>
       </svg>
     );
   }

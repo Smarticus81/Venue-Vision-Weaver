@@ -22,7 +22,7 @@ mkdirSync(assetDir, { recursive: true });
 const html = `<!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="${fontImportUrl}">
 <style>
-  html, body { margin: 0; width: 1200px; height: 630px; background: ${semantic.canvas}; color: ${semantic.text}; font-family: ${font.body}; }
+  html, body { margin: 0; width: 1200px; height: 630px; background: ${semantic.band}; color: ${semantic.text}; font-family: ${font.body}; }
   .card { position: relative; width: 1200px; height: 630px; padding: 72px 80px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
   .lockup svg { height: 64px; width: auto; display: block; }
   h1 { font-family: ${font.display}; font-weight: 600; font-size: 92px; line-height: 1.02; letter-spacing: -0.03em; margin: 0; max-width: 880px; }

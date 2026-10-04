@@ -18,29 +18,30 @@ export type LogoVariant = "color" | "ink" | "reversed";
 
 /* ------------------------------------------------------------- wordmark */
 
-export const WORDMARK_STROKE = 19;
+export const WORDMARK_STROKE = 22;
 export const WORDMARK_HEIGHT = 150;
-const GAP = 18;
+const GAP = 12;
 const S = WORDMARK_STROKE / 2; // half stroke, so outer edges land on integers
+const R = 50 - S; // bowl centre-line radius: outer bowl = 100 wide
 
 type Glyph = { width: number; d: string };
 
 const glyphs: Record<"d" | "r" | "e" | "m", Glyph> = {
   d: {
     width: 100,
-    d: `M ${50 - 40} 100 A 40 40 0 1 0 ${50 + 40} 100 A 40 40 0 1 0 ${50 - 40} 100 Z M ${100 - S} 0 V 150`,
+    d: `M ${50 - R} 100 A ${R} ${R} 0 1 0 ${50 + R} 100 A ${R} ${R} 0 1 0 ${50 - R} 100 Z M ${100 - S} 0 V 150`,
   },
   r: {
-    width: 61,
-    d: `M ${S} 150 V 50 M ${S} 90 A 40 40 0 0 1 ${S + 40} 50 H ${S + 48}`,
+    width: 58,
+    d: `M ${S} 150 V 50 M ${S} 88 A 38 38 0 0 1 ${S + 38} 50 H ${S + 47}`,
   },
   e: {
-    width: 100,
     // Ring broken between 3 o'clock and ~4:30, bar through the centre.
-    d: `M 90 100 A 40 40 0 1 0 80.64 125.71 M 10 100 H 90`,
+    width: 100,
+    d: `M ${50 + R} 100 A ${R} ${R} 0 1 0 ${(50 + R * Math.cos(-0.63)).toFixed(2)} ${(100 - R * Math.sin(-0.63)).toFixed(2)} M ${50 - R + 2} 100 H ${50 + R}`,
   },
   m: {
-    width: 159,
+    width: 162,
     d: `M ${S} 150 V 50 M ${S} 85 A 35 35 0 0 1 ${S + 70} 85 V 150 M ${S + 70} 85 A 35 35 0 0 1 ${S + 140} 85 V 150`,
   },
 };
@@ -76,45 +77,46 @@ export const WORDMARK_PATHS: readonly string[] = layout.paths;
 
 /* ----------------------------------------------------------------- mark */
 
+/**
+ * The mark, traced from the reference render (lib/brand/assets/logo/
+ * dreemer-logo-midjourney.png) on a 100-unit grid.
+ *
+ * The filled shape is a heart's left lobe: a soft rounded top-left, a straight
+ * top edge running down to the notch, a straight edge out to the right corner,
+ * a straight edge down to the point, and a gentle curve back up the left side.
+ * The thin line leaves the notch and traces where the right lobe would be,
+ * ending open on the right; a small hand-drawn spark (two short crossing
+ * strokes) sits on the line at its peak, top right.
+ */
 export const ICON_SIZE = 100;
 
-/** Soft squircle body: 68 × 68, corner radius 27. */
+/** Filled lobe. */
 export const ICON_BODY_PATH =
-  "M 37 22 H 51 A 27 27 0 0 1 78 49 V 63 A 27 27 0 0 1 51 90 H 37 A 27 27 0 0 1 10 63 V 49 A 27 27 0 0 1 37 22 Z";
+  "M 47.5 36.5 L 77.5 65.25 L 48.75 95.25 C 30 82, 10 60, 3.5 42 C 0 24, 3 9, 13 5.5 Z";
 
-/** The thin orbit line hugging the body's top-right corner, broken where the spark sits. */
-const ORBIT_CX = 51;
-const ORBIT_CY = 49;
-const ORBIT_R = 36;
-export const ICON_LINE_STROKE = 3.8;
+/** The thin right-lobe line, from the notch up over the top right and back down. */
+export const ICON_LINE_PATHS: readonly string[] = [
+  "M 48.5 35.5 C 56 24, 66 13, 77 11.5 C 88 10, 97 20, 98 31 C 98.5 37, 97.5 42, 96.5 45.5",
+];
+export const ICON_LINE_STROKE = 2.6;
 
-function orbitPoint(deg: number): [number, number] {
-  const rad = (deg * Math.PI) / 180;
-  return [ORBIT_CX + ORBIT_R * Math.cos(rad), ORBIT_CY - ORBIT_R * Math.sin(rad)];
-}
+/** The spark: two short crossing strokes over the line's peak. */
+export const ICON_SPARK_PATHS: readonly string[] = ["M 64 8.5 L 85 14.5", "M 82.5 6 L 75.5 15"];
+export const ICON_SPARK_STROKE = 2.4;
 
-function orbitArc(fromDeg: number, toDeg: number): string {
-  const [x1, y1] = orbitPoint(fromDeg);
-  const [x2, y2] = orbitPoint(toDeg);
-  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${ORBIT_R} ${ORBIT_R} 0 0 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
-}
-
-export const ICON_LINE_PATHS: readonly string[] = [orbitArc(108, 62), orbitArc(28, -14)];
-
-/** Four-point spark centred on the orbit at 45°. */
+/** A four-point star, used by the simplified favicon tile where the hairline strokes vanish. */
 export function sparkPath(cx: number, cy: number, r: number): string {
   return `M ${cx} ${cy - r} Q ${cx} ${cy} ${cx + r} ${cy} Q ${cx} ${cy} ${cx} ${cy + r} Q ${cx} ${cy} ${cx - r} ${cy} Q ${cx} ${cy} ${cx} ${cy - r} Z`;
 }
 
-const [SPARK_X, SPARK_Y] = orbitPoint(45);
-export const ICON_SPARK_PATH = sparkPath(Number(SPARK_X.toFixed(2)), Number(SPARK_Y.toFixed(2)), 7.5);
-
 /* --------------------------------------------------------------- lockup */
 
-export const LOCKUP_GAP = 38;
-export const LOCKUP_ICON_SCALE = 1.5; // icon 100 → 150, matching the ascender
-export const LOCKUP_ICON_OFFSET_Y = 15; // body bottom lands on the baseline
-export const LOCKUP_WIDTH = ICON_SIZE * LOCKUP_ICON_SCALE + LOCKUP_GAP + WORDMARK_WIDTH;
+export const LOCKUP_GAP = 36;
+/** The mark spans y 5.5–95.25 (≈90 units); scale it to the 150-unit ascender. */
+export const LOCKUP_ICON_SCALE = 150 / 90;
+export const LOCKUP_ICON_OFFSET_Y = -5.5 * (150 / 90);
+export const LOCKUP_ICON_WIDTH = 100 * LOCKUP_ICON_SCALE;
+export const LOCKUP_WIDTH = LOCKUP_ICON_WIDTH + LOCKUP_GAP + WORDMARK_WIDTH;
 export const LOCKUP_HEIGHT = WORDMARK_HEIGHT;
 
 /* --------------------------------------------------------------- colors */
@@ -141,7 +143,9 @@ function markGroup(colors: ReturnType<typeof logoColors>, transform?: string): s
     <g fill="none" stroke="${colors.line}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
       ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
     </g>
-    <path d="${ICON_SPARK_PATH}" fill="${colors.line}"/>
+    <g fill="none" stroke="${colors.line}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">
+      ${ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
+    </g>
   </g>`;
 }
 
@@ -179,11 +183,11 @@ export function wordmarkSvg(variant: LogoVariant = "color", options: { padding?:
 export function lockupSvg(variant: LogoVariant = "color", options: { padding?: number } = {}): string {
   const pad = options.padding ?? 0;
   const colors = logoColors(variant);
-  const wordX = ICON_SIZE * LOCKUP_ICON_SCALE + LOCKUP_GAP;
+  const wordX = LOCKUP_ICON_WIDTH + LOCKUP_GAP;
   return `<svg ${XMLNS} viewBox="${-pad} ${-pad} ${LOCKUP_WIDTH + pad * 2} ${LOCKUP_HEIGHT + pad * 2}" role="img" aria-label="Dreemer">
   ${background(colors, LOCKUP_WIDTH, LOCKUP_HEIGHT, pad)}
-  ${markGroup(colors, `translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})`)}
-  ${wordGroup(colors, `translate(${wordX} 0)`)}
+  ${markGroup(colors, `translate(0 ${LOCKUP_ICON_OFFSET_Y.toFixed(2)}) scale(${LOCKUP_ICON_SCALE.toFixed(4)})`)}
+  ${wordGroup(colors, `translate(${wordX.toFixed(2)} 0)`)}
 </svg>
 `;
 }
@@ -205,14 +209,19 @@ export function tileSvg(
   const inset = options.inset ?? 12; // in icon units, around the 100-unit mark (maskable icons pass ~20)
   const markScale = (100 - inset * 2) / 100;
   const r = rounded ? size * 0.22 : 0;
+  const detail = simplified
+    ? `<path d="${sparkPath(80, 12, 9)}" fill="${colors.line}"/>`
+    : `<g fill="none" stroke="${colors.line}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
+      ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
+    </g>
+    <g fill="none" stroke="${colors.line}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">
+      ${ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
+    </g>`;
   return `<svg ${XMLNS} viewBox="0 0 ${size} ${size}" role="img" aria-label="Dreemer">
   <rect width="${size}" height="${size}" rx="${r}" fill="${bg}"/>
   <g transform="scale(${scale}) translate(${inset} ${inset}) scale(${markScale})">
     <path d="${ICON_BODY_PATH}" fill="${colors.mark}"/>
-    ${simplified ? "" : `<g fill="none" stroke="${colors.line}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
-      ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
-    </g>`}
-    <path d="${simplified ? sparkPath(Number(SPARK_X.toFixed(2)), Number(SPARK_Y.toFixed(2)), 10) : ICON_SPARK_PATH}" fill="${colors.line}"/>
+    ${detail}
   </g>
 </svg>
 `;

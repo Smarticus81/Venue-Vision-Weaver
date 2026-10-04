@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 789 150" role="img" aria-label="dreemer">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 150" role="img" aria-label="dreemer">
   
-  <g fill="none" stroke="#061219" stroke-width="19" stroke-linejoin="round">
-    <path d="M 10 100 A 40 40 0 1 0 90 100 A 40 40 0 1 0 10 100 Z M 90.5 0 V 150"/>
-    <path d="M 127.5 150 V 50 M 127.5 90 A 40 40 0 0 1 167.5 50 H 175.5"/>
-    <path d="M 287 100 A 40 40 0 1 0 277.64 125.71 M 207 100 H 287"/>
-    <path d="M 405 100 A 40 40 0 1 0 395.64 125.71 M 325 100 H 405"/>
-    <path d="M 442.5 150 V 50 M 442.5 85 A 35 35 0 0 1 512.5 85 V 150 M 512.5 85 A 35 35 0 0 1 582.5 85 V 150"/>
-    <path d="M 700 100 A 40 40 0 1 0 690.64 125.71 M 620 100 H 700"/>
-    <path d="M 737.5 150 V 50 M 737.5 90 A 40 40 0 0 1 777.5 50 H 785.5"/>
+  <g fill="none" stroke="#061219" stroke-width="22" stroke-linejoin="round">
+    <path d="M 11 100 A 39 39 0 1 0 89 100 A 39 39 0 1 0 11 100 Z M 89 0 V 150"/>
+    <path d="M 123 150 V 50 M 123 88 A 38 38 0 0 1 161 50 H 170"/>
+    <path d="M 271 100 A 39 39 0 1 0 263.51 122.98 M 195 100 H 271"/>
+    <path d="M 383 100 A 39 39 0 1 0 375.51 122.98 M 307 100 H 383"/>
+    <path d="M 417 150 V 50 M 417 85 A 35 35 0 0 1 487 85 V 150 M 487 85 A 35 35 0 0 1 557 85 V 150"/>
+    <path d="M 669 100 A 39 39 0 1 0 661.51 122.98 M 593 100 H 669"/>
+    <path d="M 703 150 V 50 M 703 88 A 38 38 0 0 1 741 50 H 750"/>
   </g>
 </svg>

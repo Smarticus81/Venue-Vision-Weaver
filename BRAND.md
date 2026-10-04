@@ -134,10 +134,16 @@ happens ("Start free", "Email gallery", "Create gallery").
 
 ## Logo
 
-The mark is a soft coral squircle with a thin orbit line and a four-point
-spark at its top right. The wordmark is a lowercase monoline geometric
-"dreemer" built from circles and stems (x-height 100, ascender 150, stroke
-19) so it renders identically everywhere without a web font.
+The mark is the left lobe of a soft coral heart: a rounded top-left, a
+straight edge into the notch, a straight edge out to the right corner and
+down to the point, and a gentle curve back up the left side. A thin coral
+line leaves the notch and traces where the right lobe would be, ending open
+on the right, with a small two-stroke spark at its peak, top right. The
+wordmark is a lowercase monoline geometric "dreemer" built from circles and
+stems (x-height 100, ascender 150, stroke 22), matched to the original
+render's weight and spacing, so it renders identically everywhere without
+a web font. The original render lives at
+`lib/brand/assets/logo/dreemer-logo-midjourney.png`.
 
 Variants, all generated from `lib/brand/src/logo.ts`:
 
@@ -151,7 +157,8 @@ Variants, all generated from `lib/brand/src/logo.ts`:
   `artifacts/wedding-app/public/` by the same scripts.
 
 Rules: clear space equal to the mark's width on all sides; minimum lockup
-height 20px; below 32px use the simplified tile (orbit line dropped). Never
+height 20px; below 32px use the simplified tile (hairline and spark replaced
+by a solid star). Never
 recolor the mark outside the three variants, never set the wordmark in a
 font, never add a tagline inside the lockup.
 

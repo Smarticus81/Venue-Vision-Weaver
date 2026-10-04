@@ -22,9 +22,10 @@ the same scripts, so the two locations cannot drift.
 
 ## Reference artwork
 
-The brief's original Midjourney render (`dreemer-logo-midjourney.png`) was
-not attached to the task that produced these files. Drop it into this folder
-under that name when it is available; the SVGs above were constructed from
-the written description (soft coral mark, thin coral line and spark at the
-top right, lowercase geometric sans wordmark in near-black ink on warm ivory)
-and should be checked against it.
+`dreemer-logo-midjourney.png` is the original render the brand was built
+from. The SVGs above are traced from it on a 100-unit grid in
+`lib/brand/src/logo.ts`: the filled left lobe of a heart with a straight
+notch edge and point, the thin line that outlines the missing right lobe,
+and the two crossing strokes of the spark at its peak. The wordmark is a
+constructed monoline geometric lowercase matched to the render's weight and
+spacing so it needs no font file.

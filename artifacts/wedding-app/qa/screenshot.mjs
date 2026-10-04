@@ -42,8 +42,27 @@ try {
         await entry.action(page);
         await page.waitForTimeout(400);
       }
-      await page.evaluate(() => document.fonts.ready);
-      await page.waitForTimeout(300);
+      // Wait for the brand faces; a shot with fallback fonts misrepresents the design.
+      const waitForFonts = () =>
+        page
+          .waitForFunction(
+            () => document.fonts.check('600 20px "Outfit"') && document.fonts.check('400 16px "Figtree"'),
+            null,
+            { timeout: 15000 },
+          )
+          .then(() => true)
+          .catch(() => false);
+      let fontsReady = await waitForFonts();
+      if (!fontsReady) {
+        // A cold font fetch through a slow proxy can miss the first load; one reload usually lands it.
+        await page.reload({ waitUntil: "networkidle" });
+        if (entry.action) {
+          await entry.action(page);
+          await page.waitForTimeout(400);
+        }
+        fontsReady = await waitForFonts();
+      }
+      if (!fontsReady) console.warn(`warning: web fonts did not load for ${entry.name} (${vp.name})`);
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(600);
       const file = path.join(outDir, `${entry.name}-${vp.name}.png`);

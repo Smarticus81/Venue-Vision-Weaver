@@ -21,13 +21,16 @@ never `coral.500` (2.2:1 on ivory); primary buttons are ink-on-coral
 (7:1), never white-on-coral (2.7:1); the focus ring is `coral.700`
 because `coral.500` fails 3:1 on ivory.
 
-**Logo:** the brief's PNG was not attached, so the mark and wordmark were
-constructed from the written description — monoline geometric lowercase
-from circles and stems, soft coral squircle with a thin orbit line and a
-four-point spark. All variants (icon / wordmark / lockup × color / ink /
-reversed), favicons, app icons and the OG card are generated from one
-geometry file; the React logo reads the same paths. Check against the
-original render when it arrives (`lib/brand/assets/logo/README.md`).
+**Logo:** traced from the Midjourney render (kept at
+`lib/brand/assets/logo/dreemer-logo-midjourney.png`): the left lobe of a
+soft coral heart with a straight notch edge and point, a hairline that
+outlines the missing right lobe, and a two-stroke spark at its peak. The
+wordmark is a constructed monoline geometric lowercase (circles and stems,
+stroke 22) matched to the render's weight and spacing. All variants (icon /
+wordmark / lockup × color / ink / reversed), favicons, app icons and the OG
+card are generated from one geometry file; the React logo reads the same
+paths. The 16–32px tile swaps the hairline and spark for a solid star
+because the strokes vanish at that size.
 
 **Landing (`/`):** spine unchanged (venue owner → create account), copy
 rewritten plain: "Turn tours into bookings." → how it works in four steps on

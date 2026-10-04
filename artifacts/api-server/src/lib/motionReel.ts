@@ -9,12 +9,13 @@ import {
   ICON_BODY_PATH,
   ICON_LINE_PATHS,
   ICON_LINE_STROKE,
-  ICON_SIZE,
-  ICON_SPARK_PATH,
+  ICON_SPARK_PATHS,
+  ICON_SPARK_STROKE,
   LOCKUP_GAP,
   LOCKUP_HEIGHT,
   LOCKUP_ICON_OFFSET_Y,
   LOCKUP_ICON_SCALE,
+  LOCKUP_ICON_WIDTH,
   LOCKUP_WIDTH,
   WORDMARK_PATHS,
   WORDMARK_STROKE,
@@ -53,14 +54,16 @@ const TITLE_LOCKUP_WIDTH = 420;
 function reelLockupSvg(top: number): string {
   const scale = TITLE_LOCKUP_WIDTH / LOCKUP_WIDTH;
   const left = (REEL_WIDTH - TITLE_LOCKUP_WIDTH) / 2;
-  const wordX = ICON_SIZE * LOCKUP_ICON_SCALE + LOCKUP_GAP;
+  const wordX = LOCKUP_ICON_WIDTH + LOCKUP_GAP;
   return `<g transform="translate(${left} ${top}) scale(${scale})">
         <g transform="translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})">
           <path d="${ICON_BODY_PATH}" fill="${coral[500]}"/>
           <g fill="none" stroke="${coral[400]}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
             ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
           </g>
-          <path d="${ICON_SPARK_PATH}" fill="${coral[400]}"/>
+          <g fill="none" stroke="${coral[400]}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">
+            ${ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
+          </g>
         </g>
         <g transform="translate(${wordX} 0)" fill="none" stroke="${ivory[100]}" stroke-width="${WORDMARK_STROKE}" stroke-linejoin="round">
           ${WORDMARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n          ")}
