@@ -278,6 +278,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/brand':
+        specifier: workspace:*
+        version: link:../../lib/brand
       '@workspace/object-storage-web':
         specifier: workspace:*
         version: link:../../lib/object-storage-web
@@ -333,7 +336,17 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
 
-  lib/brand: {}
+  lib/brand:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
+      sharp:
+        specifier: ^0.35.2
+        version: 0.35.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
 
   lib/db:
     dependencies:

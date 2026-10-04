@@ -32,6 +32,7 @@ async function main() {
 
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // The bucket names predate the Dreemer rename and are kept on purpose: live data lives in them.
   const privateBucket = process.env.SUPABASE_STORAGE_BUCKET || "glimpse";
   const publicBucket = process.env.SUPABASE_PUBLIC_BUCKET || "glimpse-public";
 

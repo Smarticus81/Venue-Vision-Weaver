@@ -75,7 +75,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { DreemerLogo } from "@/components/brand/DreemerLogo";
 
 const MIN_VENUE_PHOTOS = 1;
 const MIN_COUPLE_PHOTOS = 1;
@@ -491,7 +491,7 @@ function DashboardInner() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coupleEmail.trim())) {
       toast({
         title: "Couple email required",
-        description: "This is where Glimpse sends the finished gallery.",
+        description: "You’ll email the finished gallery to this address.",
         variant: "destructive",
       });
       return;
@@ -533,7 +533,7 @@ function DashboardInner() {
           onSuccess: () => {
             toast({
               title: "Gallery started",
-              description: "Glimpse will email the couple when it is ready.",
+              description: "We’ll email you when it’s ready to review.",
             });
             resetCoupleIntake();
             void dashboard.refetch();
@@ -656,7 +656,7 @@ function DashboardInner() {
         </DialogContent>
       </Dialog>
       <aside className="workspace-nav">
-        <GlimpseLogo />
+        <DreemerLogo />
         <nav aria-label="Workspace">
           {[
             ["galleries", "Couple galleries"],
@@ -746,13 +746,13 @@ function DashboardInner() {
               className="overview-content"
             >
               <div className="flex flex-col gap-4 md:flex-row md:items-baseline md:justify-between">
-                <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">
+                <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
                   {venue?.name ?? "Your venue"}
                 </h1>
                 <p
                   className={
                     venueReady
-                      ? "eyebrow shrink-0 inline-flex items-center gap-2 text-emerald-700"
+                      ? "eyebrow shrink-0 inline-flex items-center gap-2 text-success"
                       : "eyebrow shrink-0 inline-flex items-center gap-2 text-brand"
                   }
                 >
@@ -768,7 +768,7 @@ function DashboardInner() {
                   hero
                 />
                 <Metric label="Ready" value={readySessions} />
-                <Metric label="In production" value={processingSessions} />
+                <Metric label="In progress" value={processingSessions} />
                 <Metric label="Venue photos" value={media.length} />
               </div>
             </motion.div>
@@ -787,10 +787,10 @@ function DashboardInner() {
                 className="bg-card border border-card-border rounded-lg p-6 md:p-8"
               >
                 <div className="mb-6">
-                  <h2 className="font-display text-2xl font-medium text-foreground">
+                  <h2 className="font-display text-2xl font-semibold text-foreground">
                     Venue details
                   </h2>
-                  <p className="mt-2 text-sm font-light text-muted-foreground">
+                  <p className="mt-2 text-sm text-muted-foreground">
                     Shown to couples on their gallery page.
                   </p>
                 </div>
@@ -874,12 +874,12 @@ function DashboardInner() {
           {workspaceTab === "new" && (
             <section className="border-t border-border pt-6">
               <div className="mb-6 max-w-2xl">
-                <h2 className="font-display text-2xl font-medium tracking-tight text-foreground">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">
                   Create a couple’s gallery
                 </h2>
-                <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
-                  Add the couple’s email and a few photos. Glimpse emails their
-                  private link when the gallery is ready.
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Add the couple’s email and two or three photos of them. When
+                  it’s ready, review it here and email them their private link.
                 </p>
               </div>
 
@@ -947,7 +947,7 @@ function DashboardInner() {
                           onClick={() => {
                             if (!preview) coupleFileInputRef.current?.click();
                           }}
-                          className="relative aspect-square overflow-hidden border border-border bg-background text-muted-foreground transition-colors hover:border-brand hover:text-brand group"
+                          className="relative aspect-square overflow-hidden rounded-md border border-border bg-background text-muted-foreground transition-colors hover:border-brand hover:text-brand group"
                           aria-label={
                             preview
                               ? `Couple photo ${slot + 1}`
@@ -975,7 +975,7 @@ function DashboardInner() {
                                     removeCoupleFile(slot);
                                   }
                                 }}
-                                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-sm transition hover:bg-red-500"
+                                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-ink/70 text-ink-foreground backdrop-blur-sm transition hover:bg-destructive"
                                 aria-label="Remove couple photo"
                               >
                                 <X className="h-4 w-4" />
@@ -1024,7 +1024,7 @@ function DashboardInner() {
                     ) : (
                       <Sparkles className="mr-2 h-5 w-5" />
                     )}
-                    Generate preview
+                    Create gallery
                   </Button>
                 </div>
               </form>
@@ -1040,10 +1040,10 @@ function DashboardInner() {
             <section className="grid gap-10 border-t border-border pt-6 lg:grid-cols-[420px_1fr]">
               <div className="flex flex-col">
                 <div className="mb-6">
-                  <h2 className="font-display text-2xl font-medium text-foreground">
-                    Prepare your venue
+                  <h2 className="font-display text-2xl font-semibold text-foreground">
+                    Venue photos
                   </h2>
-                  <p className="mt-2 text-sm font-light leading-relaxed text-muted-foreground">
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     {missingCoverage.length === 0
                       ? "All views covered — galleries will match your spaces."
                       : "Add these views so galleries match your real spaces."}
@@ -1102,7 +1102,7 @@ function DashboardInner() {
 
               <div>
                 <div className="mb-6 flex items-baseline justify-between gap-4 border-b border-border pb-4">
-                  <h2 className="font-display text-2xl font-medium text-foreground">
+                  <h2 className="font-display text-2xl font-semibold text-foreground">
                     Your venue photos
                   </h2>
                   <p className="eyebrow shrink-0 text-muted-foreground">
@@ -1111,12 +1111,12 @@ function DashboardInner() {
                 </div>
 
                 {media.length === 0 ? (
-                  <div className="flex min-h-64 items-center justify-center border border-dashed border-border">
+                  <div className="flex min-h-64 items-center justify-center rounded-lg border border-dashed border-input">
                     <div className="text-center text-muted-foreground">
                       <ImageIcon className="mx-auto mb-3 h-8 w-8 opacity-50" />
                       <p className="eyebrow">
-                        Add photos of your venue to help couples picture their
-                        day.
+                        Add photos of your venue. Every gallery is built from
+                        them.
                       </p>
                     </div>
                   </div>
@@ -1125,7 +1125,7 @@ function DashboardInner() {
                     {media.map((item) => (
                       <div
                         key={item.id}
-                        className="group relative aspect-square overflow-hidden bg-secondary border border-border"
+                        className="group relative aspect-square overflow-hidden rounded-md bg-soft border border-border"
                       >
                         <img
                           src={venueReferenceUrl(item.objectKey, selectedSlug)}
@@ -1135,11 +1135,11 @@ function DashboardInner() {
                           }}
                           className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                         <button
                           type="button"
                           onClick={() => handleDeleteMedia(item.id)}
-                          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-black/75 text-white backdrop-blur-sm opacity-0 transition group-hover:opacity-100 hover:bg-red-500 hover:text-white"
+                          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md bg-ink/70 text-ink-foreground backdrop-blur-sm opacity-0 transition group-hover:opacity-100 hover:bg-destructive"
                           aria-label="Delete venue photo"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1158,17 +1158,17 @@ function DashboardInner() {
           {workspaceTab === "galleries" && (
             <section className="border-t border-border pt-6">
               <div className="mb-6">
-                <h2 className="font-display text-2xl font-medium text-foreground">
+                <h2 className="font-display text-2xl font-semibold text-foreground">
                   Couple galleries
                 </h2>
-                <p className="mt-2 text-sm font-light text-muted-foreground">
+                <p className="mt-2 text-sm text-muted-foreground">
                   Review each gallery, then send the couple their private link.
                 </p>
               </div>
 
               <div>
                 {sessions.length === 0 ? (
-                  <div className="flex min-h-[200px] items-center justify-center border border-dashed border-border text-center">
+                  <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-input text-center">
                     <p className="eyebrow text-muted-foreground">
                       Your first gallery starts here. Use Create a gallery to
                       invite a couple.
@@ -1187,7 +1187,7 @@ function DashboardInner() {
                             { month: "short", day: "numeric", year: "numeric" },
                           )}
                         </p>
-                        <div className="relative h-18 w-18 overflow-hidden border border-border bg-secondary">
+                        <div className="relative h-18 w-18 overflow-hidden rounded-md border border-border bg-soft">
                           {session.thumbnailObjectKey ? (
                             <img
                               src={ownerAssetUrl(session.thumbnailObjectKey)}
@@ -1205,12 +1205,12 @@ function DashboardInner() {
                         </div>
                         <div>
                           <div className="flex flex-wrap items-center gap-3 mb-1">
-                            <p className="font-display text-lg font-medium text-foreground">
-                              {session.coupleName || "Prospect gallery"}
+                            <p className="font-display text-lg font-semibold text-foreground">
+                              {session.coupleName || "Couple"}
                             </p>
                             <StatusBadge status={session.status} />
                           </div>
-                          <p className="text-sm font-light text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             {session.coupleEmail || "No email provided"}
                           </p>
                         </div>
@@ -1259,7 +1259,7 @@ function DashboardInner() {
                                 session.coupleName,
                               )
                             }
-                            className="text-muted-foreground hover:text-red-700"
+                            className="text-muted-foreground hover:text-danger"
                             aria-label={`Delete ${session.coupleName || "gallery"}`}
                             data-testid={`delete-gallery-${session.id}`}
                           >
@@ -1286,10 +1286,10 @@ function DashboardInner() {
             <section className="border-t border-border pt-6">
               <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <h2 className="font-display text-2xl font-medium text-foreground">
+                  <h2 className="font-display text-2xl font-semibold text-foreground">
                     Plan &amp; credits
                   </h2>
-                  <p className="mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
                     One plan covers all your venues. Each gallery uses one
                     credit.
                   </p>
@@ -1303,7 +1303,7 @@ function DashboardInner() {
                   </div>
                   <div>
                     <p className="eyebrow text-muted-foreground">Credits</p>
-                    <p className="mt-1 font-display text-3xl font-medium tracking-tight text-brand">
+                    <p className="mt-1 font-display text-3xl font-semibold tracking-tight text-brand">
                       {organization?.creditsBalance ?? 0}
                     </p>
                   </div>
@@ -1320,16 +1320,16 @@ function DashboardInner() {
                 </div>
               </div>
 
-              <div className="mt-8 grid gap-px overflow-hidden border border-border bg-border md:grid-cols-3">
+              <div className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
                 {BILLING_PRODUCTS.map((product) => (
                   <div
                     key={product.id}
-                    className="flex flex-col bg-background p-6"
+                    className="flex flex-col bg-card p-6"
                   >
-                    <h3 className="font-display text-2xl font-medium text-foreground">
+                    <h3 className="font-display text-2xl font-semibold text-foreground">
                       {product.title}
                     </h3>
-                    <p className="mt-2 flex-1 text-sm font-light leading-relaxed text-muted-foreground">
+                    <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
                       {product.description}
                     </p>
                     <p className="mt-6 font-mono text-sm text-muted-foreground">
@@ -1361,8 +1361,8 @@ function DashboardInner() {
 
               <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Billing is handled securely by Stripe · Renewals refresh your
-                  shared credits
+                  Stripe handles payment · Each renewal tops up the credits
+                  shared by all your venues
                 </p>
                 <Button
                   variant="ghost"
@@ -1401,7 +1401,7 @@ function Metric({
       <p
         className={
           hero
-            ? "mt-2 font-display text-4xl md:text-5xl font-medium tracking-tight text-brand"
+            ? "mt-2 font-display text-4xl md:text-5xl font-semibold tracking-tight text-brand"
             : "mt-2 font-mono text-3xl tracking-tight text-foreground"
         }
       >
@@ -1414,9 +1414,9 @@ function Metric({
 function StatusBadge({ status }: { status: string }) {
   const color =
     status === "ready"
-      ? "text-emerald-700"
+      ? "text-success"
       : status === "failed"
-        ? "text-red-700"
+        ? "text-danger"
         : "text-brand";
 
   return (

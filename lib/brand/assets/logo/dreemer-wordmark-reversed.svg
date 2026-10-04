@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 798 198" role="img" aria-label="dreemer">
+  <rect x="-24" y="-24" width="798" height="198" fill="#061219"/>
+  <g fill="none" stroke="#F6F4EE" stroke-width="22" stroke-linejoin="round">
+    <path d="M 11 100 A 39 39 0 1 0 89 100 A 39 39 0 1 0 11 100 Z M 89 0 V 150"/>
+    <path d="M 123 150 V 50 M 123 88 A 38 38 0 0 1 161 50 H 170"/>
+    <path d="M 271 100 A 39 39 0 1 0 263.51 122.98 M 195 100 H 271"/>
+    <path d="M 383 100 A 39 39 0 1 0 375.51 122.98 M 307 100 H 383"/>
+    <path d="M 417 150 V 50 M 417 85 A 35 35 0 0 1 487 85 V 150 M 487 85 A 35 35 0 0 1 557 85 V 150"/>
+    <path d="M 669 100 A 39 39 0 1 0 661.51 122.98 M 593 100 H 669"/>
+    <path d="M 703 150 V 50 M 703 88 A 38 38 0 0 1 741 50 H 750"/>
+  </g>
+</svg>

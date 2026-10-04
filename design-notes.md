@@ -3,6 +3,66 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-10-03 (seventeenth pass) — Dreemer rebrand
+
+Full rebrand from the old name to **Dreemer** (dreemer.co). Brief: coral
+mark, ink wordmark, ivory ground; business-tool feel; venue-owner copy with
+one value — more tours turn into booked dates.
+
+**Direction (one line):** warm ivory paper, ink type, one coral action.
+Geometric everything: the constructed wordmark, Outfit for display, Figtree
+for body, 8/12/20px radii, squircle mark.
+
+**Tokens:** one shared module, `lib/brand` (`BRAND.md` documents it). The web
+app maps `--dm-*` into Tailwind in `index.css`; the API server imports the
+same module for emails, the reel title card and the QA page. Contrast is
+asserted by tests (39 pairs), not eyeballed: coral as text is `coral.700`,
+never `coral.500` (2.2:1 on ivory); primary buttons are ink-on-coral
+(7:1), never white-on-coral (2.7:1); the focus ring is `coral.700`
+because `coral.500` fails 3:1 on ivory.
+
+**Logo:** traced from the Midjourney render (kept at
+`lib/brand/assets/logo/dreemer-logo-midjourney.png`): the left lobe of a
+soft coral heart with a straight notch edge and point, a hairline that
+outlines the missing right lobe, and a two-stroke spark at its peak. The
+wordmark is a constructed monoline geometric lowercase (circles and stems,
+stroke 22) matched to the render's weight and spacing. All variants (icon /
+wordmark / lockup × color / ink / reversed), favicons, app icons and the OG
+card are generated from one geometry file; the React logo reads the same
+paths. The 16–32px tile swaps the hairline and spark for a solid star
+because the strokes vanish at that size.
+
+**Landing (`/`):** spine unchanged (venue owner → create account), copy
+rewritten plain: "Turn tours into bookings." → how it works in four steps on
+an ink band → sample gallery → **proof placeholders** (two dashed slots:
+"Reserved for a venue quote", "Reserved for booking numbers") → plans
+without invented prices → one closing CTA. Kills: the "a little…" /
+"possibility" / "imagine" vocabulary, the serif display face, the olive
+palette, the ↗ arrow CTAs, italic emphasis in headlines.
+
+**Product screens:** no layout changes; colors, type and radii re-tokenised.
+Dashboard status pills now use success/warning/danger roles instead of
+Tailwind emerald/red; the control plane dropped the undefined `rose`/`grain`
+classes (they were never defined in CSS) for the same roles. Owner-facing
+copy de-jargoned ("Create gallery", "In progress", "Couple").
+
+**Emails:** ivory body, card on `ivory.50`, lockup PNG header, coral button
+with ink text, sea links, "Dreemer · Turn tours into bookings." footer.
+
+**Deliberate leftovers:** the Supabase bucket defaults keep the old name
+(live data). Listed with migration paths in `BRAND.md`.
+
+**Not done / next:** real proof in the two slots; plan prices once set;
+the original logo render for a side-by-side check; a dark theme (tokens
+already carry the ink roles).
+
+Merge note: the outreach email studio (below) landed on `main` in parallel
+with its own flat brand constants (`BRAND`, `BRAND_COLORS`, `BRAND_TYPE`,
+`BRAND_EMAIL`, `brandMarkSvg`). Those names now live in
+`lib/brand/src/email.ts`, derived from the same tokens, and the studio tab,
+its shared console components, and the outreach email template were mapped
+onto the token classes during the merge.
+
 ## 2026-10-03 (seventeenth pass) — Outreach email studio
 
 **Conversion spine:** this email exists to get one venue owner to reply for a
@@ -141,7 +201,7 @@ under the submit. Shared step header with a 3-segment progress bar.
 
 **Cross-page** — one radius for controls (the `Button` primitive's
 `rounded-md`; tiles and photos stay square), 404 / not-found / not-ready /
-failed pages on one centered layout with the logo, `GlimpseShell` deleted
+failed pages on one centered layout with the logo, the old shell wrapper deleted
 (unused), header email dropped, alert icons dropped from state pages.
 
 Killed: whole-page fade on the dashboard main (a paused animation left the
@@ -166,7 +226,7 @@ stable looping background; remove the other video.
   sign-in, credits line) with the same veil gradient and text-shadows.
 - **Reduced motion:** identical layout, poster still instead of the
   playing video.
-- **Media removed:** all `/media/glimpse-venue-transformation*` files
+- **Media removed:** all the old transformation media files
   (original + web mp4/webm derivatives + poster/final stills, ~19MB).
 - **Media added:** `/brand/hero.webm` (VP9 crf34, no audio, 2.0MB)
   listed before the mp4 — Chromium builds without licensed H.264
@@ -198,10 +258,10 @@ cinematic hero; the mountain concept is abandoned entirely.
 - **Copy choreography:** opening editorial lockup bottom-left ("Turn
   tours into bookings." / "Let couples see themselves here." / CTA)
   fades by 48%; final lockup ("Make the tour unforgettable." + "See
-  how glimpse works →") settles in from 86%; scroll cue dies at 6%.
+  how it works →") settles in from 86%; scroll cue dies at 6%.
   Light text-shadows only — no panels, no heavy scrims; the veil is
   the brief's 0.16/0.02/0.14 gradient.
-- **Media:** original kept at /media/glimpse-venue-transformation.mp4;
+- **Media:** original kept as the old transformation media mp4;
   web derivatives per the brief's recipe (H.264 crf17 g12 faststart
   7.9MB + VP9 crf30 g12 5.5MB for Chrome/Firefox — sandbox Chromium
   decodes only VP9), poster + final-frame stills (webp q88).
@@ -358,7 +418,7 @@ petals) behind the whole page; the visitor re-lights it.
 **Signature — the mood dial.** Golden hour / Candlelit / Moonlit toggle
 in the hero re-lights the entire scene (sky shader, disc, bulbs, petals)
 AND the page accent — and the caption says the quiet part: this is
-literally what glimpse does for couples. The reference video's "theme /
+literally what the product does for couples. The reference video's "theme /
 environment control bar" productized as the sales pitch.
 
 **Scene (`venue-landing/venueScene.ts`, vanilla three, lazy chunk):**
@@ -468,7 +528,7 @@ traction numbers, unlike the reference's "+900 venues / +24k galleries".
   `brandAssets.ts` at local `/brand/*` paths permanently. Total imagery ~270KB.
 - The MCP gateway strips `input_images` on every image model, so the four
   frames drifted to different couples. Honest fix for now: mono footnote
-  "Frames from sample glimpse galleries" under the contact sheet. Future fix:
+  "Frames from sample galleries" under the contact sheet. Future fix:
   Soul character pipeline (create character from the ceremony frame, generate
   the other scenes with soul_id) for a true single-couple sheet.
 - Post-login/app surfaces carried into the darkroom editorial language (mono
@@ -561,7 +621,7 @@ venues, the darkroom where the gallery "develops."
 - `.grain` utility: static SVG turbulence tile, screen-blended at 5% — the
   signature texture, applied to hero/final sections only (not body copy).
 
-**Logo:** old bold-sans "Glimpse." wordmark with gold period is gone. New mark:
+**Logo:** the old bold-sans wordmark with gold period is gone. New mark:
 a camera-viewfinder (four corner brackets) with a rose aperture dot, wordmark
 lowercase Fraunces. Same system in `favicon.svg`. Old logo PNGs deleted.
 

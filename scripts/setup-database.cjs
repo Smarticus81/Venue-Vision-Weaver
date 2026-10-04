@@ -75,7 +75,7 @@ async function main() {
   const env = loadEnvFile(envPath);
 
   console.log("");
-  console.log("glimpse - Supabase database setup");
+  console.log("Dreemer - Supabase database setup");
   console.log("----------------------------------------");
   console.log("1. Open https://supabase.com/dashboard -> New project");
   console.log("2. Wait for the project to finish provisioning");

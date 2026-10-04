@@ -1,6 +1,6 @@
-# glimpse Production Readiness
+# Dreemer Production Readiness
 
-Use this checklist before calling a glimpse deployment production-ready.
+Use this checklist before calling a Dreemer deployment production-ready.
 
 ## Build Gate
 
@@ -43,7 +43,7 @@ The command checks:
 After deployment, verify the live app:
 
 ```bash
-pnpm run verify:production -- --url https://your-glimpse-host.example
+pnpm run verify:production -- --url https://your-dreemer-host.example
 ```
 
 The deployed `/api/readyz` endpoint must return `200` with every check set to

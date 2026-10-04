@@ -292,7 +292,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     // like venue setup instructions.
     res.status(409).json({
       error:
-        "This venue's glimpse experience isn't open quite yet. Please check back shortly.",
+        "This venue isn't taking new galleries just yet. Please check back shortly.",
     });
     return;
   }

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { toVenueSlug } from "@/lib/venueSlug";
 import { ClerkWidgetFrame, ClerkSetupNotice, OrgGate } from "@/components/auth/OrgGate";
-import { clerkConfigured, gardenAppearance } from "@/lib/clerk";
+import { clerkConfigured, brandAppearance } from "@/lib/clerk";
 
 /**
  * Onboarding: sign up (Clerk profile) → name the organization (billing
@@ -22,25 +22,28 @@ export default function CreateVenuePage() {
 
   return (
     <FormLayout
-      label="Make room for possibility"
-      title="Your venue. A new perspective."
-      description="Create your account, name your team, and add your first venue. Your team shares credits across all your spaces."
+      label="Create your venue"
+      title="Set up in one sitting."
+      description="Create your sign-in, name your business, and add your first venue. Credits are shared across every venue you add."
+      note={{
+        heading: "Five galleries free",
+        body: "Enough to run it at the end of this week’s tours and see how couples respond. No card needed to start.",
+      }}
     >
       <ClerkWidgetFrame>
 <SignedOut>
         <div className="flex flex-col items-center gap-6">
           <div className="text-center max-w-md">
-            <p className="eyebrow mb-3 text-brand">For venues</p>
-            <h2 className="font-display text-3xl font-medium tracking-tight">
-              Create your account
+            <p className="eyebrow mb-3 text-brand">Step 1 of 3</p>
+            <h2 className="font-display text-3xl font-semibold tracking-tight">
+              Create your sign-in
             </h2>
-            <p className="mt-2 text-muted-foreground font-light">
-              Then name your organization — it owns billing, credits, and every
-              venue you add.
+            <p className="mt-2 text-muted-foreground">
+              Next you’ll name your business, then add your first venue.
             </p>
           </div>
           <SignUp
-            appearance={gardenAppearance}
+            appearance={brandAppearance}
             routing="hash"
             signInUrl="/login"
             forceRedirectUrl="/create-venue"
@@ -99,7 +102,7 @@ function VenueForm() {
           contactEmail: ownerEmail,
           bookingUrl: formData.bookingUrl.trim() || undefined,
           tagline:
-            "Photoreal preview galleries that help prospects visualize the day and inquire faster.",
+            "See yourselves married here, before you leave the tour.",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -129,13 +132,13 @@ function VenueForm() {
     >
       <div className="relative">
         <div className="mb-8">
-          <p className="eyebrow mb-4 text-brand">For venues</p>
-          <h2 className="font-display text-3xl font-medium tracking-tight text-foreground">
+          <p className="eyebrow mb-4 text-brand">Step 3 of 3</p>
+          <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground">
             Add a venue
           </h2>
-          <p className="mt-2 text-muted-foreground font-light">
-            It joins your organization — billing and credits stay shared across
-            all of your venues.
+          <p className="mt-2 text-muted-foreground">
+            Billing and credits stay shared across every venue on your
+            account.
           </p>
         </div>
 
@@ -188,19 +191,19 @@ function VenueForm() {
             />
           </div>
 
-          <div className="border-l-2 border-brand/40 pl-4 text-sm font-light leading-relaxed text-muted-foreground">
-            Notifications and inquiry replies go to{" "}
+          <div className="border-l-2 border-primary pl-4 text-sm leading-relaxed text-muted-foreground">
+            Gallery notifications and couple replies go to{" "}
             <span className="text-foreground">
               {ownerEmail || "your profile email"}
             </span>
-            . You can change the public contact email later in the dashboard.
+            . You can change the contact email couples see later, in Venue details.
           </div>
 
           <Button
             type="submit"
             variant="brand"
             disabled={isSubmitting}
-            className="w-full h-12 rounded-md font-medium mt-4"
+            className="w-full h-12 rounded-md font-semibold mt-4"
             data-testid="create-venue-submit"
           >
             {isSubmitting ? (

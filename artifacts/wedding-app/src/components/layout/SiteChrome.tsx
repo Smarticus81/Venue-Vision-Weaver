@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { GlimpseLogo } from "@/components/brand/GlimpseLogo";
+import { DreemerLogo } from "@/components/brand/DreemerLogo";
 import type { ReactNode } from "react";
+
 export function SiteHeader() {
   const [path] = useLocation();
   return (
@@ -9,7 +10,7 @@ export function SiteHeader() {
         Skip to content
       </a>
       <header className="site-header page-width">
-        <GlimpseLogo />
+        <DreemerLogo />
         <nav aria-label="Main navigation">
           <Link href="/" aria-current={path === "/" ? "page" : undefined}>
             For venues
@@ -28,33 +29,38 @@ export function SiteHeader() {
             className="nav-cta"
             data-testid="venue-header-register"
           >
-            Get started <span aria-hidden>↗</span>
+            Start free
           </Link>
         </nav>
       </header>
     </>
   );
 }
+
 export function SiteFooter() {
   return (
     <footer className="site-footer page-width">
-      <GlimpseLogo />
-      <p>A glimpse of what could be.</p>
+      <DreemerLogo className="text-[1.25rem]" />
+      <p>Turn tours into bookings.</p>
       <Link href="/find-my-gallery">Find my gallery</Link>
-      <span>© {new Date().getFullYear()} glimpse</span>
+      <span>© {new Date().getFullYear()} Dreemer</span>
     </footer>
   );
 }
+
 export function FormLayout({
   children,
   title,
   description,
-  label = "Your next chapter",
+  label = "Dreemer for venues",
+  note,
 }: {
   children: ReactNode;
   title: string;
   description: string;
   label?: string;
+  /** Optional aside callout: a short heading plus one line of plain context. */
+  note?: { heading: string; body: string } | null;
 }) {
   return (
     <div className="site-page">
@@ -64,11 +70,12 @@ export function FormLayout({
           <p className="eyebrow">{label}</p>
           <h1>{title}</h1>
           <p>{description}</p>
-          <div className="form-aside-note">
-            A little imagination.
-            <br />
-            <em>A place to begin.</em>
-          </div>
+          {note ? (
+            <div className="form-aside-note">
+              <strong>{note.heading}</strong>
+              {note.body}
+            </div>
+          ) : null}
         </aside>
         <div className="form-content">{children}</div>
       </main>

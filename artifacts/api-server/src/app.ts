@@ -214,11 +214,11 @@ app.get("/v/:shareToken", async (req, res): Promise<void> => {
     const thumbnail = thumbnailAsset
       ? `/api/storage${thumbnailAsset.objectKey}?shareToken=${encodeURIComponent(shareToken)}`
       : "";
-    const coupleName = session.coupleName || "A Beautiful Couple";
-    const venueName = venue ? venue.name : "Their Dream Venue";
+    const coupleName = session.coupleName || "The couple";
+    const venueName = venue ? venue.name : "the venue";
 
-    const title = `${coupleName}'s glimpse gallery`;
-    const description = `Explore a cinematic AI wedding gallery of ${coupleName} at ${venueName}.`;
+    const title = `${coupleName} at ${venueName} · Dreemer`;
+    const description = `A Dreemer gallery: ${coupleName} imagined at ${venueName}.`;
 
     const metaTags = `
         <title>${escapeHtml(title)}</title>

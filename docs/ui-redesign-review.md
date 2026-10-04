@@ -1,4 +1,4 @@
-# Glimpse UI replacement — review
+# Dreemer UI replacement — review
 
 The interface has been rebuilt around three jobs: a venue team sets up and runs its workspace; couples create their wedding vision; couples return to, save, and share their gallery.
 

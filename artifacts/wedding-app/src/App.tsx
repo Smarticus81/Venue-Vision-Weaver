@@ -12,7 +12,7 @@ import { Toaster } from "@/components/ui/toaster";
 
 const queryClient = new QueryClient();
 
-const CHUNK_RELOAD_KEY = "glimpse:chunk-reloaded";
+const CHUNK_RELOAD_KEY = "dreemer:chunk-reloaded";
 
 /**
  * After a redeploy the hashed chunk filenames change, so a browser holding a
@@ -116,8 +116,8 @@ function Router() {
 function RouteLoading() {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-      <p role="status" className="eyebrow text-primary">
-        Opening glimpse…
+      <p role="status" className="eyebrow text-brand">
+        Opening Dreemer…
       </p>
     </div>
   );

@@ -41,6 +41,7 @@ function getSupabaseAdmin(): SupabaseClient {
   return supabaseAdmin;
 }
 
+// The bucket names predate the Dreemer rename and are kept on purpose: live data lives in them.
 function supabasePrivateBucket(): string {
   return process.env.SUPABASE_STORAGE_BUCKET || "glimpse";
 }

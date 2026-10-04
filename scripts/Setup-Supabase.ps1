@@ -2,7 +2,7 @@
 Set-Location $PSScriptRoot\..
 
 Write-Host ""
-Write-Host "glimpse - Supabase setup" -ForegroundColor Cyan
+Write-Host "Dreemer - Supabase setup" -ForegroundColor Cyan
 Write-Host ""
 
 node scripts/setup-database.cjs

@@ -11,14 +11,14 @@ export default function FindMyGalleryPage() {
   const [error, setError] = useState<string | null>(null);
   return (
     <FormLayout
-      label="Your wedding, revisited"
-      title="Your glimpse is waiting."
-      description="Find the day you imagined. We’ll send a private link to the email you used to create your gallery."
+      label="Find my gallery"
+      title="Get your gallery link again."
+      description="Enter the email you used when you made your gallery. We’ll send your private links to that address."
     >
       <div aria-live="polite">
         {submitted ? (
           <>
-            <Check className="text-primary mb-4" />
+            <Check className="text-success mb-4" />
             <h2>Check your inbox</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               If a gallery is linked to <strong>{email}</strong>, you’ll receive
@@ -39,7 +39,7 @@ export default function FindMyGalleryPage() {
           </>
         ) : (
           <>
-            <Mail className="text-primary mb-4" />
+            <Mail className="text-brand mb-4" />
             <h2>Find my gallery</h2>
             <form
               className="space-y-4"

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { font, semantic } from "@workspace/brand";
 
 interface Props {
   children: ReactNode;
@@ -36,17 +37,17 @@ export class AppErrorBoundary extends Component<Props, State> {
           alignItems: "center",
           justifyContent: "center",
           padding: "1.5rem",
-          background: "#faf9f6",
-          color: "#23392c",
-          fontFamily: "'DM Sans', system-ui, sans-serif",
+          background: semantic.canvas,
+          color: semantic.text,
+          fontFamily: font.body,
           textAlign: "center",
         }}
       >
         <div style={{ maxWidth: "26rem" }}>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.75rem" }}>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "0.75rem", fontFamily: font.display }}>
             Something went wrong
           </h1>
-          <p style={{ fontSize: "0.875rem", lineHeight: 1.6, color: "#58655c", marginBottom: "1.5rem" }}>
+          <p style={{ fontSize: "0.875rem", lineHeight: 1.6, color: semantic.textMuted, marginBottom: "1.5rem" }}>
             The page failed to load. This is usually temporary — reloading picks
             up the latest version of the site.
           </p>
@@ -55,10 +56,10 @@ export class AppErrorBoundary extends Component<Props, State> {
             onClick={() => window.location.reload()}
             style={{
               padding: "0.75rem 1.5rem",
-              background: "#285b42",
-              color: "#ffffff",
+              background: semantic.accent,
+              color: semantic.textOnAccent,
               border: "none",
-              borderRadius: "0.25rem",
+              borderRadius: "0.5rem",
               fontSize: "0.875rem",
               fontWeight: 500,
               cursor: "pointer",

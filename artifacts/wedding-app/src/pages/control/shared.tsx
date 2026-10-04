@@ -23,38 +23,38 @@ export function apiErrorMessage(err: unknown): string {
 }
 
 const PILL: Record<string, string> = {
-  active: "text-emerald-300",
-  succeeded: "text-emerald-300",
-  executed: "text-emerald-300",
-  approved: "text-emerald-300",
-  done: "text-emerald-300",
-  completed: "text-emerald-300",
-  sent: "text-emerald-300",
-  delivered: "text-emerald-300",
-  running: "text-rose",
-  in_progress: "text-rose",
-  pending: "text-amber-300",
-  proposed: "text-amber-300",
-  open: "text-amber-300",
+  active: "text-success",
+  succeeded: "text-success",
+  executed: "text-success",
+  approved: "text-success",
+  done: "text-success",
+  completed: "text-success",
+  sent: "text-success",
+  delivered: "text-success",
+  running: "text-brand",
+  in_progress: "text-brand",
+  pending: "text-warning",
+  proposed: "text-warning",
+  open: "text-warning",
   paused: "text-muted-foreground",
   dismissed: "text-muted-foreground",
   rejected: "text-muted-foreground",
   aborted: "text-muted-foreground",
-  failed: "text-red-300",
-  bounced: "text-red-300",
-  complained: "text-red-300",
-  critical: "text-red-300",
-  high: "text-amber-300",
+  failed: "text-danger",
+  bounced: "text-danger",
+  complained: "text-danger",
+  critical: "text-danger",
+  high: "text-warning",
   medium: "text-foreground/70",
   low: "text-muted-foreground",
-  new: "text-amber-300",
-  qualified: "text-emerald-300",
-  contacted: "text-rose",
-  replied: "text-emerald-300",
-  converted: "text-emerald-300",
+  new: "text-warning",
+  qualified: "text-success",
+  contacted: "text-brand",
+  replied: "text-success",
+  converted: "text-success",
   unsubscribed: "text-muted-foreground",
   disqualified: "text-muted-foreground",
-  draft: "text-amber-300",
+  draft: "text-warning",
 };
 
 export function Pill({ value, className }: { value: string; className?: string }) {
@@ -74,7 +74,7 @@ export function Pill({ value, className }: { value: string; className?: string }
 
 export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("border border-border bg-card p-5", className)}>{children}</div>
+    <div className={cn("rounded-lg border border-border bg-card p-5", className)}>{children}</div>
   );
 }
 
@@ -106,11 +106,11 @@ export function ActionButton({
       disabled={disabled}
       title={title}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        tone === "primary" && "bg-rose text-rose-foreground hover:bg-rose-hover",
+        "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        tone === "primary" && "bg-primary text-primary-foreground hover:bg-brand-hover",
         tone === "neutral" &&
-          "border border-border text-foreground/80 hover:border-foreground/40 hover:text-foreground",
-        tone === "danger" && "border border-red-400/40 text-red-300 hover:border-red-400/70",
+          "border border-border bg-background text-foreground hover:bg-soft",
+        tone === "danger" && "border border-danger/40 text-danger hover:bg-danger-soft",
       )}
     >
       {children}
@@ -121,7 +121,7 @@ export function ActionButton({
 export function TabLoading() {
   return (
     <div className="flex items-center justify-center py-16">
-      <Loader2 className="h-6 w-6 animate-spin text-rose" />
+      <Loader2 className="h-6 w-6 animate-spin text-brand" />
     </div>
   );
 }

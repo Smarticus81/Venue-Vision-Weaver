@@ -70,7 +70,7 @@ export function OutreachStudioTab() {
               onClick={() => setFilter(value)}
               className={cn(
                 "mono-label h-8 border px-3 transition-colors",
-                filter === value ? "border-rose/60 text-rose" : "border-border text-muted-foreground hover:text-foreground",
+                filter === value ? "border-primary text-brand" : "border-border text-muted-foreground hover:text-foreground",
               )}
             >
               {value === "awaiting" ? "awaiting approval" : value}
@@ -98,7 +98,7 @@ export function OutreachStudioTab() {
                 onClick={() => setSelectedId(item.email.id)}
                 className={cn(
                   "w-56 shrink-0 border bg-card p-3 text-left transition-colors",
-                  selectedId === item.email.id ? "border-rose/60" : "border-border hover:border-foreground/40",
+                  selectedId === item.email.id ? "border-primary" : "border-border hover:border-foreground/40",
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -308,14 +308,14 @@ function EmailReviewBody({
         {allWarnings.length > 0 ? (
           <ul className="mt-3 space-y-1 border-t border-border pt-3">
             {allWarnings.map((warning) => (
-              <li key={warning} className="flex gap-2 text-xs leading-relaxed text-amber-300">
+              <li key={warning} className="flex gap-2 text-xs leading-relaxed text-warning">
                 <span aria-hidden>▲</span>
                 <span>{warning}</span>
               </li>
             ))}
           </ul>
         ) : null}
-        {email.lastError ? <p className="mt-3 text-xs text-red-300">{email.lastError}</p> : null}
+        {email.lastError ? <p className="mt-3 text-xs text-danger">{email.lastError}</p> : null}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -477,7 +477,7 @@ function EmailReviewBody({
                 {assets.map((asset) => {
                   const position = imageIds.indexOf(asset.id);
                   return (
-                    <figure key={asset.id} className={cn("border bg-background", position >= 0 ? "border-rose/70" : "border-border")}>
+                    <figure key={asset.id} className={cn("border bg-background", position >= 0 ? "border-primary/70" : "border-border")}>
                       <button
                         type="button"
                         disabled={!editable}
@@ -488,7 +488,7 @@ function EmailReviewBody({
                       >
                         <img src={asset.url} alt={asset.altText} className="aspect-[4/3] w-full object-cover" loading="lazy" />
                         {position >= 0 ? (
-                          <span className="absolute left-1.5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose px-1 text-[10px] font-semibold text-rose-foreground">
+                          <span className="absolute left-1.5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-brand-foreground">
                             {position === 0 ? "hero" : position + 1}
                           </span>
                         ) : null}
@@ -550,7 +550,7 @@ function EmailReviewBody({
 
           {editable ? (
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {dirty ? <span className="text-xs text-amber-300">Unsaved edits</span> : null}
+              {dirty ? <span className="text-xs text-warning">Unsaved edits</span> : null}
               <ActionButton
                 tone="primary"
                 disabled={busy || !dirty}
@@ -597,7 +597,7 @@ function ToggleButton({
       title={label}
       className={cn(
         "inline-flex h-8 items-center gap-1.5 border px-2.5 text-xs transition-colors",
-        active ? "border-rose/60 text-rose" : "border-border text-muted-foreground hover:text-foreground",
+        active ? "border-primary text-brand" : "border-border text-muted-foreground hover:text-foreground",
       )}
     >
       {children}

@@ -32,12 +32,12 @@ pnpm --filter @workspace/db run push
 pnpm run test
 
 # Verify production env, build artifacts, ffmpeg, and optional live readiness
-pnpm run verify:production -- --url https://your-glimpse-host.example
+pnpm run verify:production -- --url https://your-dreemer-host.example
 ```
 
 ## Architecture
 
-This is a **pnpm monorepo** for glimpse, a venue-paid wedding gallery platform. Venues buy credits; couples use venue-specific QR/links to generate a four-image AI vision gallery plus one branded motion reel at that specific venue.
+This is a **pnpm monorepo** for Dreemer, a venue-paid wedding gallery platform. Venues buy credits; couples use venue-specific QR/links to generate a four-image AI vision gallery plus one branded motion reel at that specific venue.
 
 ### Artifacts (deployable apps)
 

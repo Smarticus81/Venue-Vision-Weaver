@@ -1,3 +1,4 @@
+import { BRAND_COLORS } from "@workspace/brand";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -220,7 +221,11 @@ test("template: responsive, dark-mode aware, escaped, with plain text and alt te
     postalAddress: "addr",
     forceScheme: "dark",
   });
-  assert.match(dark.html, /background-color:#141917/, "forced dark preview paints the dark canvas");
+  assert.match(
+    dark.html,
+    new RegExp(`background-color:${BRAND_COLORS.dark.canvas}`, "i"),
+    "forced dark preview paints the dark canvas",
+  );
 });
 
 test("unsubscribe: RFC 8058 headers are attached and one-click is advertised", () => {

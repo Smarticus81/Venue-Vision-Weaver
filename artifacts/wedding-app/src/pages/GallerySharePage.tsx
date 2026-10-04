@@ -66,7 +66,7 @@ function venueContactAction(venue: SessionDetailResponse["venue"]): {
   }
   if (venue.contactEmail) {
     return {
-      href: `mailto:${venue.contactEmail}?subject=${encodeURIComponent(`glimpse gallery at ${venue.name}`)}`,
+      href: `mailto:${venue.contactEmail}?subject=${encodeURIComponent(`Our Dreemer gallery at ${venue.name}`)}`,
       label: "Contact venue",
       icon: "mail",
     };
@@ -165,9 +165,9 @@ function NotAvailable() {
   const [, navigate] = useLocation();
   return (
     <FormLayout
-      label="Your gallery link"
-      title="Let’s bring your day back."
-      description="A private link is all you need to return to your wedding vision."
+      label="Gallery link"
+      title="We couldn’t open that gallery."
+      description="The link may be wrong or out of date. You can find your gallery again with the email you used."
     >
       <h2>We couldn’t open this gallery</h2>
       <p className="text-sm text-muted-foreground leading-relaxed">
@@ -196,9 +196,9 @@ function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
   const [, navigate] = useLocation();
   return (
     <FormLayout
-      label="A fresh perspective"
-      title="Start a new possibility."
-      description="Your venue is the beginning of your wedding vision."
+      label="Gallery"
+      title="Start a new gallery."
+      description="This gallery was made with an older version and can’t be shown any more."
     >
       <h2>This gallery needs a fresh start</h2>
       <p className="text-sm text-muted-foreground leading-relaxed">
@@ -235,9 +235,9 @@ function FailureView({
   const [, navigate] = useLocation();
   return (
     <FormLayout
-      label="Let’s try that again"
-      title="A pause in the picture."
-      description="Your wedding vision couldn’t be completed this time."
+      label="Gallery"
+      title="That one didn’t work out."
+      description="We couldn’t finish your gallery this time. Trying again from your venue’s link usually works."
     >
       <h2>We couldn’t finish your gallery</h2>
       <p role="alert" className="text-sm text-muted-foreground leading-relaxed">
@@ -273,16 +273,15 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
         data-testid="processing-screen"
       >
         <aside>
-          <p className="eyebrow">Your vision is taking shape</p>
-          <h1>A day worth imagining.</h1>
+          <p className="eyebrow">Making your gallery</p>
+          <h1>A few minutes, then it’s yours.</h1>
           <p>
-            We’re creating your portraits at{" "}
-            {session.venue?.name || "your venue"}, then preparing your motion
-            reel.
+            We’re making your images at {session.venue?.name || "your venue"},
+            then your reel. Keep this link. The page updates on its own.
           </p>
         </aside>
         <section className="form-content" role="status">
-          <Loader2 className="animate-spin text-primary mb-6" />
+          <Loader2 className="animate-spin text-brand mb-6" />
           <h2>Creating your gallery</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
             This usually takes a few minutes. This page updates automatically
@@ -400,7 +399,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
             data-testid="copy-link-button"
           >
             <Link className="h-4 w-4 mr-2 text-muted-foreground" />
-            Copy Link
+            Copy link
           </Button>
           <Button
             variant="ghost"
@@ -431,7 +430,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
             }}
           >
             {emailLocked ? (
-              <p className="text-sm text-muted-foreground text-center font-light">
+              <p className="text-sm text-muted-foreground text-center">
                 We will send the link to the email you provided when you created
                 your gallery.
               </p>
@@ -446,7 +445,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                   onChange={(event) => setEmailInput(event.target.value)}
                   placeholder="you@example.com"
                   autoComplete="email"
-                  className="w-full rounded-md bg-secondary border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand transition-colors"
+                  className="w-full rounded-md bg-soft border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand transition-colors"
                   data-testid="email-input"
                   aria-label="Email address for your gallery"
                 />
@@ -464,7 +463,7 @@ function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
                 {sending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Send Gallery Link"
+                  "Send gallery link"
                 )}
               </Button>
             </div>
@@ -525,8 +524,7 @@ function GalleryVisionView({
           </div>
           <div className="flex items-center justify-between mt-4 gap-4">
             <p className="caption">
-              Portrait {activeStill + 1} of {stills.length} · AI-generated
-              vision
+              Image {activeStill + 1} of {stills.length} · AI-generated
             </p>
             <a
               href={src}
@@ -534,21 +532,22 @@ function GalleryVisionView({
               className="text-link"
               data-testid={"gallery-still-download-" + activeStill}
             >
-              <Download size={16} /> Save portrait
+              <Download size={16} /> Save image
             </a>
           </div>
         </section>
         <aside className="gallery-sidebar">
-          <p className="eyebrow">A glimpse of your day</p>
+          <p className="eyebrow">Your gallery</p>
           <h1>{session.coupleName || "The two of you."}</h1>
           <p>
-            Imagined at {session.venue?.name || "your venue"}. A little closer
-            to the day you’ve been dreaming of.
+            Four images and a reel of you at{" "}
+            {session.venue?.name || "your venue"}. Save them, share them, and
+            come back any time.
           </p>
           <ShareActionsToolbar session={session} />
           {reelSrc && (
             <section className="mt-6">
-              <h2 className="text-lg">Your day, in motion</h2>
+              <h2 className="text-lg">Your reel</h2>
               <video
                 src={reelSrc}
                 controls
@@ -562,13 +561,13 @@ function GalleryVisionView({
                 className="text-link"
                 data-testid="gallery-download-reel"
               >
-                <Download size={16} /> Save motion reel
+                <Download size={16} /> Save reel
               </a>
             </section>
           )}
           {contact && (
             <div className="gallery-contact">
-              <h2 className="text-xl mb-3">Make this possibility yours.</h2>
+              <h2 className="text-xl mb-3">Like what you see?</h2>
               <a
                 href={contact.href}
                 target="_blank"
@@ -588,7 +587,7 @@ function GalleryVisionView({
             className="mt-6"
             data-testid="gallery-restart"
           >
-            <RotateCcw /> Create another vision
+            <RotateCcw /> Make another gallery
           </Button>
         </aside>
       </main>
