@@ -250,6 +250,7 @@ test("registry: unique keys and every granted tool exists", () => {
 test("safety model: external contact and spend always require operator approval", () => {
   const expectations: Record<string, "medium" | "high"> = {
     send_prospect_email: "high",
+    send_outreach_email: "high",
     send_venue_email: "high",
     launch_campaign: "high",
     grant_promo_credits: "high",

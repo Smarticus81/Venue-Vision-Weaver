@@ -17,6 +17,9 @@ import { sendControlPlaneEmail } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
 import { recordAuditEvent } from "./audit.js";
 import { getPolicyBoolean, getPolicyNumber, setPolicy } from "./policies.js";
+import { assertProspectContactableNow } from "./outreach/contactGuards.js";
+import { defaultSendDeps, prospectEmailsSentToday, sendOutreachEmail } from "./outreach/sender.js";
+import { markEmailsRejectedForAction } from "./outreach/studio.js";
 
 /**
  * The only way agents touch the business is through this catalog. Every
@@ -122,8 +125,11 @@ const enrollProspectsSchema = z
 
 const campaignIdSchema = z.object({ campaignId: z.number().int().positive() }).strict();
 
-/** Statuses a prospect may be in for the control plane to email them. */
-const CONTACTABLE_PROSPECT_STATUSES = ["new", "qualified", "contacted"] as const;
+const sendOutreachEmailSchema = z
+  .object({
+    emailId: z.number().int().positive().describe("control_outreach_emails.id created by draft_outreach_email."),
+  })
+  .strict();
 
 const OPT_OUT_FOOTER =
   'If you would rather not hear from us, just reply "unsubscribe" and we will not contact you again.';
@@ -161,13 +167,13 @@ export const ACTION_CATALOG: Record<string, ActionDefinition> = {
     type: "send_prospect_email",
     riskLevel: "high",
     description:
-      "Send one personalized outreach email to a prospect (first touch or campaign follow-up). Blocked for prospects who replied, converted, unsubscribed, or were disqualified; subject to daily send caps and minimum contact gaps.",
+      "Legacy plain-text prospect email (no venue photos). Prefer draft_outreach_email, which produces a reviewed studio email. Blocked for prospects who replied, converted, unsubscribed, bounced, or were disqualified; subject to daily send caps and minimum contact gaps.",
     paramsSchema: sendProspectEmailSchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = sendProspectEmailSchema.parse(rawParams);
 
       const cap = await getPolicyNumber("max_prospect_emails_per_day", "emails", 15);
-      const sentToday = await executedTodayCount("send_prospect_email");
+      const sentToday = await prospectEmailsSentToday();
       if (sentToday >= cap) {
         throw new Error(`Daily prospect email cap reached (${sentToday}/${cap}).`);
       }
@@ -177,44 +183,8 @@ export const ACTION_CATALOG: Record<string, ActionDefinition> = {
         .from(controlProspectsTable)
         .where(eq(controlProspectsTable.id, params.prospectId));
       if (!prospect) throw new Error(`Prospect ${params.prospectId} not found.`);
-      if (
-        !CONTACTABLE_PROSPECT_STATUSES.includes(
-          prospect.status as (typeof CONTACTABLE_PROSPECT_STATUSES)[number],
-        )
-      ) {
-        throw new Error(
-          `Prospect ${prospect.id} is "${prospect.status}" and may not be emailed by the control plane.`,
-        );
-      }
-
-      const maxContacts = await getPolicyNumber("max_contacts_per_prospect", "contacts", 3);
-      if (prospect.contactCount >= maxContacts) {
-        throw new Error(
-          `Prospect ${prospect.id} already received ${prospect.contactCount}/${maxContacts} emails; no further automated contact allowed.`,
-        );
-      }
-
-      const minGapHours = await getPolicyNumber("min_hours_between_prospect_contacts", "hours", 72);
-      if (prospect.lastContactedAt) {
-        const hoursSince = (Date.now() - prospect.lastContactedAt.getTime()) / 3_600_000;
-        if (hoursSince < minGapHours) {
-          throw new Error(
-            `Prospect ${prospect.id} was contacted ${Math.round(hoursSince)}h ago; policy requires a ${minGapHours}h gap.`,
-          );
-        }
-      }
-
-      // Existing customers are venue outreach, not prospect outreach.
-      const [existingVenue] = await db
-        .select({ id: venuesTable.id, slug: venuesTable.slug })
-        .from(venuesTable)
-        .where(sql`lower(${venuesTable.ownerEmail}) = ${prospect.email.toLowerCase()}`)
-        .limit(1);
-      if (existingVenue) {
-        throw new Error(
-          `Prospect ${prospect.id} (${prospect.email}) already owns venue "${existingVenue.slug}"; use send_venue_email instead.`,
-        );
-      }
+      // Consent, cadence, suppression list, and existing-customer checks.
+      await assertProspectContactableNow(prospect);
 
       if (params.campaignId) {
         const [campaign] = await db
@@ -263,6 +233,18 @@ export const ACTION_CATALOG: Record<string, ActionDefinition> = {
         campaignId: params.campaignId ?? prospect.campaignId,
         step: params.step ?? null,
       };
+    },
+  },
+  send_outreach_email: {
+    type: "send_outreach_email",
+    riskLevel: "high",
+    description:
+      "Send a studio outreach email (venue photos + personal copy) that was drafted with draft_outreach_email and reviewed by an operator in /control. Re-checks consent, suppression list, contact gaps, lifetime caps, and the daily cap at send time.",
+    paramsSchema: sendOutreachEmailSchema as z.ZodType<Record<string, unknown>>,
+    async execute(rawParams) {
+      const params = sendOutreachEmailSchema.parse(rawParams);
+      const result = await sendOutreachEmail(params.emailId, defaultSendDeps());
+      return { ...result };
     },
   },
   enroll_prospects_in_campaign: {
@@ -653,6 +635,9 @@ export async function decideAction(
 
   if (decision === "approve") {
     return executeAction(actionId, `operator:${operatorEmail}`);
+  }
+  if (action.actionType === "send_outreach_email") {
+    await markEmailsRejectedForAction(actionId);
   }
   return updated;
 }

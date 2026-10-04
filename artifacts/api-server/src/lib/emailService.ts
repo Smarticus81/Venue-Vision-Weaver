@@ -113,6 +113,51 @@ async function sendEmail(to: string, subject: string, html: string): Promise<Ema
   }
 }
 
+export type RawEmailSendResult = { sent: true; id: string | null } | { sent: false; reason: string };
+
+/**
+ * Fully rendered message with its own HTML, plain-text twin, and headers —
+ * used by the outreach studio, which owns its template (List-Unsubscribe
+ * headers, reply-to, physical-address footer). Returns the provider id so
+ * delivery webhooks can be matched back to the message.
+ */
+export async function sendRawEmail(message: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers?: Record<string, string>;
+  replyTo?: string | null;
+}): Promise<RawEmailSendResult> {
+  if (!resend) {
+    logger.warn({ to: message.to, subject: message.subject }, "RESEND_API_KEY not set - skipping email");
+    return { sent: false, reason: NOT_CONFIGURED_REASON };
+  }
+  try {
+    const { data, error } = await resend.emails.send({
+      from: fromEmail,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      headers: message.headers,
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+    });
+    if (error) {
+      logger.error({ error, to: message.to, subject: message.subject, from: fromEmail }, "Resend email failed");
+      const providerMessage = error.message || "The email provider rejected the send.";
+      return { sent: false, reason: `${providerMessage}${usingSandboxSender ? SANDBOX_HINT : ""}` };
+    }
+    return { sent: true, id: data?.id ?? null };
+  } catch (err) {
+    logger.error({ err, to: message.to, subject: message.subject }, "Email send threw");
+    return {
+      sent: false,
+      reason: "The email provider request failed. Check server connectivity and RESEND_API_KEY.",
+    };
+  }
+}
+
 /**
  * Generic branded email used by the Autonomous Business Control Plane for
  * governed venue outreach (activation nudges, low-credit reminders, support

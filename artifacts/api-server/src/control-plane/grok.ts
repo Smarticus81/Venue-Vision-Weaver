@@ -137,6 +137,64 @@ function parseArguments(raw: string | undefined): { args: Record<string, unknown
   }
 }
 
+/**
+ * One-shot structured completion (no tools, no web search): the model answers
+ * with a single JSON object. Used by the outreach studio for grounded fact
+ * extraction and copywriting, where the inputs are already fetched and the
+ * model must not go looking for more.
+ */
+export async function completeJson(params: {
+  systemPrompt: string;
+  userMessage: string;
+  maxOutputTokens?: number;
+}): Promise<{ json: Record<string, unknown>; raw: string; promptTokens: number; completionTokens: number }> {
+  const apiKey = process.env.XAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("XAI_API_KEY is required for control-plane reasoning.");
+  }
+  const response = await callGrok(apiKey, {
+    model: controlPlaneModel(),
+    input: [
+      { role: "system", content: params.systemPrompt },
+      { role: "user", content: params.userMessage },
+    ],
+    text: { format: { type: "json_object" } },
+    ...(params.maxOutputTokens ? { max_output_tokens: params.maxOutputTokens } : {}),
+  });
+  const raw = messageText(response.output ?? []).join("\n").trim();
+  const json = parseJsonObject(raw);
+  if (!json) {
+    throw new Error("Grok did not return a JSON object.");
+  }
+  return {
+    json,
+    raw,
+    promptTokens: response.usage?.input_tokens ?? 0,
+    completionTokens: response.usage?.output_tokens ?? 0,
+  };
+}
+
+/** Tolerant JSON-object parse: strips code fences and leading prose. */
+export function parseJsonObject(raw: string): Record<string, unknown> | null {
+  const candidates = [raw.trim()];
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) candidates.unshift(fenced[1].trim());
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return null;
+}
+
 export async function runAgentLoop(params: {
   systemPrompt: string;
   userMessage: string;

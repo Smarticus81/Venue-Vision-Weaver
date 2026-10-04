@@ -17,5 +17,6 @@ Useful routes:
 - `/v/processing`: waiting state.
 - `/v/failed`: failed generation recovery.
 - `/find-my-gallery`: simulated recovery request failure.
+- `/control#outreach`: the outreach email studio review screen. Run `pnpm run outreach:demo -- --out qa-output/outreach-demo --site <venue url>` first and the fixture renders those real samples (photos are swapped for the local sample image).
 
 All names, email addresses, balances, and dates are fixtures. Gallery images reuse the generated public sample; no fixture video is included. The sign-in widget itself is not exercised. This preview provides layout and interaction checks, not end-to-end verification of production services.

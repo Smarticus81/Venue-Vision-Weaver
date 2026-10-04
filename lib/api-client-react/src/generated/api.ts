@@ -30,8 +30,14 @@ import type {
   ControlCampaignsResponse,
   ControlExperimentsResponse,
   ControlMetricsHistoryResponse,
+  ControlOutreachDraftBody,
+  ControlOutreachEmailDetailResponse,
+  ControlOutreachEmailRegenerateBody,
+  ControlOutreachEmailUpdateBody,
+  ControlOutreachEmailsResponse,
   ControlOverviewResponse,
   ControlPoliciesResponse,
+  ControlProspectResearchResponse,
   ControlProspectResponse,
   ControlProspectStatusBody,
   ControlProspectsResponse,
@@ -52,6 +58,7 @@ import type {
   ListControlActionsParams,
   ListControlCampaignsParams,
   ListControlExperimentsParams,
+  ListControlOutreachEmailsParams,
   ListControlProspectsParams,
   ListControlRunsParams,
   ListControlTasksParams,
@@ -3889,3 +3896,649 @@ export function useListControlCampaigns<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Outreach studio emails with prospect and approval state
+ */
+export const getListControlOutreachEmailsUrl = (
+  params?: ListControlOutreachEmailsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/control/outreach/emails?${stringifiedParams}`
+    : `/api/control/outreach/emails`;
+};
+
+export const listControlOutreachEmails = async (
+  params?: ListControlOutreachEmailsParams,
+  options?: RequestInit,
+): Promise<ControlOutreachEmailsResponse> => {
+  return customFetch<ControlOutreachEmailsResponse>(
+    getListControlOutreachEmailsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListControlOutreachEmailsQueryKey = (
+  params?: ListControlOutreachEmailsParams,
+) => {
+  return [`/api/control/outreach/emails`, ...(params ? [params] : [])] as const;
+};
+
+export const getListControlOutreachEmailsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listControlOutreachEmails>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlOutreachEmailsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlOutreachEmails>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListControlOutreachEmailsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listControlOutreachEmails>>
+  > = ({ signal }) =>
+    listControlOutreachEmails(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listControlOutreachEmails>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListControlOutreachEmailsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listControlOutreachEmails>>
+>;
+export type ListControlOutreachEmailsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Outreach studio emails with prospect and approval state
+ */
+
+export function useListControlOutreachEmails<
+  TData = Awaited<ReturnType<typeof listControlOutreachEmails>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListControlOutreachEmailsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listControlOutreachEmails>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListControlOutreachEmailsQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Full review payload for one studio email (previews, images, sources, facts)
+ */
+export const getGetControlOutreachEmailUrl = (id: number) => {
+  return `/api/control/outreach/emails/${id}`;
+};
+
+export const getControlOutreachEmail = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ControlOutreachEmailDetailResponse> => {
+  return customFetch<ControlOutreachEmailDetailResponse>(
+    getGetControlOutreachEmailUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetControlOutreachEmailQueryKey = (id: number) => {
+  return [`/api/control/outreach/emails/${id}`] as const;
+};
+
+export const getGetControlOutreachEmailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlOutreachEmail>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlOutreachEmail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetControlOutreachEmailQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlOutreachEmail>>
+  > = ({ signal }) =>
+    getControlOutreachEmail(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOutreachEmail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlOutreachEmailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlOutreachEmail>>
+>;
+export type GetControlOutreachEmailQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Full review payload for one studio email (previews, images, sources, facts)
+ */
+
+export function useGetControlOutreachEmail<
+  TData = Awaited<ReturnType<typeof getControlOutreachEmail>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlOutreachEmail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlOutreachEmailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Edit a studio email while it awaits approval (subject, copy, images, call to action)
+ */
+export const getUpdateControlOutreachEmailUrl = (id: number) => {
+  return `/api/control/outreach/emails/${id}`;
+};
+
+export const updateControlOutreachEmail = async (
+  id: number,
+  controlOutreachEmailUpdateBody: ControlOutreachEmailUpdateBody,
+  options?: RequestInit,
+): Promise<ControlOutreachEmailDetailResponse> => {
+  return customFetch<ControlOutreachEmailDetailResponse>(
+    getUpdateControlOutreachEmailUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlOutreachEmailUpdateBody),
+    },
+  );
+};
+
+export const getUpdateControlOutreachEmailMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlOutreachEmail>>,
+    TError,
+    { id: number; data: BodyType<ControlOutreachEmailUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlOutreachEmail>>,
+  TError,
+  { id: number; data: BodyType<ControlOutreachEmailUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlOutreachEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlOutreachEmail>>,
+    { id: number; data: BodyType<ControlOutreachEmailUpdateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateControlOutreachEmail(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlOutreachEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlOutreachEmail>>
+>;
+export type UpdateControlOutreachEmailMutationBody =
+  BodyType<ControlOutreachEmailUpdateBody>;
+export type UpdateControlOutreachEmailMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Edit a studio email while it awaits approval (subject, copy, images, call to action)
+ */
+export const useUpdateControlOutreachEmail = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlOutreachEmail>>,
+    TError,
+    { id: number; data: BodyType<ControlOutreachEmailUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlOutreachEmail>>,
+  TError,
+  { id: number; data: BodyType<ControlOutreachEmailUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlOutreachEmailMutationOptions(options));
+};
+
+/**
+ * @summary Rewrite the copy with Grok and/or re-run the venue website research
+ */
+export const getRegenerateControlOutreachEmailUrl = (id: number) => {
+  return `/api/control/outreach/emails/${id}/regenerate`;
+};
+
+export const regenerateControlOutreachEmail = async (
+  id: number,
+  controlOutreachEmailRegenerateBody: ControlOutreachEmailRegenerateBody,
+  options?: RequestInit,
+): Promise<ControlOutreachEmailDetailResponse> => {
+  return customFetch<ControlOutreachEmailDetailResponse>(
+    getRegenerateControlOutreachEmailUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlOutreachEmailRegenerateBody),
+    },
+  );
+};
+
+export const getRegenerateControlOutreachEmailMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateControlOutreachEmail>>,
+    TError,
+    { id: number; data: BodyType<ControlOutreachEmailRegenerateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof regenerateControlOutreachEmail>>,
+  TError,
+  { id: number; data: BodyType<ControlOutreachEmailRegenerateBody> },
+  TContext
+> => {
+  const mutationKey = ["regenerateControlOutreachEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof regenerateControlOutreachEmail>>,
+    { id: number; data: BodyType<ControlOutreachEmailRegenerateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return regenerateControlOutreachEmail(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegenerateControlOutreachEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof regenerateControlOutreachEmail>>
+>;
+export type RegenerateControlOutreachEmailMutationBody =
+  BodyType<ControlOutreachEmailRegenerateBody>;
+export type RegenerateControlOutreachEmailMutationError =
+  ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Rewrite the copy with Grok and/or re-run the venue website research
+ */
+export const useRegenerateControlOutreachEmail = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateControlOutreachEmail>>,
+    TError,
+    { id: number; data: BodyType<ControlOutreachEmailRegenerateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof regenerateControlOutreachEmail>>,
+  TError,
+  { id: number; data: BodyType<ControlOutreachEmailRegenerateBody> },
+  TContext
+> => {
+  return useMutation(getRegenerateControlOutreachEmailMutationOptions(options));
+};
+
+/**
+ * @summary Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
+ */
+export const getRequestControlSamplePreviewUrl = (id: number) => {
+  return `/api/control/outreach/emails/${id}/sample-preview`;
+};
+
+export const requestControlSamplePreview = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ControlOutreachEmailDetailResponse> => {
+  return customFetch<ControlOutreachEmailDetailResponse>(
+    getRequestControlSamplePreviewUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRequestControlSamplePreviewMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestControlSamplePreview>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestControlSamplePreview>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["requestControlSamplePreview"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestControlSamplePreview>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return requestControlSamplePreview(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestControlSamplePreviewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestControlSamplePreview>>
+>;
+
+export type RequestControlSamplePreviewMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
+ */
+export const useRequestControlSamplePreview = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestControlSamplePreview>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestControlSamplePreview>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRequestControlSamplePreviewMutationOptions(options));
+};
+
+/**
+ * @summary Research the prospect's venue, write a studio draft, and queue it for approval
+ */
+export const getDraftControlOutreachEmailUrl = (id: number) => {
+  return `/api/control/prospects/${id}/draft`;
+};
+
+export const draftControlOutreachEmail = async (
+  id: number,
+  controlOutreachDraftBody?: ControlOutreachDraftBody,
+  options?: RequestInit,
+): Promise<ControlOutreachEmailDetailResponse> => {
+  return customFetch<ControlOutreachEmailDetailResponse>(
+    getDraftControlOutreachEmailUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlOutreachDraftBody),
+    },
+  );
+};
+
+export const getDraftControlOutreachEmailMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof draftControlOutreachEmail>>,
+    TError,
+    { id: number; data: BodyType<ControlOutreachDraftBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof draftControlOutreachEmail>>,
+  TError,
+  { id: number; data: BodyType<ControlOutreachDraftBody> },
+  TContext
+> => {
+  const mutationKey = ["draftControlOutreachEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof draftControlOutreachEmail>>,
+    { id: number; data: BodyType<ControlOutreachDraftBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return draftControlOutreachEmail(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DraftControlOutreachEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof draftControlOutreachEmail>>
+>;
+export type DraftControlOutreachEmailMutationBody =
+  BodyType<ControlOutreachDraftBody>;
+export type DraftControlOutreachEmailMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Research the prospect's venue, write a studio draft, and queue it for approval
+ */
+export const useDraftControlOutreachEmail = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof draftControlOutreachEmail>>,
+    TError,
+    { id: number; data: BodyType<ControlOutreachDraftBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof draftControlOutreachEmail>>,
+  TError,
+  { id: number; data: BodyType<ControlOutreachDraftBody> },
+  TContext
+> => {
+  return useMutation(getDraftControlOutreachEmailMutationOptions(options));
+};
+
+/**
+ * @summary Re-run the venue website research (facts and photos) for a prospect
+ */
+export const getResearchControlProspectUrl = (id: number) => {
+  return `/api/control/prospects/${id}/research`;
+};
+
+export const researchControlProspect = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ControlProspectResearchResponse> => {
+  return customFetch<ControlProspectResearchResponse>(
+    getResearchControlProspectUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getResearchControlProspectMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof researchControlProspect>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof researchControlProspect>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["researchControlProspect"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof researchControlProspect>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return researchControlProspect(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResearchControlProspectMutationResult = NonNullable<
+  Awaited<ReturnType<typeof researchControlProspect>>
+>;
+
+export type ResearchControlProspectMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Re-run the venue website research (facts and photos) for a prospect
+ */
+export const useResearchControlProspect = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof researchControlProspect>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof researchControlProspect>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResearchControlProspectMutationOptions(options));
+};

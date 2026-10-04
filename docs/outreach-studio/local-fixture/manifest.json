@@ -1,0 +1,120 @@
+{
+  "site": "http://127.0.0.1:8099/",
+  "fetchedAt": "2026-10-04T00:04:24.164Z",
+  "research": {
+    "status": "ok",
+    "sourceUrls": [
+      "http://127.0.0.1:8099/",
+      "http://127.0.0.1:8099/weddings.html",
+      "http://127.0.0.1:8099/gallery.html"
+    ],
+    "facts": {
+      "name": "Willow House",
+      "location": "Hudson, NY",
+      "spaces": [
+        "The Timber Barn",
+        "The Stone Terrace",
+        "The Orchard Lawn"
+      ],
+      "style": "A restored 1850s farmhouse and timber barn on forty acres above the Hudson, with gardens, a stone terrace, and room for 180 guests.",
+      "capacity": 180,
+      "summary": null
+    },
+    "warnings": [],
+    "images": [
+      {
+        "sourceUrl": "http://127.0.0.1:8099/images/garden-venue.webp",
+        "pageUrl": "http://127.0.0.1:8099/",
+        "contentType": "image/jpeg",
+        "width": 1200,
+        "height": 896,
+        "bytes": 200732,
+        "altText": "Willow House, photographed for 127.0.0.1",
+        "score": 76,
+        "selected": true,
+        "file": "images/0430b69f0d068b62.jpg"
+      },
+      {
+        "sourceUrl": "http://127.0.0.1:8099/images/hero-atmosphere.webp",
+        "pageUrl": "http://127.0.0.1:8099/",
+        "contentType": "image/jpeg",
+        "width": 1200,
+        "height": 517,
+        "bytes": 15333,
+        "altText": "Willow House: The Timber Barn at dusk",
+        "score": 60,
+        "selected": true,
+        "file": "images/6b3226387d535531.jpg"
+      },
+      {
+        "sourceUrl": "http://127.0.0.1:8099/images/frame-reel-still.webp",
+        "pageUrl": "http://127.0.0.1:8099/gallery.html",
+        "contentType": "image/jpeg",
+        "width": 900,
+        "height": 1126,
+        "bytes": 90013,
+        "altText": "Willow House: Candlelit corridor to the Timber Barn",
+        "score": 51,
+        "selected": true,
+        "file": "images/c8565579637c7b4c.jpg"
+      },
+      {
+        "sourceUrl": "http://127.0.0.1:8099/images/frame-ceremony.webp",
+        "pageUrl": "http://127.0.0.1:8099/weddings.html",
+        "contentType": "image/jpeg",
+        "width": 900,
+        "height": 1068,
+        "bytes": 106319,
+        "altText": "Willow House: Ceremony on the Orchard Lawn",
+        "score": 50,
+        "selected": false,
+        "file": "images/8e1b53586d337193.jpg"
+      },
+      {
+        "sourceUrl": "http://127.0.0.1:8099/images/frame-first-dance.webp",
+        "pageUrl": "http://127.0.0.1:8099/weddings.html",
+        "contentType": "image/jpeg",
+        "width": 900,
+        "height": 1100,
+        "bytes": 55165,
+        "altText": "Willow House: First dance in the Timber Barn",
+        "score": 49,
+        "selected": false,
+        "file": "images/b2ee64723dfb168e.jpg"
+      },
+      {
+        "sourceUrl": "http://127.0.0.1:8099/images/frame-golden-hour.webp",
+        "pageUrl": "http://127.0.0.1:8099/",
+        "contentType": "image/jpeg",
+        "width": 900,
+        "height": 1117,
+        "bytes": 97432,
+        "altText": "Willow House: Stone Terrace at golden hour",
+        "score": 48,
+        "selected": false,
+        "file": "images/f59d1fb9cca9d7d0.jpg"
+      }
+    ]
+  },
+  "copy": {
+    "subjects": [
+      "A preview of weddings at Willow House",
+      "Willow House, after the tour"
+    ],
+    "greeting": "Hi Dana,",
+    "body": "I came across Willow House while looking at wedding venues in Hudson, NY. The Timber Barn and the Stone Terrace look like places couples would want to picture their own day in.\n\nI work at Dreemer. After a couple tours with you, we make them a short, personal preview of their wedding in your actual spaces, so the conversation keeps going once they leave. Venues use it to follow up the same week, while the visit is still fresh.\n\nWould you like a free preview made for Willow House? There is nothing to set up on your side, and you can decide what to do with it after you see it.",
+    "signOff": "Thanks,\nSam at Dreemer",
+    "ctaLabel": "Ask for a free preview",
+    "notes": {
+      "source": "fallback",
+      "wordCount": 111,
+      "attempts": 0,
+      "violations": []
+    }
+  },
+  "headers": {
+    "List-Unsubscribe": "<https://dreemer.co/api/outreach/unsubscribe/demo-token>",
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
+  },
+  "grokConfigured": false
+}

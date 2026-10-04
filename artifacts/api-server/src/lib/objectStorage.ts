@@ -175,6 +175,35 @@ export class ObjectStorageService {
     return dir;
   }
 
+  /**
+   * Store a buffer as an unconditionally public object. Returns the path the
+   * public-objects route serves it from (relative to /api/storage/public-objects/).
+   * Used for outreach email imagery, which mail clients fetch anonymously.
+   */
+  async uploadPublicObject(relativePath: string, buffer: Buffer, contentType: string): Promise<string> {
+    const cleanPath = relativePath.replace(/^\/+/, "");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(cleanPath) || cleanPath.includes("..")) {
+      throw new Error("Invalid public object path.");
+    }
+    if (useSupabaseStorage()) {
+      const bucket = supabasePublicBucket();
+      const { error } = await getSupabaseAdmin()
+        .storage.from(bucket)
+        .upload(`public/${cleanPath}`, buffer, { contentType, upsert: true });
+      if (error) {
+        throw new Error(`Supabase public upload failed: ${error.message}`);
+      }
+      return cleanPath;
+    }
+    const [searchPath] = this.getPublicObjectSearchPaths();
+    const { bucketName, objectName } = parseObjectPath(`${searchPath}/${cleanPath}`);
+    await objectStorageClient.bucket(bucketName).file(objectName).save(buffer, {
+      contentType,
+      resumable: false,
+    });
+    return cleanPath;
+  }
+
   async searchPublicObject(filePath: string): Promise<ObjectFileHandle | null> {
     if (useSupabaseStorage()) {
       const bucket = supabasePublicBucket();

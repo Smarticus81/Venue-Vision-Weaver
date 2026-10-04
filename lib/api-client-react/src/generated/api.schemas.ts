@@ -992,6 +992,242 @@ export interface ControlCampaignsResponse {
   campaigns: ControlCampaign[];
 }
 
+export interface ControlVenueFacts {
+  name?: string | null;
+  location?: string | null;
+  spaces: string[];
+  style?: string | null;
+  capacity?: number | null;
+  summary?: string | null;
+}
+
+export type ControlProspectResearchStatus =
+  (typeof ControlProspectResearchStatus)[keyof typeof ControlProspectResearchStatus];
+
+export const ControlProspectResearchStatus = {
+  ok: "ok",
+  no_images: "no_images",
+  fetch_failed: "fetch_failed",
+} as const;
+
+export interface ControlProspectResearch {
+  status: ControlProspectResearchStatus;
+  facts: ControlVenueFacts;
+  sourceUrls: string[];
+  warnings: string[];
+  fetchedAt: string;
+}
+
+export type ControlOutreachAssetKind =
+  (typeof ControlOutreachAssetKind)[keyof typeof ControlOutreachAssetKind];
+
+export const ControlOutreachAssetKind = {
+  venue_image: "venue_image",
+  sample_preview: "sample_preview",
+} as const;
+
+export interface ControlOutreachAsset {
+  id: number;
+  kind: ControlOutreachAssetKind;
+  url: string;
+  sourceUrl?: string | null;
+  pageUrl?: string | null;
+  width: number;
+  height: number;
+  bytes: number;
+  altText: string;
+  score: number;
+  selected: boolean;
+  inEmail: boolean;
+  createdAt: string;
+}
+
+export interface ControlProspectResearchResponse {
+  research: ControlProspectResearch;
+  assets: ControlOutreachAsset[];
+}
+
+export type ControlOutreachEmailStatus =
+  (typeof ControlOutreachEmailStatus)[keyof typeof ControlOutreachEmailStatus];
+
+export const ControlOutreachEmailStatus = {
+  draft: "draft",
+  sent: "sent",
+  delivered: "delivered",
+  bounced: "bounced",
+  complained: "complained",
+  failed: "failed",
+  rejected: "rejected",
+} as const;
+
+export type ControlOutreachEmailDraftNotes = { [key: string]: unknown } | null;
+
+export interface ControlOutreachEmail {
+  id: number;
+  prospectId: number;
+  actionId?: number | null;
+  campaignId?: number | null;
+  step?: number | null;
+  status: ControlOutreachEmailStatus;
+  subjectOptions: string[];
+  subject: string;
+  body: string;
+  greeting: string;
+  signOff: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  imageAssetIds: number[];
+  draftNotes?: ControlOutreachEmailDraftNotes;
+  providerMessageId?: string | null;
+  sentTo?: string | null;
+  sentAt?: string | null;
+  deliveredAt?: string | null;
+  bouncedAt?: string | null;
+  bounceReason?: string | null;
+  lastError?: string | null;
+  createdByAgent?: string | null;
+  editedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlOutreachProspectSummary {
+  id: number;
+  name: string;
+  email: string;
+  contactName?: string | null;
+  status: string;
+  website?: string | null;
+  region?: string | null;
+}
+
+export interface ControlOutreachEmailListItem {
+  email: ControlOutreachEmail;
+  prospect: ControlOutreachProspectSummary;
+  actionStatus?: string | null;
+  imageCount: number;
+}
+
+export interface ControlOutreachEmailsResponse {
+  emails: ControlOutreachEmailListItem[];
+}
+
+export type ControlOutreachEmailDetailAction = {
+  id: number;
+  status: string;
+  decidedBy?: string | null;
+  decisionNote?: string | null;
+  error?: string | null;
+} | null;
+
+export type ControlOutreachEmailDetailPreviewHeaders = {
+  [key: string]: string;
+};
+
+export type ControlOutreachEmailDetailPreview = {
+  html: string;
+  htmlDark: string;
+  text: string;
+  headers: ControlOutreachEmailDetailPreviewHeaders;
+};
+
+export type ControlOutreachEmailDetailWarnings = {
+  research: string[];
+  config: string[];
+};
+
+export interface ControlOutreachEmailDetail {
+  email: ControlOutreachEmail;
+  prospect: ControlProspect;
+  action?: ControlOutreachEmailDetailAction;
+  research?: ControlProspectResearch | null;
+  assets: ControlOutreachAsset[];
+  preview: ControlOutreachEmailDetailPreview;
+  warnings: ControlOutreachEmailDetailWarnings;
+  editable: boolean;
+  samplePreviewsEnabled: boolean;
+}
+
+export interface ControlOutreachEmailDetailResponse {
+  detail: ControlOutreachEmailDetail;
+}
+
+export interface ControlOutreachEmailUpdateBody {
+  /**
+   * @minLength 3
+   * @maxLength 80
+   */
+  subject?: string;
+  /**
+   * @minLength 20
+   * @maxLength 2000
+   */
+  body?: string;
+  /**
+   * @minLength 2
+   * @maxLength 80
+   */
+  greeting?: string;
+  /**
+   * @minLength 2
+   * @maxLength 160
+   */
+  signOff?: string;
+  /**
+   * @minLength 2
+   * @maxLength 40
+   */
+  ctaLabel?: string;
+  /**
+   * @minLength 5
+   * @maxLength 500
+   */
+  ctaUrl?: string;
+  /** @maxItems 3 */
+  imageAssetIds?: number[];
+}
+
+export type ControlOutreachEmailRegenerateBodyMode =
+  (typeof ControlOutreachEmailRegenerateBodyMode)[keyof typeof ControlOutreachEmailRegenerateBodyMode];
+
+export const ControlOutreachEmailRegenerateBodyMode = {
+  copy: "copy",
+  research: "research",
+  both: "both",
+} as const;
+
+export type ControlOutreachEmailRegenerateBodyAsk =
+  (typeof ControlOutreachEmailRegenerateBodyAsk)[keyof typeof ControlOutreachEmailRegenerateBodyAsk];
+
+export const ControlOutreachEmailRegenerateBodyAsk = {
+  preview: "preview",
+  call: "call",
+} as const;
+
+export interface ControlOutreachEmailRegenerateBody {
+  mode: ControlOutreachEmailRegenerateBodyMode;
+  ask?: ControlOutreachEmailRegenerateBodyAsk;
+}
+
+export type ControlOutreachDraftBodyAsk =
+  (typeof ControlOutreachDraftBodyAsk)[keyof typeof ControlOutreachDraftBodyAsk];
+
+export const ControlOutreachDraftBodyAsk = {
+  preview: "preview",
+  call: "call",
+} as const;
+
+export interface ControlOutreachDraftBody {
+  ask?: ControlOutreachDraftBodyAsk;
+  campaignId?: number;
+  /**
+   * @minimum 1
+   * @maximum 10
+   */
+  step?: number;
+  refreshResearch?: boolean;
+}
+
 export type GetStorageObjectParams = {
   /**
    * Required to read generated gallery assets from a public share page.
@@ -1073,3 +1309,22 @@ export const ListControlProspectsStatus = {
 export type ListControlCampaignsParams = {
   limit?: number;
 };
+
+export type ListControlOutreachEmailsParams = {
+  status?: ListControlOutreachEmailsStatus;
+  prospectId?: number;
+  limit?: number;
+};
+
+export type ListControlOutreachEmailsStatus =
+  (typeof ListControlOutreachEmailsStatus)[keyof typeof ListControlOutreachEmailsStatus];
+
+export const ListControlOutreachEmailsStatus = {
+  draft: "draft",
+  sent: "sent",
+  delivered: "delivered",
+  bounced: "bounced",
+  complained: "complained",
+  failed: "failed",
+  rejected: "rejected",
+} as const;

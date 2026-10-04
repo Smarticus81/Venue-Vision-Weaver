@@ -23,6 +23,8 @@ import { ACTION_CATALOG, describeActionCatalog, proposeAction } from "./actions.
 import { getPolicyNumber, listPolicies } from "./policies.js";
 import { recordAuditEvent } from "./audit.js";
 import type { ToolDeclaration } from "./grok.js";
+import { createDraft, ensureResearch, loadProspectAssets, loadProspectById, loadResearch } from "./outreach/studio.js";
+import { publicObjectUrl } from "./outreach/config.js";
 
 export interface ToolContext {
   agentKey: string;
@@ -667,6 +669,90 @@ const TOOLS: Record<string, ControlPlaneTool> = {
     },
   },
 
+  get_prospect_research: {
+    declaration: {
+      name: "get_prospect_research",
+      description:
+        "What the outreach studio knows about a prospect's venue from its own public website: grounded facts (name, location, named spaces, style, capacity), the pages consulted, warnings, and the venue photos saved with their source URLs. Set refresh=true to re-fetch the site (slow; only when the saved research is missing or stale).",
+      parameters: {
+        type: "object",
+        properties: {
+          prospectId: { type: "integer" },
+          refresh: { type: "boolean", description: "Re-run the website research now." },
+        },
+        required: ["prospectId"],
+      },
+    },
+    async execute(args, ctx) {
+      const prospectId = num(args.prospectId, 0, Number.MAX_SAFE_INTEGER);
+      if (!prospectId) throw new Error("prospectId is required.");
+      const prospect = await loadProspectById(prospectId);
+      if (!prospect) throw new Error(`Prospect ${prospectId} not found.`);
+      if (args.refresh === true) {
+        const refreshed = await ensureResearch(prospect, { force: true, actor: ctx.agentKey });
+        return {
+          research: refreshed.research,
+          images: refreshed.assets.map((asset) => ({ ...asset, url: publicObjectUrl(asset.objectKey) })),
+        };
+      }
+      const [research, assets] = await Promise.all([loadResearch(prospectId), loadProspectAssets(prospectId)]);
+      return {
+        research,
+        images: assets.map((asset) => ({ ...asset, url: publicObjectUrl(asset.objectKey) })),
+        hint: research ? undefined : "No research yet; draft_outreach_email runs it automatically.",
+      };
+    },
+  },
+
+  draft_outreach_email: {
+    declaration: {
+      name: "draft_outreach_email",
+      description:
+        "Produce a studio outreach email for one prospect and queue it for operator approval. Researches the venue's own website (facts + real photos), writes a short personal note in plain words that names their actual spaces and makes one ask, and proposes the governed send_outreach_email action. Nothing is sent until an operator approves it in /control. Fails for prospects who replied, converted, unsubscribed, bounced, are disqualified, already have a pending email, or are inside the contact gap.",
+      parameters: {
+        type: "object",
+        properties: {
+          prospectId: { type: "integer" },
+          ask: {
+            type: "string",
+            enum: ["preview", "call"],
+            description: "The one ask: a free preview for their venue (default for first touch) or a short call (default for follow-ups).",
+          },
+          campaignId: { type: "integer", description: "Campaign this touch belongs to, if any." },
+          step: { type: "integer", description: "Campaign step number (1-based) this touch fulfils." },
+        },
+        required: ["prospectId"],
+      },
+    },
+    async execute(args, ctx) {
+      const prospectId = num(args.prospectId, 0, Number.MAX_SAFE_INTEGER);
+      if (!prospectId) throw new Error("prospectId is required.");
+      const askRaw = str(args.ask);
+      const campaignId = num(args.campaignId, 0, Number.MAX_SAFE_INTEGER) || null;
+      const step = num(args.step, 0, 10) || null;
+      const result = await createDraft({
+        prospectId,
+        ask: askRaw === "call" || askRaw === "preview" ? askRaw : undefined,
+        campaignId,
+        step,
+        agentKey: ctx.agentKey,
+        runId: ctx.runId,
+        actor: ctx.agentKey,
+      });
+      return {
+        emailId: result.email.id,
+        actionId: result.actionId,
+        actionStatus: result.actionStatus,
+        subjectOptions: result.email.subjectOptions,
+        body: result.email.body,
+        images: result.email.imageAssetIds.length,
+        copy: result.copy,
+        warnings: result.warnings,
+        note: "Queued for operator review in /control → Outreach. Do not propose send_prospect_email for the same prospect.",
+      };
+    },
+  },
+
   create_task: {
     declaration: {
       name: "create_task",
@@ -758,7 +844,7 @@ const TOOLS: Record<string, ControlPlaneTool> = {
           params: {
             type: "object",
             description:
-              "Action parameters. send_prospect_email: {prospectId, subject, message, campaignId?, step?}. enroll_prospects_in_campaign: {campaignId, prospectIds}. launch_campaign/pause_campaign/complete_campaign: {campaignId}. send_venue_email: {venueSlug, subject, message}. grant_promo_credits: {organizationId, amount, note}. requeue_failed_session: {sessionId}. pause_agent/resume_agent: {agentKey}. update_policy: {key, value, note}.",
+              "Action parameters. send_outreach_email: {emailId} (use draft_outreach_email instead, which proposes this for you). send_prospect_email (legacy plain text): {prospectId, subject, message, campaignId?, step?}. enroll_prospects_in_campaign: {campaignId, prospectIds}. launch_campaign/pause_campaign/complete_campaign: {campaignId}. send_venue_email: {venueSlug, subject, message}. grant_promo_credits: {organizationId, amount, note}. requeue_failed_session: {sessionId}. pause_agent/resume_agent: {agentKey}. update_policy: {key, value, note}.",
           },
         },
         required: ["actionType", "title", "reasoning", "params"],
