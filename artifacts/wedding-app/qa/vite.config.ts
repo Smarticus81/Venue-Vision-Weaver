@@ -2,6 +2,7 @@ import { defineConfig, mergeConfig } from "vite";
 import config from "../vite.config";
 import path from "node:path";
 import fs from "node:fs";
+import { controlFixture } from "./control-fixture";
 const media = Array.from({ length: 1 }, (_, i) => ({
   id: i + 1,
   objectKey: "/demo" + i,
@@ -54,6 +55,13 @@ const qaConfig = mergeConfig(config, {
         server.middlewares.use("/api", (req, res) => {
           res.setHeader("Content-Type", "application/json");
           let u = req.url || "";
+          if (u.startsWith("/control") && req.method === "GET") {
+            const fixture = controlFixture(u);
+            if (fixture !== undefined) {
+              res.end(JSON.stringify(fixture));
+              return;
+            }
+          }
           if (u.startsWith("/storage")) {
             res.setHeader("Content-Type", "image/webp");
             res.end(

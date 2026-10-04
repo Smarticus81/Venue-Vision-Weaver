@@ -13,6 +13,8 @@
     "test:reference-upscaler": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/lib/referenceImagePreparation.test.ts",
     "test:mobile-reel": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/lib/byteRange.test.ts",
     "test:control-plane": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/control-plane/controlPlane.test.ts",
+    "outreach:demo": "node ./scripts/node_modules/tsx/dist/cli.mjs ./artifacts/api-server/src/tools/outreachStudioDemo.ts",
+    "outreach:screenshots": "bash ./scripts/outreach-screenshots.sh",
     "test:outreach-studio": "node ./scripts/node_modules/tsx/dist/cli.mjs --test ./artifacts/api-server/src/control-plane/outreach/outreachStudio.test.ts",
     "test": "pnpm run test:reference-upscaler && pnpm run test:mobile-reel && pnpm run test:control-plane && pnpm run test:outreach-studio",
     "setup:db": "node scripts/setup-database.cjs",
