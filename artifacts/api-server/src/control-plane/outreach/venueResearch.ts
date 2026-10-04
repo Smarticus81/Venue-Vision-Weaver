@@ -393,12 +393,16 @@ const LOCATION_RE = new RegExp(
   `\\b([A-Z][a-zA-Z.'’-]+(?:\\s+[A-Z][a-zA-Z.'’-]+){0,3}),\\s*(${US_STATES})\\b(?!\\w)`,
 );
 const SPACE_WORDS =
-  "Ballroom|Garden|Gardens|Barn|Terrace|Chapel|Pavilion|Lawn|Courtyard|Vineyard|Hall|Loft|Rooftop|Conservatory|Greenhouse|Patio|Veranda|Orchard|Meadow|Grove|Library|Atrium|Carriage House|Cellar|Deck|Pier|Boathouse|Studio|Solarium|Manor|Stable|Stables|Mill|Great Room|Dining Room|Lounge|Arbor|Gazebo|Porch|Pond|Lake|Lakeside|Waterfront|Cottage|Farmhouse|Silo|Tasting Room|Winery|Brewery|Loggia|Cloister|Parlor|Salon|Mezzanine|Observatory|Treehouse|Amphitheater|Overlook|Bluff|Beach|Dock|Hangar|Warehouse|Foundry|Gallery|Theater|Theatre";
+  "Ballroom|Garden|Gardens|Barn|Terrace|Chapel|Pavilion|Lawn|Courtyard|Vineyard|Hall|Loft|Rooftop|Conservatory|Greenhouse|Patio|Veranda|Orchard|Meadow|Grove|Library|Atrium|Carriage House|Cellar|Deck|Pier|Boathouse|Studio|Solarium|Manor|Stable|Stables|Mill|Great Room|Dining Room|Lounge|Arbor|Gazebo|Porch|Pond|Lake|Lakeside|Waterfront|Cottage|Farmhouse|Silo|Tasting Room|Winery|Brewery|Loggia|Cloister|Parlor|Salon|Mezzanine|Observatory|Treehouse|Amphitheater|Overlook|Bluff|Beach|Dock|Hangar|Warehouse|Foundry|Theater|Theatre";
+// Space names never cross a line break (headings, nav links, and paragraphs
+// are separated by newlines after tag stripping), hence [ \t] not \s.
 const SPACE_RE = new RegExp(
-  `\\b((?:The\\s+)?(?:[A-Z][\\w'’-]+\\s+){0,3}(?:${SPACE_WORDS}))\\b`,
+  `\\b((?:The[ \\t]+)?(?:[A-Z][\\w'’-]+[ \\t]+){0,3}(?:${SPACE_WORDS}))\\b`,
   "g",
 );
-const GENERIC_SPACE = /^(the\s+)?(photo\s+)?(gallery|garden|hall|lounge|deck|beach|lake|pond|studio|library|theater|theatre)$/i;
+const GENERIC_SPACE = /^(the\s+)?(photo\s+)?(garden|hall|lounge|deck|beach|lake|pond|studio|library|theater|theatre|estate|house)$/i;
+/** Words that mark a navigation label or sentence fragment rather than a space name. */
+const SPACE_STOP_WORDS = /\b(weddings?|events?|photos?|venues?|home|contact|about|welcome|our|your|us|at|in|of|and|the\s+the|[A-Z]{2})\b/i;
 const CAPACITY_RE = /\b(\d{2,4})\s*(?:\+\s*)?(?:seated\s+|standing\s+)?(?:guests|people|persons|attendees)\b/gi;
 
 export function extractHeuristicFacts(pages: Array<{ url: string; html: string }>, fallbackName: string, region: string | null): VenueFacts {
@@ -464,8 +468,10 @@ export function extractHeuristicFacts(pages: Array<{ url: string; html: string }
       for (const match of source.matchAll(SPACE_RE)) {
         const candidate = match[1]!.replace(/\s+/g, " ").trim();
         if (candidate.length < 4 || candidate.length > 40 || GENERIC_SPACE.test(candidate)) continue;
-        if (/^(our|your|the|a|an)\s+\w+$/i.test(candidate) && !/^The\s/.test(candidate)) continue;
-        const key = candidate.toLowerCase();
+        const inner = candidate.replace(/^The\s+/, "");
+        if (SPACE_STOP_WORDS.test(inner)) continue;
+        // "The Timber Barn" and "Timber Barn" are one space; keep the article.
+        const key = candidate.toLowerCase().replace(/^the\s+/, "");
         spaces.set(key, (spaces.get(key) ?? 0) + (headings.includes(source) || alts.includes(source) ? 3 : 1));
       }
     }
@@ -484,11 +490,10 @@ export function extractHeuristicFacts(pages: Array<{ url: string; html: string }
     .map(([key]) => key)
     .slice(0, 6)
     .map((key) =>
-      key
+      `The ${key
         .split(" ")
-        .map((word) => (word === "the" ? "the" : word.charAt(0).toUpperCase() + word.slice(1)))
-        .join(" ")
-        .replace(/^the /, "The "),
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")}`,
     );
 
   return {

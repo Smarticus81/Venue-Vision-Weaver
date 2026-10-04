@@ -899,8 +899,17 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+function initialTab(): TabId {
+  const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
+  return TABS.some((entry) => entry.id === hash) ? (hash as TabId) : "overview";
+}
+
 function ControlConsole() {
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, setTabState] = useState<TabId>(initialTab);
+  const setTab = (next: TabId) => {
+    setTabState(next);
+    if (typeof window !== "undefined") window.history.replaceState(null, "", `#${next}`);
+  };
   const overviewQuery = useGetControlOverview({
     query: { queryKey: getGetControlOverviewQueryKey(), refetchInterval: 30000, retry: 1 },
   });

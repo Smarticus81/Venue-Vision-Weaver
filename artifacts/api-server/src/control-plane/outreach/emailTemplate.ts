@@ -40,6 +40,9 @@ export interface TemplateInput {
 
 type Palette = Record<keyof typeof BRAND_COLORS.light, string>;
 
+/** Font stacks for inline style attributes: single quotes so they survive style="...". */
+const FONT_BODY = BRAND_TYPE.body.replace(/"/g, "'");
+
 export interface RenderedEmail {
   html: string;
   text: string;
@@ -80,7 +83,7 @@ export function splitParagraphs(body: string): string[] {
 }
 
 function paragraphHtml(text: string, color: string): string {
-  return `<p class="dm-ink" style="margin:0 0 18px;font-family:${BRAND_TYPE.body};font-size:16px;line-height:26px;color:${color};mso-line-height-rule:exactly;">${escapeHtml(text).replace(/\n/g, "<br />")}</p>`;
+  return `<p class="dm-ink" style="margin:0 0 18px;font-family:${FONT_BODY};font-size:16px;line-height:26px;color:${color};mso-line-height-rule:exactly;">${escapeHtml(text).replace(/\n/g, "<br />")}</p>`;
 }
 
 function darkRules(prefix: string): string {
@@ -106,9 +109,9 @@ function imageBlock(image: TemplateImage, width: number, colors: Palette, radius
     : image.sourceHost
       ? `Photo: ${image.sourceHost}`
       : null;
-  return `<img src="${escapeHtml(image.url)}" width="${width}" height="${height}" alt="${escapeHtml(image.alt)}" style="display:block;width:100%;max-width:${width}px;height:auto;border:0;outline:none;text-decoration:none;border-radius:${radius};" />${
+  return `<img class="fluid" src="${escapeHtml(image.url)}" width="${width}" height="${height}" alt="${escapeHtml(image.alt)}" style="display:block;width:100%;max-width:${width}px;height:auto;border:0;outline:none;text-decoration:none;border-radius:${radius};" />${
     credit
-      ? `<p class="dm-muted" style="margin:8px 0 0;font-family:${BRAND_TYPE.body};font-size:12px;line-height:16px;color:${colors.inkMuted};">${escapeHtml(credit)}</p>`
+      ? `<p class="dm-muted" style="margin:8px 0 0;font-family:${FONT_BODY};font-size:12px;line-height:16px;color:${colors.inkMuted};">${escapeHtml(credit)}</p>`
       : ""
   }`;
 }
@@ -121,20 +124,28 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
   const radius = `${10}px`;
   const ctaHref = safeHref(input.ctaUrl);
   const unsubscribeHref = safeHref(input.unsubscribeUrl);
-  const [hero, ...rest] = input.images.slice(0, 3);
+  // The hero should be a landscape frame; a portrait photo leads only when nothing else is available.
+  const ordered = input.images.slice(0, 3);
+  const landscapeIndex = ordered.findIndex((image) => image.width / image.height >= 1.1);
+  if (landscapeIndex > 0) ordered.unshift(...ordered.splice(landscapeIndex, 1));
+  const [hero, ...rest] = ordered;
+  const aspect = (image: TemplateImage) => image.width / image.height;
+  const twoUp = rest.length === 2 && Math.abs(aspect(rest[0]!) - aspect(rest[1]!)) / aspect(rest[0]!) <= 0.12;
   const preheader = input.paragraphs[0]?.split(/(?<=[.!?])\s/)[0]?.slice(0, 140) ?? input.subject;
 
   const paragraphs = input.paragraphs.map((p) => paragraphHtml(p, colors.ink));
   // Secondary images sit after the first paragraph so the note still opens with words.
-  const secondary =
-    rest.length === 2
-      ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 22px;"><tr>
+  const secondary = twoUp
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 22px;"><tr>
               <td class="stack" width="50%" valign="top" style="padding:0 6px 0 0;">${imageBlock(rest[0]!, Math.floor(inner / 2) - 6, colors, "8px")}</td>
               <td class="stack stack-gap" width="50%" valign="top" style="padding:0 0 0 6px;">${imageBlock(rest[1]!, Math.floor(inner / 2) - 6, colors, "8px")}</td>
             </tr></table>`
-      : rest.length === 1
-        ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 22px;"><tr><td>${imageBlock(rest[0]!, inner, colors, "8px")}</td></tr></table>`
-        : "";
+    : rest
+        .map(
+          (image) =>
+            `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 22px;"><tr><td>${imageBlock(image, inner, colors, "8px")}</td></tr></table>`,
+        )
+        .join("");
   const bodyHtml =
     paragraphs.length > 1
       ? `${paragraphs[0]}${secondary}${paragraphs.slice(1).join("")}`
@@ -170,7 +181,7 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
       .px { padding-left: 20px !important; padding-right: 20px !important; }
       .stack { display: block !important; width: 100% !important; padding: 0 !important; }
       .stack-gap { padding-top: 12px !important; }
-      .stack img { max-width: 100% !important; }
+      .fluid { width: 100% !important; max-width: 100% !important; height: auto !important; }
       .canvas-pad { padding: 12px 0 !important; }
       .card { border-radius: 0 !important; }
       .btn a { display: block !important; text-align: center !important; }
@@ -186,12 +197,12 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
     <tr>
       <td class="canvas-pad" align="center" style="padding:28px 12px;">
         <!--[if mso]><table role="presentation" width="${width}" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
-        <table role="presentation" class="container" width="${width}" cellspacing="0" cellpadding="0" border="0" style="width:${width}px;max-width:${width}px;margin:0 auto;">
+        <table role="presentation" class="container" width="${width}" cellspacing="0" cellpadding="0" border="0" style="width:${width}px;max-width:${width}px;margin:0 auto;table-layout:fixed;">
           <tr>
             <td class="px" style="padding:0 ${gutter}px 14px;">
               <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
                 <td valign="middle" style="padding-right:7px;line-height:0;"><span class="dm-mark-light">${markLight}</span><span class="dm-mark-dark">${markDark}</span></td>
-                <td valign="middle" class="dm-muted" style="font-family:${BRAND_TYPE.body};font-size:14px;letter-spacing:0.02em;color:${colors.inkMuted};">${escapeHtml(BRAND.wordmark)}</td>
+                <td valign="middle" class="dm-muted" style="font-family:${FONT_BODY};font-size:14px;letter-spacing:0.02em;color:${colors.inkMuted};">${escapeHtml(BRAND.wordmark)}</td>
               </tr></table>
             </td>
           </tr>
@@ -213,14 +224,14 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
                   <td class="px" style="padding:4px ${gutter}px 26px;">
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" class="btn"><tr>
                       <td class="dm-btn" style="background-color:${colors.accent};border-radius:6px;mso-padding-alt:13px 22px;">
-                        <a href="${escapeHtml(ctaHref)}" style="display:inline-block;padding:13px 22px;font-family:${BRAND_TYPE.body};font-size:15px;font-weight:600;line-height:18px;color:${colors.onAccent};text-decoration:none;border-radius:6px;">${escapeHtml(input.ctaLabel)}</a>
+                        <a href="${escapeHtml(ctaHref)}" style="display:inline-block;padding:13px 22px;font-family:${FONT_BODY};font-size:15px;font-weight:600;line-height:18px;color:${colors.onAccent};text-decoration:none;border-radius:6px;">${escapeHtml(input.ctaLabel)}</a>
                       </td>
                     </tr></table>
                   </td>
                 </tr>
                 <tr>
                   <td class="px" style="padding:0 ${gutter}px ${gutter}px;">
-                    <p class="dm-ink" style="margin:0;font-family:${BRAND_TYPE.body};font-size:16px;line-height:26px;color:${colors.ink};">${input.signOffLines.map(escapeHtml).join("<br />")}</p>
+                    <p class="dm-ink" style="margin:0;font-family:${FONT_BODY};font-size:16px;line-height:26px;color:${colors.ink};">${input.signOffLines.map(escapeHtml).join("<br />")}</p>
                   </td>
                 </tr>
               </table>
@@ -228,8 +239,8 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
           </tr>
           <tr>
             <td class="px" style="padding:22px ${gutter}px 8px;">
-              <p class="dm-muted" style="margin:0 0 10px;font-family:${BRAND_TYPE.body};font-size:12px;line-height:18px;color:${colors.inkMuted};">You are getting this one note because ${escapeHtml(input.venueName)} hosts weddings and I thought it might be useful. If you would rather not hear from me, <a class="dm-link" href="${escapeHtml(unsubscribeHref)}" style="color:${colors.accent};text-decoration:underline;">unsubscribe</a> and I will not write again.</p>
-              <p class="dm-muted" style="margin:0;font-family:${BRAND_TYPE.body};font-size:12px;line-height:18px;color:${colors.inkMuted};">${escapeHtml(input.postalAddress)}<br />${escapeHtml(BRAND.name)} &middot; <a class="dm-link" href="https://${escapeHtml(BRAND.domain)}" style="color:${colors.inkMuted};text-decoration:none;">${escapeHtml(BRAND.domain)}</a></p>
+              <p class="dm-muted" style="margin:0 0 10px;font-family:${FONT_BODY};font-size:12px;line-height:18px;color:${colors.inkMuted};">You are getting this one note because ${escapeHtml(input.venueName)} hosts weddings and I thought it might be useful. If you would rather not hear from me, <a class="dm-link" href="${escapeHtml(unsubscribeHref)}" style="color:${colors.accent};text-decoration:underline;">unsubscribe</a> and I will not write again.</p>
+              <p class="dm-muted" style="margin:0;font-family:${FONT_BODY};font-size:12px;line-height:18px;color:${colors.inkMuted};">${escapeHtml(input.postalAddress)}<br />${escapeHtml(BRAND.name)} &middot; <a class="dm-link" href="https://${escapeHtml(BRAND.domain)}" style="color:${colors.inkMuted};text-decoration:none;">${escapeHtml(BRAND.domain)}</a></p>
             </td>
           </tr>
         </table>

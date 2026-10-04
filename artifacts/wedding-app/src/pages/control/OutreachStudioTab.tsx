@@ -87,15 +87,17 @@ export function OutreachStudioTab() {
       ) : items.length === 0 ? (
         <EmptyState text="No studio emails here. The outreach agent drafts personal venue emails with the venue's own photos; use “Draft email” on a qualified prospect in Pipeline to start one by hand." />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
-          <div className="space-y-2 lg:max-h-[80vh] lg:overflow-y-auto lg:pr-1">
+        <div className="space-y-4">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Studio emails">
             {items.map((item) => (
               <button
                 key={item.email.id}
                 type="button"
+                role="tab"
+                aria-selected={selectedId === item.email.id}
                 onClick={() => setSelectedId(item.email.id)}
                 className={cn(
-                  "w-full border bg-card p-3 text-left transition-colors",
+                  "w-56 shrink-0 border bg-card p-3 text-left transition-colors",
                   selectedId === item.email.id ? "border-rose/60" : "border-border hover:border-foreground/40",
                 )}
               >
@@ -104,16 +106,14 @@ export function OutreachStudioTab() {
                   <span className="mono-label text-muted-foreground">#{item.email.id}</span>
                 </div>
                 <p className="mt-2 truncate text-sm font-medium text-foreground">{item.prospect.name}</p>
-                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.email.subject}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.email.subject}</p>
                 <p className="mono-label mt-2 text-muted-foreground">
                   {item.imageCount} photo{item.imageCount === 1 ? "" : "s"} · {fmt(item.email.updatedAt)}
                 </p>
               </button>
             ))}
           </div>
-          <div className="min-w-0">
-            {selectedId != null ? <EmailReview emailId={selectedId} /> : null}
-          </div>
+          {selectedId != null ? <EmailReview emailId={selectedId} /> : null}
         </div>
       )}
     </div>
@@ -318,7 +318,7 @@ function EmailReviewBody({
         {email.lastError ? <p className="mt-3 text-xs text-red-300">{email.lastError}</p> : null}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Preview */}
         <Card className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
@@ -341,7 +341,7 @@ function EmailReviewBody({
                 <FileText className="h-3.5 w-3.5" />
               </ToggleButton>
             </div>
-            <p className="mono-label text-muted-foreground">
+            <p className="mono-label min-w-0 flex-1 truncate text-muted-foreground sm:text-right">
               {dirty ? "preview shows the saved version" : `subject: ${email.subject}`}
             </p>
           </div>
@@ -355,7 +355,7 @@ function EmailReviewBody({
                 title={`Email preview (${device}, ${scheme})`}
                 sandbox=""
                 srcDoc={scheme === "dark" ? preview.htmlDark : preview.html}
-                style={{ width: device === "mobile" ? 390 : 680, height: 860 }}
+                style={{ width: device === "mobile" ? 390 : 660, height: 860, maxWidth: "100%" }}
                 className="shrink-0 border-0 bg-transparent"
               />
             )}
