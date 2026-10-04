@@ -39,11 +39,11 @@ const STEPS = [
   },
   {
     title: "They see themselves married at your venue",
-    body: "A few minutes later they get four images and a short reel by email, while your venue is still fresh. Most couples send it straight to their parents and friends.",
+    body: "A few minutes later their gallery is ready on the page they opened: four images and a short reel, while your venue is still fresh. They can share it with parents and friends from there.",
   },
   {
     title: "You review, then follow up",
-    body: "Every gallery lands in your dashboard first. Check the likeness, send it, and your booking link is right there when they are ready.",
+    body: "Every gallery also lands in your dashboard. Check the likeness, email it to the couple with your booking link, and follow up when they are ready.",
   },
 ] as const;
 
@@ -82,7 +82,9 @@ export default function VenueLandingPage() {
     <div className="site-page">
       <div className="hero-band">
         <SiteHeader />
-        <main id="main-content">
+      </div>
+      <main id="main-content">
+        <div className="hero-band">
           <section className="venue-hero page-width">
             <div className="hero-copy">
               <p className="eyebrow">For wedding venues</p>
@@ -92,10 +94,9 @@ export default function VenueLandingPage() {
                 into <em>bookings.</em>
               </h1>
               <p className="hero-description">
-                A couple tours your venue. Before they leave, they see
-                realistic images and a short reel of themselves getting
-                married there. They send it to family. They are more likely
-                to pick you.
+                A couple tours your venue. Before they leave, they see realistic
+                images and a short reel of themselves getting married there.
+                They send it to family. They are more likely to pick you.
               </p>
               <div className="action-row">
                 <Link
@@ -128,144 +129,160 @@ export default function VenueLandingPage() {
               </figcaption>
             </figure>
           </section>
-        </main>
-      </div>
-
-      <section className="value-strip page-width" aria-label="What makes it work">
-        <div>
-          {VALUE_POINTS.map((point) => (
-            <div key={point.title}>
-              <h3>{point.title}</h3>
-              <p>{point.body}</p>
-            </div>
-          ))}
         </div>
-      </section>
 
-      <section id="experience" className="page-width section">
-        <div className="section-heading">
+        <section
+          className="value-strip page-width"
+          aria-label="What makes it work"
+        >
           <div>
-            <p className="eyebrow">What the couple gets</p>
-            <h2>Four images and one short reel, at your venue.</h2>
-          </div>
-          <p>
-            Delivered to a private page that carries your venue name and your
-            booking link. The couple can save it, share it, and come back to
-            it.
-          </p>
-        </div>
-        <div className="sample-gallery">
-          {GALLERY_FRAMES.map((frame, i) => (
-            <figure key={frame.index}>
-              <img
-                src={frame.src}
-                alt={frame.alt}
-                loading="lazy"
-                width="600"
-                height="750"
-              />
-              <figcaption>
-                <span>0{i + 1}</span>
-                {frame.label}
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-        <p className="caption">
-          Example gallery, AI-generated. Each couple's gallery is made from
-          their own photos and your venue's photos.
-        </p>
-      </section>
-
-      <section id="how-it-works" className="ink-section">
-        <div className="how-section page-width">
-          <div>
-            <p className="eyebrow">How it works</p>
-            <h2>Add it to the end of every tour.</h2>
-            <p className="mt-4 max-w-md text-base leading-relaxed">
-              The tour already does the hard work. Dreemer gives the couple
-              something to take home that puts them in your space.
-            </p>
-            <Link href="/create-venue" className="text-link mt-6">
-              Set up your venue <ArrowRight size={17} />
-            </Link>
-          </div>
-          <ol className="journey-list">
-            {STEPS.map((step, i) => (
-              <li key={step.title}>
-                <span>0{i + 1}</span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.body}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      <section className="proof-section page-width" aria-labelledby="proof-heading">
-        <div className="proof-grid">
-          <div>
-            <p className="eyebrow">Results</p>
-            <h2 id="proof-heading">Numbers, not adjectives.</h2>
-            <p className="mt-4 max-w-md text-base leading-relaxed text-foreground/80">
-              Dreemer is new. We would rather show one venue's real
-              before-and-after booking rate than invent a statistic. As venues
-              report results, they go here, named and with permission.
-            </p>
-          </div>
-          <div className="grid gap-4">
-            {PROOF_SLOTS.map((slot) => (
-              <div key={slot.label} className="proof-slot">
-                <p className="eyebrow">{slot.label}</p>
-                <p>{slot.body}</p>
+            {VALUE_POINTS.map((point) => (
+              <div key={point.title}>
+                <h3>{point.title}</h3>
+                <p>{point.body}</p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="plans-section page-width" aria-labelledby="plans-heading">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Plans</p>
-            <h2 id="plans-heading">A monthly plan, plus credits when you need them.</h2>
+        <section id="experience" className="page-width section">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">What the couple gets</p>
+              <h2>Four images and one short reel, at your venue.</h2>
+            </div>
+            <p>
+              Delivered to a private page that carries your venue name and your
+              booking link. The couple can save it, share it, and come back to
+              it.
+            </p>
           </div>
-          <p>
-            One credit is one couple's gallery. Credits are shared across every
-            venue on your account. Prices are shown at checkout in your
-            dashboard.
+          <div className="sample-gallery">
+            {GALLERY_FRAMES.map((frame, i) => (
+              <figure key={frame.index}>
+                <img
+                  src={frame.src}
+                  alt={frame.alt}
+                  loading="lazy"
+                  width="600"
+                  height="750"
+                />
+                <figcaption>
+                  <span>0{i + 1}</span>
+                  {frame.label}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="caption">
+            Example gallery, AI-generated. Each couple's gallery is made from
+            their own photos and your venue's photos.
           </p>
-        </div>
-        <ul>
-          {PLANS.map((plan) => (
-            <li key={plan.name}>
-              <h3>{plan.name}</h3>
-              <p>{plan.body}</p>
-              <p>{plan.detail}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
+        </section>
 
-      <section className="start-section page-width">
-        <p className="eyebrow">Start today</p>
-        <h2>Give the next couple a reason to pick you.</h2>
-        <Link
-          href="/create-venue"
-          className="action-primary"
-          data-testid="venue-trial-register"
+        <section id="how-it-works" className="ink-section">
+          <div className="how-section page-width">
+            <div>
+              <p className="eyebrow">How it works</p>
+              <h2>Add it to the end of every tour.</h2>
+              <p className="mt-4 max-w-md text-base leading-relaxed">
+                The tour already does the hard work. Dreemer gives the couple
+                something to take home that puts them in your space.
+              </p>
+              <Link href="/create-venue" className="text-link mt-6">
+                Set up your venue <ArrowRight size={17} />
+              </Link>
+            </div>
+            <ol className="journey-list">
+              {STEPS.map((step, i) => (
+                <li key={step.title}>
+                  <span>0{i + 1}</span>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section
+          className="proof-section page-width"
+          aria-labelledby="proof-heading"
         >
-          Start free <ArrowRight size={18} />
-        </Link>
-        <p className="caption">
-          Five galleries free. Setup is your venue photos and your booking link.
-        </p>
-        <Link href="/login" className="text-link" data-testid="venue-trial-sign-in">
-          Already set up? Sign in
-        </Link>
-      </section>
+          <div className="proof-grid">
+            <div>
+              <p className="eyebrow">Results</p>
+              <h2 id="proof-heading">Numbers, not adjectives.</h2>
+              <p className="mt-4 max-w-md text-base leading-relaxed text-foreground/80">
+                Dreemer is new. We would rather show one venue's real
+                before-and-after booking rate than invent a statistic. As venues
+                report results, they go here, named and with permission.
+              </p>
+            </div>
+            <div className="grid gap-4">
+              {PROOF_SLOTS.map((slot) => (
+                <div key={slot.label} className="proof-slot">
+                  <p className="eyebrow">{slot.label}</p>
+                  <p>{slot.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section
+          className="plans-section page-width"
+          aria-labelledby="plans-heading"
+        >
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Plans</p>
+              <h2 id="plans-heading">
+                A monthly plan, plus credits when you need them.
+              </h2>
+            </div>
+            <p>
+              One credit is one couple's gallery. Credits are shared across
+              every venue on your account. Prices are shown at checkout in your
+              dashboard.
+            </p>
+          </div>
+          <ul>
+            {PLANS.map((plan) => (
+              <li key={plan.name}>
+                <h3>{plan.name}</h3>
+                <p>{plan.body}</p>
+                <p>{plan.detail}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="start-section page-width">
+          <p className="eyebrow">Start today</p>
+          <h2>Give the next couple a reason to pick you.</h2>
+          <Link
+            href="/create-venue"
+            className="action-primary"
+            data-testid="venue-trial-register"
+          >
+            Start free <ArrowRight size={18} />
+          </Link>
+          <p className="caption">
+            Five galleries free. Setup is your venue photos and your booking
+            link.
+          </p>
+          <Link
+            href="/login"
+            className="text-link"
+            data-testid="venue-trial-sign-in"
+          >
+            Already set up? Sign in
+          </Link>
+        </section>
+      </main>
       <SiteFooter />
     </div>
   );

@@ -75,7 +75,7 @@ export default function LandingPage() {
               <span>02</span> Choose your style
             </li>
             <li>
-              <span>03</span> Get your gallery by email
+              <span>03</span> See your gallery
             </li>
           </ol>
         </section>

@@ -491,7 +491,7 @@ function DashboardInner() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coupleEmail.trim())) {
       toast({
         title: "Couple email required",
-        description: "This is where Dreemer sends the finished gallery.",
+        description: "You’ll email the finished gallery to this address.",
         variant: "destructive",
       });
       return;
@@ -533,7 +533,7 @@ function DashboardInner() {
           onSuccess: () => {
             toast({
               title: "Gallery started",
-              description: "We’ll email the couple when it’s ready to view.",
+              description: "We’ll email you when it’s ready to review.",
             });
             resetCoupleIntake();
             void dashboard.refetch();
@@ -878,8 +878,8 @@ function DashboardInner() {
                   Create a couple’s gallery
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Add the couple’s email and two or three photos of them. We
-                  email their private link when the gallery is ready.
+                  Add the couple’s email and two or three photos of them. When
+                  it’s ready, review it here and email them their private link.
                 </p>
               </div>
 

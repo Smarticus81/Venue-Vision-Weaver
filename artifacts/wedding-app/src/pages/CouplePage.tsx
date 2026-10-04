@@ -406,7 +406,7 @@ function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
         </p>
         <p className="text-sm">
           Add a few photos, pick a style, and get four images and a short reel
-          by email in a few minutes.
+          in a few minutes.
         </p>
         <Button onClick={onNext} data-testid="visualize-cta">
           Start our gallery <ArrowRight />
@@ -777,8 +777,8 @@ function StyleStep({
               Four images and a short reel
             </div>
             <div className="text-base text-muted-foreground leading-relaxed">
-              Made at this venue from your photos, sent to your email. Usually
-              ready in a few minutes.
+              Made at this venue from your photos. Usually ready in a few
+              minutes, right on this page.
             </div>
           </div>
         </div>

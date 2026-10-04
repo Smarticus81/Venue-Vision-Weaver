@@ -277,7 +277,7 @@ function ProcessingView({ session }: { session: SessionDetailResponse }) {
           <h1>A few minutes, then it’s yours.</h1>
           <p>
             We’re making your images at {session.venue?.name || "your venue"},
-            then your reel. We’ll email you when they’re ready.
+            then your reel. Keep this link. The page updates on its own.
           </p>
         </aside>
         <section className="form-content" role="status">
