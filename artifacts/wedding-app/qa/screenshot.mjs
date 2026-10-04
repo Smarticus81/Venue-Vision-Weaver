@@ -27,6 +27,7 @@ const pages = [
   { name: "gallery", path: "/v/demo" },
   { name: "dashboard", path: "/dashboard" },
   { name: "control", path: "/control" },
+  { name: "control-outreach", path: "/control", action: async (page) => page.getByRole("button", { name: /^Outreach/ }).click() },
 ];
 
 await mkdir(outDir, { recursive: true });

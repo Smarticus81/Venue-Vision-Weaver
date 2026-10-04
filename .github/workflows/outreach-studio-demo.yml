@@ -1,0 +1,49 @@
+name: Outreach studio samples
+
+# Builds sample outreach emails from real public venue websites and commits the
+# HTML, provenance manifests, and screenshots (desktop/mobile, light/dark) to
+# the triggering branch under docs/outreach-studio/samples. Exists because the
+# authoring sandbox cannot reach arbitrary public sites. Nothing is sent: the
+# demo tool never talks to a mail provider or a database.
+on:
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: Comma-separated venue website URLs
+        required: true
+        default: https://www.pippinhillfarm.com/,https://www.brooklynwinery.com/,https://www.hummingbirdnestranch.com/
+      commit:
+        description: Commit the output to this branch
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  samples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable && corepack prepare pnpm@10.26.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Build samples from the venue sites
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          OUTREACH_SENDER_NAME: Sam
+          OUTREACH_POSTAL_ADDRESS: "Dreemer · 1234 Example Street · Austin, TX 78701"
+        run: pnpm run outreach:demo -- --out docs/outreach-studio/samples --sites "${{ inputs.sites }}"
+      - name: Screenshot (desktop + mobile, light + dark)
+        run: CHROME=google-chrome bash scripts/outreach-screenshots.sh docs/outreach-studio/samples
+      - name: Commit samples
+        if: ${{ inputs.commit }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/outreach-studio/samples
+          git diff --cached --quiet && echo "nothing to commit" && exit 0
+          git commit -m "docs: outreach studio samples from real venue sites (workflow run ${{ github.run_number }})"
+          git push

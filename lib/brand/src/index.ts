@@ -1,3 +1,4 @@
 export * from "./tokens.js";
 export * from "./contrast.js";
 export * from "./logo.js";
+export * from "./email.js";

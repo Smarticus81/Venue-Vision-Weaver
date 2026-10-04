@@ -306,3 +306,202 @@ export type ControlAuditEvent = typeof controlAuditEventsTable.$inferSelect;
 export type ControlPolicy = typeof controlPoliciesTable.$inferSelect;
 export type ControlCampaign = typeof controlCampaignsTable.$inferSelect;
 export type ControlProspect = typeof controlProspectsTable.$inferSelect;
+
+/* ————— Outreach email studio ————— */
+
+/** Lifecycle of a studio email. Approval itself lives on the governed action. */
+export const OUTREACH_EMAIL_STATUSES = [
+  "draft",
+  "sent",
+  "delivered",
+  "bounced",
+  "complained",
+  "failed",
+  "rejected",
+] as const;
+export type OutreachEmailStatus = (typeof OUTREACH_EMAIL_STATUSES)[number];
+
+export const PROSPECT_ASSET_KINDS = ["venue_image", "sample_preview"] as const;
+export type ProspectAssetKind = (typeof PROSPECT_ASSET_KINDS)[number];
+
+export const PROSPECT_RESEARCH_STATUSES = ["ok", "no_images", "fetch_failed"] as const;
+export type ProspectResearchStatus = (typeof PROSPECT_RESEARCH_STATUSES)[number];
+
+export const EMAIL_SUPPRESSION_REASONS = [
+  "unsubscribe_link",
+  "one_click",
+  "operator",
+  "bounce",
+  "complaint",
+] as const;
+export type EmailSuppressionReason = (typeof EMAIL_SUPPRESSION_REASONS)[number];
+
+/**
+ * What the studio learned about a prospect's venue from its own public site:
+ * grounded facts (name, location, spaces, style, capacity) with the URL each
+ * fact came from, plus the outcome of the image hunt. One row per prospect,
+ * replaced on every re-run.
+ */
+export const controlProspectResearchTable = pgTable(
+  "control_prospect_research",
+  {
+    id: serial("id").primaryKey(),
+    prospectId: integer("prospect_id")
+      .notNull()
+      .references(() => controlProspectsTable.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("ok"),
+    /** Pages fetched during research, in order. */
+    sourceUrls: jsonb("source_urls").$type<string[]>().notNull(),
+    /** { name, location, spaces: string[], style, capacity, summary } — only facts seen on the site. */
+    facts: jsonb("facts").$type<Record<string, unknown>>().notNull(),
+    /** Operator-facing flags, e.g. "No usable venue photos found on the site". */
+    warnings: jsonb("warnings").$type<string[]>().notNull(),
+    fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    prospectUnique: uniqueIndex("control_prospect_research_prospect_unique").on(table.prospectId),
+  }),
+);
+
+/**
+ * Images attached to a prospect: copies of the venue's own public photos
+ * (stored in our public bucket with the exact source URL recorded) and, when
+ * an operator asks for one, a labeled Dreemer sample preview.
+ */
+export const controlProspectAssetsTable = pgTable(
+  "control_prospect_assets",
+  {
+    id: serial("id").primaryKey(),
+    prospectId: integer("prospect_id")
+      .notNull()
+      .references(() => controlProspectsTable.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull().default("venue_image"),
+    /** Public object path, e.g. /public-objects/outreach/12/abc.jpg. */
+    objectKey: text("object_key").notNull(),
+    /** Where the original image came from. */
+    sourceUrl: text("source_url"),
+    /** The page the image was discovered on. */
+    pageUrl: text("page_url"),
+    contentType: text("content_type").notNull().default("image/jpeg"),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    bytes: integer("bytes").notNull(),
+    altText: text("alt_text").notNull(),
+    /** Research score; higher ranks first. */
+    score: integer("score").notNull().default(0),
+    /** Research pick (top 1-3) — operators can still swap any candidate in. */
+    selected: boolean("selected").notNull().default(false),
+    createdBy: text("created_by").notNull().default("research"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    prospectIdx: index("control_prospect_assets_prospect_idx").on(table.prospectId, table.score),
+  }),
+);
+
+/**
+ * A studio email: Grok's personal draft, the operator's edits, the chosen
+ * images, and the delivery record. Sending is only possible through the
+ * governed send_outreach_email action referenced by actionId; the row keeps
+ * an exact snapshot of what went out.
+ */
+export const controlOutreachEmailsTable = pgTable(
+  "control_outreach_emails",
+  {
+    id: serial("id").primaryKey(),
+    prospectId: integer("prospect_id")
+      .notNull()
+      .references(() => controlProspectsTable.id, { onDelete: "cascade" }),
+    actionId: integer("action_id").references(() => agentActionsTable.id, { onDelete: "set null" }),
+    campaignId: integer("campaign_id").references(() => controlCampaignsTable.id, {
+      onDelete: "set null",
+    }),
+    step: integer("step"),
+    status: text("status").notNull().default("draft"),
+    /** Two subject options Grok offered; `subject` is the one that sends. */
+    subjectOptions: jsonb("subject_options").$type<string[]>().notNull(),
+    subject: text("subject").notNull(),
+    /** Plain-text body paragraphs separated by blank lines (no greeting/sign-off). */
+    body: text("body").notNull(),
+    greeting: text("greeting").notNull(),
+    signOff: text("sign_off").notNull(),
+    ctaLabel: text("cta_label").notNull(),
+    ctaUrl: text("cta_url").notNull(),
+    /** Ordered control_prospect_assets ids rendered in the email (0-3). */
+    imageAssetIds: jsonb("image_asset_ids").$type<number[]>().notNull(),
+    /** Copy-quality notes from the drafting pass (word count, fallbacks used). */
+    draftNotes: jsonb("draft_notes").$type<Record<string, unknown> | null>(),
+    /** Random token in the unsubscribe URL; unique per email. */
+    unsubscribeToken: text("unsubscribe_token").notNull(),
+    htmlSnapshot: text("html_snapshot"),
+    textSnapshot: text("text_snapshot"),
+    providerMessageId: text("provider_message_id"),
+    sentTo: text("sent_to"),
+    sentAt: timestamp("sent_at"),
+    deliveredAt: timestamp("delivered_at"),
+    bouncedAt: timestamp("bounced_at"),
+    bounceReason: text("bounce_reason"),
+    lastError: text("last_error"),
+    createdByAgent: text("created_by_agent"),
+    editedBy: text("edited_by"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    prospectIdx: index("control_outreach_emails_prospect_idx").on(table.prospectId, table.createdAt),
+    statusIdx: index("control_outreach_emails_status_idx").on(table.status, table.updatedAt),
+    tokenUnique: uniqueIndex("control_outreach_emails_token_unique").on(table.unsubscribeToken),
+    providerIdx: index("control_outreach_emails_provider_idx").on(table.providerMessageId),
+  }),
+);
+
+/**
+ * Addresses the control plane must never email again. Written by the
+ * unsubscribe endpoints (link + RFC 8058 one-click), bounce/complaint
+ * webhooks, and operators; checked by every outreach send.
+ */
+export const controlEmailSuppressionsTable = pgTable(
+  "control_email_suppressions",
+  {
+    id: serial("id").primaryKey(),
+    email: text("email").notNull(),
+    reason: text("reason").notNull(),
+    detail: text("detail"),
+    prospectId: integer("prospect_id").references(() => controlProspectsTable.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailUnique: uniqueIndex("control_email_suppressions_email_unique").on(table.email),
+  }),
+);
+
+/** Provider delivery events (sent, delivered, bounced, complained) per studio email. */
+export const controlEmailEventsTable = pgTable(
+  "control_email_events",
+  {
+    id: serial("id").primaryKey(),
+    emailId: integer("email_id").references(() => controlOutreachEmailsTable.id, {
+      onDelete: "cascade",
+    }),
+    providerEventId: text("provider_event_id"),
+    eventType: text("event_type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailIdx: index("control_email_events_email_idx").on(table.emailId, table.createdAt),
+    providerEventUnique: uniqueIndex("control_email_events_provider_event_unique").on(
+      table.providerEventId,
+    ),
+  }),
+);
+
+export type ControlProspectResearch = typeof controlProspectResearchTable.$inferSelect;
+export type ControlProspectAsset = typeof controlProspectAssetsTable.$inferSelect;
+export type ControlOutreachEmail = typeof controlOutreachEmailsTable.$inferSelect;
+export type ControlEmailSuppression = typeof controlEmailSuppressionsTable.$inferSelect;
+export type ControlEmailEvent = typeof controlEmailEventsTable.$inferSelect;

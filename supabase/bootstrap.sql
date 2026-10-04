@@ -345,3 +345,112 @@ CREATE TABLE IF NOT EXISTS control_policies (
 
 CREATE UNIQUE INDEX IF NOT EXISTS control_policies_key_unique
   ON control_policies (key);
+
+-- Outreach email studio (venue research, images, studio emails, suppression, delivery events)
+
+CREATE TABLE IF NOT EXISTS control_prospect_research (
+  id SERIAL PRIMARY KEY,
+  prospect_id INTEGER NOT NULL REFERENCES control_prospects(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'ok',
+  source_urls JSONB NOT NULL,
+  facts JSONB NOT NULL,
+  warnings JSONB NOT NULL,
+  fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS control_prospect_research_prospect_unique
+  ON control_prospect_research (prospect_id);
+
+CREATE TABLE IF NOT EXISTS control_prospect_assets (
+  id SERIAL PRIMARY KEY,
+  prospect_id INTEGER NOT NULL REFERENCES control_prospects(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'venue_image',
+  object_key TEXT NOT NULL,
+  source_url TEXT,
+  page_url TEXT,
+  content_type TEXT NOT NULL DEFAULT 'image/jpeg',
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  bytes INTEGER NOT NULL,
+  alt_text TEXT NOT NULL,
+  score INTEGER NOT NULL DEFAULT 0,
+  selected BOOLEAN NOT NULL DEFAULT FALSE,
+  created_by TEXT NOT NULL DEFAULT 'research',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS control_prospect_assets_prospect_idx
+  ON control_prospect_assets (prospect_id, score);
+
+CREATE TABLE IF NOT EXISTS control_outreach_emails (
+  id SERIAL PRIMARY KEY,
+  prospect_id INTEGER NOT NULL REFERENCES control_prospects(id) ON DELETE CASCADE,
+  action_id INTEGER REFERENCES agent_actions(id) ON DELETE SET NULL,
+  campaign_id INTEGER REFERENCES control_campaigns(id) ON DELETE SET NULL,
+  step INTEGER,
+  status TEXT NOT NULL DEFAULT 'draft',
+  subject_options JSONB NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  greeting TEXT NOT NULL,
+  sign_off TEXT NOT NULL,
+  cta_label TEXT NOT NULL,
+  cta_url TEXT NOT NULL,
+  image_asset_ids JSONB NOT NULL,
+  draft_notes JSONB,
+  unsubscribe_token TEXT NOT NULL,
+  html_snapshot TEXT,
+  text_snapshot TEXT,
+  provider_message_id TEXT,
+  sent_to TEXT,
+  sent_at TIMESTAMP,
+  delivered_at TIMESTAMP,
+  bounced_at TIMESTAMP,
+  bounce_reason TEXT,
+  last_error TEXT,
+  created_by_agent TEXT,
+  edited_by TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS control_outreach_emails_prospect_idx
+  ON control_outreach_emails (prospect_id, created_at);
+
+CREATE INDEX IF NOT EXISTS control_outreach_emails_status_idx
+  ON control_outreach_emails (status, updated_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS control_outreach_emails_token_unique
+  ON control_outreach_emails (unsubscribe_token);
+
+CREATE INDEX IF NOT EXISTS control_outreach_emails_provider_idx
+  ON control_outreach_emails (provider_message_id);
+
+CREATE TABLE IF NOT EXISTS control_email_suppressions (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  detail TEXT,
+  prospect_id INTEGER REFERENCES control_prospects(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS control_email_suppressions_email_unique
+  ON control_email_suppressions (email);
+
+CREATE TABLE IF NOT EXISTS control_email_events (
+  id SERIAL PRIMARY KEY,
+  email_id INTEGER REFERENCES control_outreach_emails(id) ON DELETE CASCADE,
+  provider_event_id TEXT,
+  event_type TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS control_email_events_email_idx
+  ON control_email_events (email_id, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS control_email_events_provider_event_unique
+  ON control_email_events (provider_event_id);

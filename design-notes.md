@@ -56,6 +56,63 @@ with ink text, sea links, "Dreemer · Turn tours into bookings." footer.
 the original logo render for a side-by-side check; a dark theme (tokens
 already carry the ink roles).
 
+Merge note: the outreach email studio (below) landed on `main` in parallel
+with its own flat brand constants (`BRAND`, `BRAND_COLORS`, `BRAND_TYPE`,
+`BRAND_EMAIL`, `brandMarkSvg`). Those names now live in
+`lib/brand/src/email.ts`, derived from the same tokens, and the studio tab,
+its shared console components, and the outreach email template were mapped
+onto the token classes during the merge.
+
+## 2026-10-03 (seventeenth pass) — Outreach email studio
+
+**Conversion spine:** this email exists to get one venue owner to reply for a
+free preview (or a short call), because a personal note that shows their own
+spaces earns a reply where a newsletter earns a delete.
+
+**Direction (one line):** a handwritten note with photographs clipped to it —
+the venue's own photos are the centerpiece, Dreemer is a small signature
+(viewfinder mark + lowercase wordmark, muted), copy in plain words under 120
+words with one ask. Tokens come from the new shared module `lib/brand`
+(garden palette: canvas #faf9f5, ink #24332c, accent #325747; dark set tuned
+for Gmail/Apple Mail/Outlook forced dark).
+
+**Decisions & kills:**
+
+- Hand-built table HTML instead of React Email/MJML. Same output class
+  (600px fluid container, MSO conditionals, `role="presentation"`,
+  `prefers-color-scheme` + `[data-ogsc]` dark rules), zero runtime
+  dependencies in the API bundle, and the renderer is unit-tested with
+  node:test. Swapping to React Email later is contained to one file.
+- Hero photo first, then words; the second and third photos sit after the
+  first paragraph as a two-up (stacks on mobile). More than three photos
+  killed — it reads as a catalog.
+- Every photo carries a one-line credit ("Photo: venue.com") — honest about
+  provenance and it signals "I looked at your site" better than saying so.
+- No logo header, no color bands, no social icons, no "View in browser".
+  Footer is three lines: why you got this + unsubscribe, physical address,
+  dreemer.co.
+- Button is the only accent fill on the page; links in the body are killed so
+  the one ask stays the apex.
+- Preheader = the first sentence of the body, not a tagline.
+- Copy guardrails are code, not vibes: 2 subjects ≤ 50 chars, 35–120 words,
+  must name a real space from the site, banned-phrase list (hype/jargon),
+  no percentages/multipliers/prices, no bullets, max one exclamation.
+- Review screen in `/control` → Outreach: the real rendering in an iframe at
+  desktop/mobile widths with a light/dark toggle (dark = the template's dark
+  rules forced on, which is what a dark-mode client applies), plain-text view,
+  the exact List-Unsubscribe headers, photo picker with source links, facts
+  panel with the pages consulted. Approve is disabled while edits are unsaved
+  so what the operator sees is what sends.
+
+**Not done / next passes:**
+
+- Operator sample preview (an example couple in the venue) is a stubbed hook.
+- Real-venue screenshots come from the `Outreach studio samples` GitHub
+  workflow because the sandbox cannot reach public venue sites.
+- Pre-existing: the control console still references `text-rose`/`mono-label`
+  utilities that no longer exist in `index.css`; the studio tab reuses them for
+  consistency rather than fixing the console theme in this pass.
+
 ## 2026-10-02 (sixteenth pass) — Dashboard de-clutter (visual only)
 
 Owner brief after a full review: make the owner dashboard cleaner and

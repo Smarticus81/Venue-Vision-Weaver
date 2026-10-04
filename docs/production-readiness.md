@@ -159,6 +159,13 @@ The Autonomous Business Control Plane reasons with Grok instead and needs
 `XAI_API_KEY`; without it the server boots normally and the control-plane
 agents simply stay idle (approvals and metrics snapshots keep running).
 
+The outreach email studio (prospect emails with the venue's own photos) sends
+through Resend with `List-Unsubscribe` / one-click headers and needs
+`OUTREACH_POSTAL_ADDRESS` set to a real mailing address before the first real
+send; previews in `/control` → Outreach warn while it is a placeholder. Point a
+Resend webhook at `/api/webhooks/resend` with `RESEND_WEBHOOK_SECRET` so bounces
+and complaints land on the email record and suppress the address.
+
 Quality steps run low, medium, high, xhigh, max, and auto; production uses
 `high` via `OPENAI_IMAGE_QUALITY`. Cost and latency climb steeply above it. If a
 provider reports a temporary resolution-specific quality incident, keep the AI

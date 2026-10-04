@@ -1284,6 +1284,226 @@ paths:
               schema:
                 $ref: "#/components/schemas/ControlCampaignsResponse"
 
+  /control/outreach/emails:
+    get:
+      operationId: listControlOutreachEmails
+      tags: [control-plane]
+      summary: Outreach studio emails with prospect and approval state
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [draft, sent, delivered, bounced, complained, failed, rejected]
+        - name: prospectId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Emails
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachEmailsResponse"
+
+  /control/outreach/emails/{id}:
+    get:
+      operationId: getControlOutreachEmail
+      tags: [control-plane]
+      summary: Full review payload for one studio email (previews, images, sources, facts)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Email detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachEmailDetailResponse"
+        "404":
+          description: Email not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: updateControlOutreachEmail
+      tags: [control-plane]
+      summary: Edit a studio email while it awaits approval (subject, copy, images, call to action)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlOutreachEmailUpdateBody"
+      responses:
+        "200":
+          description: Updated detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachEmailDetailResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Email not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Email is no longer editable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/outreach/emails/{id}/regenerate:
+    post:
+      operationId: regenerateControlOutreachEmail
+      tags: [control-plane]
+      summary: Rewrite the copy with Grok and/or re-run the venue website research
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlOutreachEmailRegenerateBody"
+      responses:
+        "200":
+          description: Updated detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachEmailDetailResponse"
+        "409":
+          description: Email is no longer editable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: AI is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/outreach/emails/{id}/sample-preview:
+    post:
+      operationId: requestControlSamplePreview
+      tags: [control-plane]
+      summary: Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachEmailDetailResponse"
+        "501":
+          description: Sample previews are not available in this build
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/prospects/{id}/draft:
+    post:
+      operationId: draftControlOutreachEmail
+      tags: [control-plane]
+      summary: Research the prospect's venue, write a studio draft, and queue it for approval
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlOutreachDraftBody"
+      responses:
+        "201":
+          description: Draft created (pending approval)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachEmailDetailResponse"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Prospect may not be emailed (consent, cadence, or a pending draft exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/prospects/{id}/research:
+    post:
+      operationId: researchControlProspect
+      tags: [control-plane]
+      summary: Re-run the venue website research (facts and photos) for a prospect
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Research result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectResearchResponse"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
 components:
   schemas:
     HealthStatus:
@@ -2669,3 +2889,351 @@ components:
           items:
             $ref: "#/components/schemas/ControlCampaign"
 
+    ControlVenueFacts:
+      type: object
+      required: [spaces]
+      properties:
+        name:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        spaces:
+          type: array
+          items:
+            type: string
+        style:
+          type: string
+          nullable: true
+        capacity:
+          type: integer
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+
+    ControlProspectResearch:
+      type: object
+      required: [status, facts, sourceUrls, warnings, fetchedAt]
+      properties:
+        status:
+          type: string
+          enum: [ok, no_images, fetch_failed]
+        facts:
+          $ref: "#/components/schemas/ControlVenueFacts"
+        sourceUrls:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        fetchedAt:
+          type: string
+          format: date-time
+
+    ControlOutreachAsset:
+      type: object
+      required: [id, kind, url, width, height, bytes, altText, score, selected, inEmail, createdAt]
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          enum: [venue_image, sample_preview]
+        url:
+          type: string
+        sourceUrl:
+          type: string
+          nullable: true
+        pageUrl:
+          type: string
+          nullable: true
+        width:
+          type: integer
+        height:
+          type: integer
+        bytes:
+          type: integer
+        altText:
+          type: string
+        score:
+          type: integer
+        selected:
+          type: boolean
+        inEmail:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ControlProspectResearchResponse:
+      type: object
+      required: [research, assets]
+      properties:
+        research:
+          $ref: "#/components/schemas/ControlProspectResearch"
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlOutreachAsset"
+
+    ControlOutreachEmail:
+      type: object
+      required:
+        [id, prospectId, status, subjectOptions, subject, body, greeting, signOff, ctaLabel, ctaUrl, imageAssetIds, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        prospectId:
+          type: integer
+        actionId:
+          type: integer
+          nullable: true
+        campaignId:
+          type: integer
+          nullable: true
+        step:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, delivered, bounced, complained, failed, rejected]
+        subjectOptions:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        body:
+          type: string
+        greeting:
+          type: string
+        signOff:
+          type: string
+        ctaLabel:
+          type: string
+        ctaUrl:
+          type: string
+        imageAssetIds:
+          type: array
+          items:
+            type: integer
+        draftNotes:
+          type: object
+          additionalProperties: true
+          nullable: true
+        providerMessageId:
+          type: string
+          nullable: true
+        sentTo:
+          type: string
+          nullable: true
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        bouncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        bounceReason:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+        createdByAgent:
+          type: string
+          nullable: true
+        editedBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ControlOutreachProspectSummary:
+      type: object
+      required: [id, name, email, status]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        contactName:
+          type: string
+          nullable: true
+        status:
+          type: string
+        website:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+
+    ControlOutreachEmailListItem:
+      type: object
+      required: [email, prospect, imageCount]
+      properties:
+        email:
+          $ref: "#/components/schemas/ControlOutreachEmail"
+        prospect:
+          $ref: "#/components/schemas/ControlOutreachProspectSummary"
+        actionStatus:
+          type: string
+          nullable: true
+        imageCount:
+          type: integer
+
+    ControlOutreachEmailsResponse:
+      type: object
+      required: [emails]
+      properties:
+        emails:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlOutreachEmailListItem"
+
+    ControlOutreachEmailDetail:
+      type: object
+      required: [email, prospect, assets, preview, warnings, editable, samplePreviewsEnabled]
+      properties:
+        email:
+          $ref: "#/components/schemas/ControlOutreachEmail"
+        prospect:
+          $ref: "#/components/schemas/ControlProspect"
+        action:
+          type: object
+          nullable: true
+          required: [id, status]
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+            decidedBy:
+              type: string
+              nullable: true
+            decisionNote:
+              type: string
+              nullable: true
+            error:
+              type: string
+              nullable: true
+        research:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ControlProspectResearch"
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlOutreachAsset"
+        preview:
+          type: object
+          required: [html, htmlDark, text, headers]
+          properties:
+            html:
+              type: string
+            htmlDark:
+              type: string
+            text:
+              type: string
+            headers:
+              type: object
+              additionalProperties:
+                type: string
+        warnings:
+          type: object
+          required: [research, config]
+          properties:
+            research:
+              type: array
+              items:
+                type: string
+            config:
+              type: array
+              items:
+                type: string
+        editable:
+          type: boolean
+        samplePreviewsEnabled:
+          type: boolean
+
+    ControlOutreachEmailDetailResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          $ref: "#/components/schemas/ControlOutreachEmailDetail"
+
+    ControlOutreachEmailUpdateBody:
+      type: object
+      properties:
+        subject:
+          type: string
+          minLength: 3
+          maxLength: 80
+        body:
+          type: string
+          minLength: 20
+          maxLength: 2000
+        greeting:
+          type: string
+          minLength: 2
+          maxLength: 80
+        signOff:
+          type: string
+          minLength: 2
+          maxLength: 160
+        ctaLabel:
+          type: string
+          minLength: 2
+          maxLength: 40
+        ctaUrl:
+          type: string
+          minLength: 5
+          maxLength: 500
+        imageAssetIds:
+          type: array
+          maxItems: 3
+          items:
+            type: integer
+
+    ControlOutreachEmailRegenerateBody:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [copy, research, both]
+        ask:
+          type: string
+          enum: [preview, call]
+
+    ControlOutreachDraftBody:
+      type: object
+      properties:
+        ask:
+          type: string
+          enum: [preview, call]
+        campaignId:
+          type: integer
+        step:
+          type: integer
+          minimum: 1
+          maximum: 10
+        refreshResearch:
+          type: boolean

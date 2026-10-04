@@ -11,6 +11,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { clerkDomainMismatch } from "./lib/clerkEnv.js";
 import router from "./routes";
 import { handleClerkWebhook, handleStripeWebhook } from "./routes/billing.js";
+import { handleResendWebhook } from "./control-plane/outreach/resendWebhook.js";
 import { logger } from "./lib/logger";
 import { logStripeMissing } from "./lib/stripe.js";
 import { clerkEnabled, clerkPublishableKey } from "./lib/orgAuth.js";
@@ -111,8 +112,19 @@ app.post(
   },
 );
 
+// Resend delivery webhooks (outreach studio bounces/complaints). Raw body for svix.
+app.post(
+  "/api/webhooks/resend",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    void handleResendWebhook(req, res);
+  },
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// RFC 8058 one-click unsubscribe posts `List-Unsubscribe=One-Click` as text/plain.
+app.use("/api/outreach/unsubscribe", express.text({ type: "text/plain" }));
 
 app.use("/api", router);
 
