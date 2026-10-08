@@ -70,6 +70,13 @@ export function getAppBaseUrl(): string {
   return fallback;
 }
 
+/** Absolute URL for a site-relative path ("/og-image.png" -> "https://host/og-image.png"). */
+export function absoluteUrl(pathAndQuery: string): string {
+  const base = getAppBaseUrl();
+  if (/^https?:\/\//i.test(pathAndQuery)) return pathAndQuery;
+  return `${base}${pathAndQuery.startsWith("/") ? "" : "/"}${pathAndQuery}`;
+}
+
 export function shareUrlForToken(shareToken: string | null | undefined): string {
   if (!shareToken) return getAppBaseUrl();
   return `${getAppBaseUrl()}/v/${shareToken}`;

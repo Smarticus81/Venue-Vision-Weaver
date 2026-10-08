@@ -2,13 +2,6 @@ import { Storage, File } from "@google-cloud/storage";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import {
-  ObjectAclPolicy,
-  ObjectPermission,
-  canAccessObject,
-  getObjectAclPolicy,
-  setObjectAclPolicy,
-} from "./objectAcl";
 import { parseByteRange } from "./byteRange.js";
 
 type ReadStreamOptions = { start?: number; end?: number };
@@ -205,13 +198,33 @@ export class ObjectStorageService {
     return cleanPath;
   }
 
+  /**
+   * Existence check for a public object. Uses a directory listing (metadata
+   * only) rather than downloading the whole file: mail clients fetch outreach
+   * images anonymously and a download-to-test-then-stream doubled the egress.
+   */
   async searchPublicObject(filePath: string): Promise<ObjectFileHandle | null> {
     if (useSupabaseStorage()) {
       const bucket = supabasePublicBucket();
       const objectPath = `public/${filePath}`;
-      const { data, error } = await getSupabaseAdmin().storage.from(bucket).download(objectPath);
-      if (error || !data) return null;
-      return supabaseHandle(bucket, objectPath);
+      const segments = objectPath.split("/");
+      const fileName = segments.pop() ?? "";
+      if (!fileName) return null;
+      try {
+        const { data: listed, error } = await getSupabaseAdmin()
+          .storage.from(bucket)
+          .list(segments.join("/"), { search: fileName, limit: 100 });
+        if (error) return null;
+        const meta = listed?.find((entry) => entry.name === fileName);
+        if (!meta) return null;
+        const m = (meta.metadata ?? {}) as Record<string, unknown>;
+        const storedType = typeof m.mimetype === "string" ? m.mimetype : null;
+        const storedSize =
+          typeof m.size === "string" || typeof m.size === "number" ? m.size : undefined;
+        return supabaseHandle(bucket, objectPath, storedType, storedSize);
+      } catch {
+        return null;
+      }
     }
 
     for (const searchPath of this.getPublicObjectSearchPaths()) {
@@ -441,48 +454,6 @@ export class ObjectStorageService {
 
     const entityId = rawObjectPath.slice(objectEntityDir.length);
     return `/objects/${entityId}`;
-  }
-
-  async trySetObjectEntityAclPolicy(
-    rawPath: string,
-    aclPolicy: ObjectAclPolicy,
-  ): Promise<string> {
-    const normalizedPath = this.normalizeObjectEntityPath(rawPath);
-    if (!normalizedPath.startsWith("/")) {
-      return normalizedPath;
-    }
-
-    if (useSupabaseStorage()) {
-      return normalizedPath;
-    }
-
-    const parts = normalizedPath.slice(1).split("/");
-    const entityId = parts.slice(1).join("/");
-    let entityDir = this.getPrivateObjectDir();
-    if (!entityDir.endsWith("/")) entityDir = `${entityDir}/`;
-    const { bucketName, objectName } = parseObjectPath(`${entityDir}${entityId}`);
-    const gcsFile = objectStorageClient.bucket(bucketName).file(objectName);
-    await setObjectAclPolicy(gcsFile, aclPolicy);
-    return normalizedPath;
-  }
-
-  async canAccessObjectEntity({
-    userId,
-    objectFile,
-    requestedPermission,
-  }: {
-    userId?: string;
-    objectFile: ObjectFileHandle;
-    requestedPermission?: ObjectPermission;
-  }): Promise<boolean> {
-    if (useSupabaseStorage()) {
-      return true;
-    }
-    return canAccessObject({
-      userId,
-      objectFile: objectFile as unknown as File,
-      requestedPermission: requestedPermission ?? ObjectPermission.READ,
-    });
   }
 }
 

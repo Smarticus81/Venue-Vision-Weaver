@@ -22,3 +22,18 @@ export function trustProxySetting(env: NodeJS.ProcessEnv = process.env): TrustPr
 
   return false;
 }
+
+/**
+ * A request carrying X-Forwarded-For while trust proxy is off means every
+ * caller shares the proxy's IP: per-IP rate limits collapse into one bucket
+ * and one busy venue locks everyone out. Returns true when that should be
+ * flagged (the caller logs it once).
+ */
+export function forwardedForIgnored(
+  headers: Record<string, string | string[] | undefined>,
+  trustSetting: TrustProxyValue,
+): boolean {
+  if (trustSetting !== false) return false;
+  const forwarded = headers["x-forwarded-for"];
+  return Boolean(Array.isArray(forwarded) ? forwarded.length : forwarded?.trim());
+}
