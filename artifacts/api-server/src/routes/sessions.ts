@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { eq, and, sql, ilike, gte, isNull } from "drizzle-orm";
+import { eq, and, sql, gte, gt, isNull } from "drizzle-orm";
 import {
   db,
   coupleSessionsTable,
@@ -11,29 +11,42 @@ import {
   organizationsTable,
   creditTransactionsTable,
   uploadIntentsTable,
+  type SessionCreatedVia,
 } from "@workspace/db";
 import {
   CreateSessionParams,
   CreateSessionBody,
   GetSessionParams,
+  RecordGalleryEventBody,
+  RecoverSessionsBody,
 } from "@workspace/api-zod";
 import {
   creditsForSession,
   countVenueSessionsToday,
   VENUE_DAILY_SESSION_CAP,
+  LOW_CREDIT_THRESHOLD,
+  isLowCredit,
 } from "../lib/credits.js";
-import { assertCanSpend, SPEND_ERRORS } from "../lib/trial.js";
-import { toPublicVenue, isVenueReady } from "../lib/venueResponse.js";
+import { assertCanSpend, SPEND_ERRORS, type SpendCheck } from "../lib/trial.js";
+import { toPublicVenue, isVenueReady, bookingCtaFor } from "../lib/venueResponse.js";
 import { MIN_COUPLE_REFERENCES } from "../lib/referenceImage.js";
 import { recordGalleryEvent, hashClientIp } from "../lib/galleryEvents.js";
+import { recordFunnelEvent } from "../lib/funnelEvents.js";
 import {
   sendSessionCreatedNotification,
   sendGalleryToCouple,
   sendRecoveryEmail,
+  sendOwnerCreditsExhausted,
+  sendOwnerLowCredit,
 } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
-import { requireOrgVenue } from "../lib/orgAuth.js";
+import {
+  requireOrg,
+  requireOrgAdmin,
+  requireOwnerMutationOrigin,
+  type OrgContext,
+} from "../lib/orgAuth.js";
 import {
   mimeTypeFromObjectPath,
   ObjectNotFoundError,
@@ -51,6 +64,7 @@ import {
   hasCompletePublicGalleryAssets,
 } from "../lib/sessionVisibility.js";
 import { findGalleryStyle } from "../lib/galleryStyles.js";
+import { verifyTurnstileToken, type TurnstileVerification } from "../lib/turnstile.js";
 
 const router: IRouter = Router();
 
@@ -64,7 +78,26 @@ const objectStorageService = new ObjectStorageService();
 const ALLOWED_COUPLE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const STALE_UPLOAD_INTENT_ERROR = "STALE_UPLOAD_INTENT";
 
-function buildSessionDetailPayload(session: typeof coupleSessionsTable.$inferSelect, venue: typeof venuesTable.$inferSelect | undefined, venueMedia: Array<typeof venueMediaTable.$inferSelect>, generatedAssets: Array<typeof generatedAssetsTable.$inferSelect>, options: { includeEmail: boolean }) {
+/** Per-IP session creation: 10 per hour. */
+export const SESSION_CREATE_IP_LIMIT = 10;
+/** Per-venue burst cap beneath the daily cap: a tour-day crowd is a handful an hour, not dozens. */
+export const VENUE_HOURLY_SESSION_CAP = 12;
+/** Per-IP share-page events: 30 per 10 minutes. */
+const GALLERY_EVENT_IP_LIMIT = 30;
+/** The owner gets at most one "credits ran out" email per organization per day per reason. */
+const EXHAUSTED_EMAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const COUPLE_UNAVAILABLE_MESSAGE = "This venue isn't taking new galleries just yet. Please check back shortly.";
+
+/* ————— Payloads ————— */
+
+function buildSessionDetailPayload(
+  session: typeof coupleSessionsTable.$inferSelect,
+  venue: typeof venuesTable.$inferSelect | undefined,
+  venueMedia: Array<typeof venueMediaTable.$inferSelect>,
+  generatedAssets: Array<typeof generatedAssetsTable.$inferSelect>,
+  options: { includeEmail: boolean },
+) {
   const base = {
     id: session.id,
     venueId: session.venueId,
@@ -92,12 +125,15 @@ function buildSessionDetailPayload(session: typeof coupleSessionsTable.$inferSel
       bookedAt: session.bookedAt,
       consentAt: session.consentAt,
       failureDetail: session.failureDetail,
-      // Filled by the gallery pipeline workstream from render telemetry.
+      // Render telemetry (render_attempts) belongs to the gallery pipeline
+      // workstream; null until it publishes a summary.
       qualitySummary: null,
     };
   }
   return base;
 }
+
+/* ————— Upload intents and photo validation ————— */
 
 async function assertUploadIntentAvailable(
   objectKey: string,
@@ -122,35 +158,44 @@ async function assertUploadIntentAvailable(
   }
 }
 
+/**
+ * Cheap checks first (shape, duplicates, intent rows), then the expensive
+ * download + sharp pass. Nothing is downloaded until every key has a live
+ * upload intent for this venue.
+ */
 async function validateCouplePhotoObjectKeys(objectKeys: string[], venueId: number): Promise<void> {
   const seen = new Set<string>();
-  const qualities: ReferenceImageQuality[] = [];
-
   for (const [index, objectKey] of objectKeys.entries()) {
     if (seen.has(objectKey)) {
       throw new Error(`Couple photo ${index + 1} is duplicated. Upload distinct reference photos.`);
     }
     seen.add(objectKey);
-
     if (!objectKey.startsWith("/objects/uploads/")) {
       throw new Error(`Couple photo ${index + 1} is not a valid uploaded object.`);
     }
     await assertUploadIntentAvailable(objectKey, venueId, "couple");
+  }
 
+  const qualities: ReferenceImageQuality[] = [];
+  for (const [index, objectKey] of objectKeys.entries()) {
     try {
       const file = await objectStorageService.getObjectEntityFile(objectKey);
-      const [buffer] = await file.download();
-      if (buffer.length > MAX_COUPLE_UPLOAD_BYTES) {
+      const metadata = await file.getMetadata().catch(() => null);
+      const declaredSize = Number(metadata?.size ?? 0);
+      if (declaredSize > MAX_COUPLE_UPLOAD_BYTES) {
         throw new Error(`Couple photo ${index + 1} is too large. Upload images up to 50MB.`);
       }
-
-      const metadata = await file.getMetadata().catch(() => null);
       const contentType =
         metadata?.contentType && metadata.contentType !== "application/octet-stream"
           ? metadata.contentType
           : mimeTypeFromObjectPath(objectKey);
       if (!ALLOWED_COUPLE_IMAGE_TYPES.has(contentType)) {
         throw new Error(`Couple photo ${index + 1} must be a JPG, PNG, or WebP image.`);
+      }
+
+      const [buffer] = await file.download();
+      if (buffer.length > MAX_COUPLE_UPLOAD_BYTES) {
+        throw new Error(`Couple photo ${index + 1} is too large. Upload images up to 50MB.`);
       }
 
       const quality = await assertReferenceImageQuality({
@@ -190,20 +235,270 @@ async function hasReadyEmailGalleryBundle(sessionId: number): Promise<boolean> {
   return hasCompletePublicGalleryAssets(assets);
 }
 
-async function readyGalleryThumbnailObjectKey(sessionId: number, status: string): Promise<string | null> {
-  if (status !== "ready") return null;
-  const assets = await db
-    .select({
-      objectKey: generatedAssetsTable.objectKey,
-      assetType: generatedAssetsTable.assetType,
-      displayOrder: generatedAssetsTable.displayOrder,
-    })
-    .from(generatedAssetsTable)
-    .where(eq(generatedAssetsTable.sessionId, sessionId))
-    .orderBy(generatedAssetsTable.displayOrder);
-  if (!hasCompletePublicGalleryAssets(assets)) return null;
-  return assets.find((asset) => asset.assetType === "image" && asset.displayOrder === 1)?.objectKey ?? null;
+async function countVenueSessionsLastHour(venueId: number): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(coupleSessionsTable)
+    .where(
+      and(
+        eq(coupleSessionsTable.venueId, venueId),
+        gte(coupleSessionsTable.createdAt, sql`now() - interval '1 hour'`),
+      ),
+    );
+  return row?.count ?? 0;
 }
+
+/* ————— Session-create guard pipeline (exported for tests) ————— */
+
+export interface SessionCreateGuardInput {
+  venueId: number;
+  clientIp: string;
+  couplePhotoKeys: string[];
+  turnstileToken: string | null | undefined;
+  neededCredits: number;
+}
+
+export interface SessionCreateGuardDeps {
+  rateLimit(key: string, limit: number, windowMs: number): boolean;
+  loadVenueMedia(venueId: number): Promise<Array<{ coverage?: string | null }>>;
+  countVenueSessionsToday(venueId: number): Promise<number>;
+  countVenueSessionsLastHour(venueId: number): Promise<number>;
+  assertCanSpend(venueId: number, amount: number): Promise<SpendCheck>;
+  verifyTurnstile(token: string | null | undefined, ip: string): Promise<TurnstileVerification>;
+  /** Upload-intent checks, then download + quality validation. Throws a couple-facing message. */
+  validatePhotos(objectKeys: string[], venueId: number): Promise<void>;
+}
+
+export type SessionCreateGuardResult =
+  | { ok: true }
+  | {
+      ok: false;
+      status: 400 | 402 | 409 | 429 | 503;
+      body: { error: string; code?: string };
+      spendReason?: SpendRefusalReason;
+    };
+
+export type SpendRefusalReason = Extract<SpendCheck, { ok: false }>["reason"];
+
+/**
+ * Every check that must pass before a couple's photos are downloaded or a
+ * credit is touched, in cost order: rate limit -> venue readiness -> daily
+ * and hourly caps -> trial clock / balance -> Turnstile -> upload intents ->
+ * download and validate. Nothing here writes to the database.
+ */
+export async function runSessionCreateGuards(
+  input: SessionCreateGuardInput,
+  deps: SessionCreateGuardDeps,
+): Promise<SessionCreateGuardResult> {
+  if (!deps.rateLimit(`create:${input.clientIp}`, SESSION_CREATE_IP_LIMIT, 60 * 60 * 1000)) {
+    return {
+      ok: false,
+      status: 429,
+      body: { error: "Too many sessions from this address. Try again later.", code: "rate_limited" },
+    };
+  }
+
+  // Readiness: enough reference photos AND every coverage role (the same rule
+  // the public venue payload reports). Couple-facing copy, never setup advice.
+  const media = await deps.loadVenueMedia(input.venueId);
+  if (!isVenueReady(media)) {
+    return { ok: false, status: 409, body: { error: COUPLE_UNAVAILABLE_MESSAGE, code: "venue_not_ready" } };
+  }
+
+  if ((await deps.countVenueSessionsToday(input.venueId)) >= VENUE_DAILY_SESSION_CAP) {
+    return {
+      ok: false,
+      status: 429,
+      body: { error: "This venue has reached its daily preview limit. Please try again tomorrow.", code: "venue_daily_cap" },
+    };
+  }
+  if ((await deps.countVenueSessionsLastHour(input.venueId)) >= VENUE_HOURLY_SESSION_CAP) {
+    return {
+      ok: false,
+      status: 429,
+      body: { error: "This venue is busy right now. Please try again in a little while.", code: "venue_hourly_cap" },
+    };
+  }
+
+  // Trial clock + balance (lib/trial.ts): a lapsed trial is blocked by time
+  // even when credits remain; the code lets the couple app explain which.
+  const spend = await deps.assertCanSpend(input.venueId, input.neededCredits);
+  if (!spend.ok) {
+    return { ok: false, status: 402, body: { error: SPEND_ERRORS[spend.reason], code: spend.reason }, spendReason: spend.reason };
+  }
+
+  // Optional bot check (only enforced when TURNSTILE_SECRET_KEY is set).
+  const turnstile = await deps.verifyTurnstile(input.turnstileToken, input.clientIp);
+  if (!turnstile.ok) {
+    if (turnstile.reason === "verify_failed") {
+      return {
+        ok: false,
+        status: 503,
+        body: { error: "We couldn't confirm you're not a robot just now. Please try again in a moment.", code: "turnstile_unavailable" },
+      };
+    }
+    return {
+      ok: false,
+      status: 400,
+      body: { error: "Please complete the quick security check and try again.", code: "turnstile_failed" },
+    };
+  }
+
+  try {
+    await deps.validatePhotos(input.couplePhotoKeys, input.venueId);
+  } catch (err) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: err instanceof Error ? err.message : "One or more couple photos are invalid. Upload clear images again.",
+        code: "invalid_photos",
+      },
+    };
+  }
+
+  return { ok: true };
+}
+
+function liveGuardDeps(): SessionCreateGuardDeps {
+  return {
+    rateLimit,
+    loadVenueMedia: (venueId) =>
+      db.select({ coverage: venueMediaTable.coverage }).from(venueMediaTable).where(eq(venueMediaTable.venueId, venueId)),
+    countVenueSessionsToday,
+    countVenueSessionsLastHour,
+    assertCanSpend,
+    verifyTurnstile: (token, ip) => verifyTurnstileToken(token, ip),
+    validatePhotos: validateCouplePhotoObjectKeys,
+  };
+}
+
+/* ————— Owner credit nudges ————— */
+
+/**
+ * The low-credit email goes out once per dip: when the balance is at or
+ * below the threshold and either no email was ever sent, or credits were
+ * granted since the last one (a purchase lifted the balance in between).
+ */
+export function shouldSendLowCreditEmail(input: {
+  balance: number;
+  lowCreditNotifiedAt: Date | null;
+  lastGrantAt: Date | null;
+  threshold?: number;
+}): boolean {
+  if (!isLowCredit(input.balance, input.threshold ?? LOW_CREDIT_THRESHOLD)) return false;
+  if (!input.lowCreditNotifiedAt) return true;
+  return input.lastGrantAt != null && input.lastGrantAt.getTime() > input.lowCreditNotifiedAt.getTime();
+}
+
+type CreateVenueRow = {
+  id: number;
+  name: string;
+  slug: string;
+  ownerEmail: string;
+  organizationId: number | null;
+};
+
+async function notifyCreditsExhausted(
+  venue: CreateVenueRow,
+  reason: "trial_expired" | "insufficient_credits",
+  coupleName: string | null,
+): Promise<void> {
+  void recordFunnelEvent({
+    organizationId: venue.organizationId,
+    venueId: venue.id,
+    event: "credits_exhausted",
+    properties: { reason },
+    source: "server",
+  });
+  const scope = venue.organizationId != null ? `org:${venue.organizationId}` : `venue:${venue.id}`;
+  if (!rateLimit(`exhausted-email:${scope}:${reason}`, 1, EXHAUSTED_EMAIL_WINDOW_MS)) return;
+  const result = await sendOwnerCreditsExhausted({ ownerEmail: venue.ownerEmail, venue, coupleName, reason });
+  if (!result.sent) logger.warn({ venueId: venue.id, reason: result.reason }, "Credits-exhausted owner email not sent");
+}
+
+async function maybeSendLowCreditEmail(venue: CreateVenueRow): Promise<void> {
+  if (venue.organizationId == null) return;
+  const [org] = await db
+    .select({
+      creditsBalance: organizationsTable.creditsBalance,
+      lowCreditNotifiedAt: organizationsTable.lowCreditNotifiedAt,
+    })
+    .from(organizationsTable)
+    .where(eq(organizationsTable.id, venue.organizationId));
+  if (!org) return;
+  const [grant] = await db
+    .select({ createdAt: sql<Date | string | null>`max(${creditTransactionsTable.createdAt})` })
+    .from(creditTransactionsTable)
+    .where(and(eq(creditTransactionsTable.organizationId, venue.organizationId), gt(creditTransactionsTable.delta, 0)));
+  const lastGrantAt = grant?.createdAt ? new Date(grant.createdAt) : null;
+  if (!shouldSendLowCreditEmail({ balance: org.creditsBalance, lowCreditNotifiedAt: org.lowCreditNotifiedAt, lastGrantAt })) return;
+
+  const [claimed] = await db
+    .update(organizationsTable)
+    .set({ lowCreditNotifiedAt: new Date() })
+    .where(
+      and(
+        eq(organizationsTable.id, venue.organizationId),
+        org.lowCreditNotifiedAt
+          ? eq(organizationsTable.lowCreditNotifiedAt, org.lowCreditNotifiedAt)
+          : isNull(organizationsTable.lowCreditNotifiedAt),
+      ),
+    )
+    .returning({ id: organizationsTable.id });
+  if (!claimed) return; // another request already sent it
+  const result = await sendOwnerLowCredit({ ownerEmail: venue.ownerEmail, venue, creditsLeft: org.creditsBalance });
+  if (!result.sent) logger.warn({ venueId: venue.id, reason: result.reason }, "Low-credit owner email not sent");
+}
+
+async function recordFirstGalleryIfNew(venue: CreateVenueRow): Promise<void> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(coupleSessionsTable)
+    .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
+    .where(
+      and(
+        eq(coupleSessionsTable.kind, "couple"),
+        venue.organizationId != null ? eq(venuesTable.organizationId, venue.organizationId) : eq(venuesTable.id, venue.id),
+      ),
+    );
+  if ((row?.count ?? 0) === 1) {
+    await recordFunnelEvent({ organizationId: venue.organizationId, venueId: venue.id, event: "first_gallery", source: "server" });
+  }
+}
+
+/* ————— Owner session resolution (authenticate first, uniform 404) ————— */
+
+type OwnerSessionContext = {
+  ctx: OrgContext;
+  session: typeof coupleSessionsTable.$inferSelect;
+  venue: typeof venuesTable.$inferSelect;
+};
+
+/**
+ * Every /sessions/:id route authenticates before touching the session table
+ * and answers 404 for anything outside the caller's organization, so an
+ * unauthenticated probe learns nothing about which ids exist.
+ */
+async function resolveOwnerSession(req: Request, res: Response, sessionId: number): Promise<OwnerSessionContext | null> {
+  if (!requireOwnerMutationOrigin(req, res)) return null;
+  const ctx = await requireOrg(req, res);
+  if (!ctx) return null;
+
+  const [row] = await db
+    .select({ session: coupleSessionsTable, venue: venuesTable })
+    .from(coupleSessionsTable)
+    .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
+    .where(and(eq(coupleSessionsTable.id, sessionId), eq(venuesTable.organizationId, ctx.org.id)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "Session not found" });
+    return null;
+  }
+  return { ctx, session: row.session, venue: row.venue };
+}
+
+/* ————— Routes ————— */
 
 // POST /venues/:slug/sessions
 router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
@@ -215,12 +510,39 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
 
   const body = CreateSessionBody.safeParse(req.body);
   if (!body.success) {
-    res.status(400).json({ error: body.error.message });
+    res.status(400).json({ error: body.error.message, code: "invalid_body" });
     return;
   }
 
   if (!body.data.coupleEmail || !EMAIL_REGEX.test(body.data.coupleEmail.trim())) {
-    res.status(400).json({ error: "A valid couple email is required" });
+    res.status(400).json({ error: "A valid couple email is required", code: "invalid_email" });
+    return;
+  }
+
+  // Both partners agree to the AI preview and photo handling before any
+  // photo is touched. Couple sessions never start without it.
+  if (body.data.consent !== true) {
+    res.status(400).json({
+      error: "Please confirm that both of you agree to the AI preview and how your photos are handled.",
+      code: "consent_required",
+    });
+    return;
+  }
+
+  if (
+    body.data.couplePhotoKeys.length < MIN_COUPLE_PHOTOS ||
+    body.data.couplePhotoKeys.length > MAX_COUPLE_PHOTOS
+  ) {
+    res.status(400).json({
+      error: `Upload ${MIN_COUPLE_PHOTOS}-${MAX_COUPLE_PHOTOS} clear couple photos for best likeness.`,
+      code: "photo_count",
+    });
+    return;
+  }
+
+  const styleId = body.data.styleId ?? DEFAULT_STYLE_ID;
+  if (!findGalleryStyle(styleId)) {
+    res.status(400).json({ error: "Choose a valid gallery style.", code: "invalid_style" });
     return;
   }
 
@@ -228,8 +550,8 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     .select({
       id: venuesTable.id,
       name: venuesTable.name,
+      slug: venuesTable.slug,
       ownerEmail: venuesTable.ownerEmail,
-      creditsBalance: venuesTable.creditsBalance,
       organizationId: venuesTable.organizationId,
     })
     .from(venuesTable)
@@ -240,79 +562,33 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  if (
-    body.data.couplePhotoKeys.length < MIN_COUPLE_PHOTOS ||
-    body.data.couplePhotoKeys.length > MAX_COUPLE_PHOTOS
-  ) {
-    res.status(400).json({
-      error: `Upload ${MIN_COUPLE_PHOTOS}-${MAX_COUPLE_PHOTOS} clear couple photos for best likeness.`,
-    });
-    return;
-  }
-
-  try {
-    await validateCouplePhotoObjectKeys(body.data.couplePhotoKeys, venue.id);
-  } catch (err) {
-    res.status(400).json({
-      error:
-        err instanceof Error
-          ? err.message
-          : "One or more couple photos are invalid. Upload clear images again.",
-    });
-    return;
-  }
-
-  const styleId = body.data.styleId ?? DEFAULT_STYLE_ID;
-  if (!findGalleryStyle(styleId)) {
-    res.status(400).json({ error: "Choose a valid gallery style." });
-    return;
-  }
-
   const neededCredits = creditsForSession();
+  const coupleName = body.data.coupleName?.trim() || null;
 
-  const todayCount = await countVenueSessionsToday(venue.id);
-  if (todayCount >= VENUE_DAILY_SESSION_CAP) {
-    res.status(429).json({
-      error: "This venue has reached its daily preview limit. Please try again tomorrow.",
-    });
-    return;
-  }
-
-  // Trial clock + balance (lib/trial.ts): a lapsed trial is blocked by time
-  // even when credits remain; the code lets the couple app explain which.
-  const spend = await assertCanSpend(venue.id, neededCredits);
-  if (!spend.ok) {
-    res.status(402).json({ error: SPEND_ERRORS[spend.reason], code: spend.reason });
-    return;
-  }
-
-  // Refuse to create a session unless the venue is ready: enough reference
-  // photos AND every coverage role present (the same rule the public venue
-  // payload's isReady flag reports). Generation against thin coverage either
-  // fails downstream or produces an unconvincing gallery - block it here so
-  // the couple isn't charged time/cost on a doomed run.
-  const venueMediaForReadiness = await db
-    .select({ coverage: venueMediaTable.coverage })
-    .from(venueMediaTable)
-    .where(eq(venueMediaTable.venueId, venue.id));
-
-  if (!isVenueReady(venueMediaForReadiness)) {
-    // Couple-facing copy: the couple sees this message, so it must not read
-    // like venue setup instructions.
-    res.status(409).json({
-      error:
-        "This venue isn't taking new galleries just yet. Please check back shortly.",
-    });
-    return;
-  }
-
-  // Per-IP creation rate limit: 10 sessions / hour
-  if (!rateLimit(`create:${clientKey(req)}`, 10, 60 * 60 * 1000)) {
-    res.status(429).json({ error: "Too many sessions from this address. Try again later." });
+  const guard = await runSessionCreateGuards(
+    {
+      venueId: venue.id,
+      clientIp: clientKey(req),
+      couplePhotoKeys: body.data.couplePhotoKeys,
+      turnstileToken: body.data.turnstileToken,
+      neededCredits,
+    },
+    liveGuardDeps(),
+  );
+  if (!guard.ok) {
+    if (guard.status === 402 && guard.spendReason) {
+      // Credit exhaustion is a conversion moment for the owner, not a dead end.
+      void notifyCreditsExhausted(venue, guard.spendReason, coupleName).catch((err) =>
+        logger.warn({ err, venueId: venue.id }, "credits-exhausted notification failed"),
+      );
+    }
+    res.status(guard.status).json(guard.body);
     return;
   }
 
   const normalizedEmail = body.data.coupleEmail.trim().toLowerCase();
+  const createdVia: SessionCreatedVia = body.data.createdVia === "tour_day" ? "tour_day" : "couple_link";
+  const weddingMonth = body.data.weddingMonth ?? null;
 
   let session: typeof coupleSessionsTable.$inferSelect | null = null;
   try {
@@ -369,10 +645,14 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
           venueId: venue.id,
           status: "pending",
           styleId,
-          coupleName: body.data.coupleName?.trim() || null,
+          coupleName,
           coupleEmail: normalizedEmail,
           shareToken: crypto.randomUUID(),
           creditsCharged: neededCredits,
+          kind: "couple",
+          createdVia,
+          weddingMonth,
+          consentAt: new Date(),
         })
         .returning();
 
@@ -399,18 +679,27 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     });
   } catch (err) {
     if (err instanceof Error && err.message === STALE_UPLOAD_INTENT_ERROR) {
-      res.status(409).json({ error: "One of these uploads was already used or expired. Upload the photos again." });
+      res.status(409).json({
+        error: "One of these uploads was already used or expired. Upload the photos again.",
+        code: "stale_upload",
+      });
       return;
     }
     throw err;
   }
 
   if (!session) {
+    // Lost the race for the last credit between the guard and the debit.
+    void notifyCreditsExhausted(venue, "insufficient_credits", coupleName).catch((err) =>
+      logger.warn({ err, venueId: venue.id }, "credits-exhausted notification failed"),
+    );
     res.status(402).json({ error: SPEND_ERRORS.insufficient_credits, code: "insufficient_credits" });
     return;
   }
 
   void sendSessionCreatedNotification(venue.ownerEmail, session, venue);
+  void maybeSendLowCreditEmail(venue).catch((err) => logger.warn({ err, venueId: venue.id }, "low-credit check failed"));
+  void recordFirstGalleryIfNew(venue).catch((err) => logger.warn({ err, venueId: venue.id }, "first-gallery event failed"));
 
   res.status(201).json({
     id: session.id,
@@ -429,36 +718,15 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [session] = await db
+  const owner = await resolveOwnerSession(req, res, params.data.id);
+  if (!owner) return;
+  const { session, venue } = owner;
+
+  const venueMedia = await db
     .select()
-    .from(coupleSessionsTable)
-    .where(eq(coupleSessionsTable.id, params.data.id));
-
-  if (!session) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
-
-  const [venue] = await db
-    .select()
-    .from(venuesTable)
-    .where(eq(venuesTable.id, session.venueId));
-
-  if (!venue) {
-    res.status(404).json({ error: "Venue not found" });
-    return;
-  }
-
-  const ownerVenue = await requireOrgVenue(req, res, venue.slug);
-  if (!ownerVenue) return;
-
-  const venueMedia = venue
-    ? await db
-        .select()
-        .from(venueMediaTable)
-        .where(eq(venueMediaTable.venueId, venue.id))
-        .orderBy(venueMediaTable.displayOrder)
-    : [];
+    .from(venueMediaTable)
+    .where(eq(venueMediaTable.venueId, venue.id))
+    .orderBy(venueMediaTable.displayOrder);
 
   const generatedAssets = await db
     .select()
@@ -469,7 +737,7 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
   res.json(buildSessionDetailPayload(session, venue, venueMedia, generatedAssets, { includeEmail: true }));
 });
 
-// DELETE /sessions/:id  (owner session)
+// DELETE /sessions/:id  (owner session, organization admins only)
 router.delete("/sessions/:id", async (req, res): Promise<void> => {
   const params = GetSessionParams.safeParse(req.params);
   if (!params.success) {
@@ -478,26 +746,12 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
   }
   const sessionId = params.data.id;
 
-  const [session] = await db
-    .select({ id: coupleSessionsTable.id, venueId: coupleSessionsTable.venueId })
-    .from(coupleSessionsTable)
-    .where(eq(coupleSessionsTable.id, sessionId));
-  if (!session) {
-    res.status(404).json({ error: "Session not found" });
+  const owner = await resolveOwnerSession(req, res, sessionId);
+  if (!owner) return;
+  if (!requireOrgAdmin(owner.ctx)) {
+    res.status(403).json({ error: "Only organization admins can delete galleries.", code: "org_admin_required" });
     return;
   }
-
-  const [venue] = await db
-    .select({ slug: venuesTable.slug })
-    .from(venuesTable)
-    .where(eq(venuesTable.id, session.venueId));
-  if (!venue) {
-    res.status(404).json({ error: "Venue not found" });
-    return;
-  }
-
-  const ownerVenue = await requireOrgVenue(req, res, venue.slug);
-  if (!ownerVenue) return;
 
   const generated = await db
     .select({ objectKey: generatedAssetsTable.objectKey })
@@ -508,8 +762,8 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
     .from(coupleMediaTable)
     .where(eq(coupleMediaTable.sessionId, sessionId));
 
-  // couple_media and generated_assets cascade with the session row;
-  // credit_transactions keep their history with session_id set null.
+  // couple_media, generated_assets and gallery_events cascade with the
+  // session row; credit_transactions keep their history with session_id null.
   await db.delete(coupleSessionsTable).where(eq(coupleSessionsTable.id, sessionId));
 
   // Storage cleanup is best-effort after the DB delete: a leftover object is
@@ -584,46 +838,96 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
   res.json(buildSessionDetailPayload(session, venue, venueMedia, publicGeneratedAssets, { includeEmail: false }));
 });
 
+// POST /sessions/by-token/:shareToken/events  (public share-page funnel events)
+router.post("/sessions/by-token/:shareToken/events", async (req, res): Promise<void> => {
+  const { shareToken } = req.params;
+  if (!shareToken || shareToken.length < 16) {
+    res.status(400).json({ error: "Share token required", code: "invalid_event" });
+    return;
+  }
 
-// POST /sessions/recover  (magic-link recovery; never reveals if email exists)
+  // "viewed" is server-recorded by GET by-token and is not in the body enum.
+  const body = RecordGalleryEventBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Unsupported gallery event.", code: "invalid_event" });
+    return;
+  }
+
+  if (!rateLimit(`gallery-event:${clientKey(req)}`, GALLERY_EVENT_IP_LIMIT, 10 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many events from this address. Try again later.", code: "rate_limited" });
+    return;
+  }
+
+  const [session] = await db
+    .select({
+      id: coupleSessionsTable.id,
+      venueId: coupleSessionsTable.venueId,
+      kind: coupleSessionsTable.kind,
+      weddingMonth: coupleSessionsTable.weddingMonth,
+    })
+    .from(coupleSessionsTable)
+    .where(eq(coupleSessionsTable.shareToken, shareToken));
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  // Sample galleries are owner demos; they never count in the funnel.
+  if (session.kind !== "couple") {
+    res.json({ recorded: false });
+    return;
+  }
+
+  await recordGalleryEvent({
+    sessionId: session.id,
+    venueId: session.venueId,
+    eventType: body.data.type,
+    source: body.data.source ?? "share_page",
+    ipHash: hashClientIp(clientKey(req)),
+    meta: session.weddingMonth ? { weddingMonth: session.weddingMonth } : null,
+  });
+  res.json({ recorded: true });
+});
+
+/** Exact, case-insensitive match on the stored address: no LIKE/ILIKE, so `_` and `%` are literal. */
+export function recoverableSessionsQuery(normalizedEmail: string) {
+  return db
+    .select({
+      id: coupleSessionsTable.id,
+      status: coupleSessionsTable.status,
+      coupleName: coupleSessionsTable.coupleName,
+      shareToken: coupleSessionsTable.shareToken,
+      createdAt: coupleSessionsTable.createdAt,
+      venueName: venuesTable.name,
+    })
+    .from(coupleSessionsTable)
+    .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
+    .where(and(eq(sql`lower(${coupleSessionsTable.coupleEmail})`, normalizedEmail), eq(coupleSessionsTable.kind, "couple")))
+    .orderBy(sql`${coupleSessionsTable.createdAt} desc`)
+    .limit(50);
+}
+
+// POST /sessions/recover  (emails the couple their links; never reveals if the email exists)
 router.post("/sessions/recover", async (req, res): Promise<void> => {
-  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const parsed = RecoverSessionsBody.safeParse(req.body);
+  const email = parsed.success ? parsed.data.email.trim().toLowerCase() : "";
   if (!email || !EMAIL_REGEX.test(email)) {
     res.status(400).json({ error: "Valid email required" });
     return;
   }
 
   // Rate-limit BOTH per IP and per email so a single attacker can't enumerate
-  // and a single inbox can't get spammed. 3 / 15 minutes each.
+  // and a single inbox can't get spammed. 5 / 15 minutes per address, 3 per inbox.
   const windowMs = 15 * 60 * 1000;
   const ipOk = rateLimit(`recover:ip:${clientKey(req)}`, 5, windowMs);
   const emailOk = rateLimit(`recover:email:${email}`, 3, windowMs);
-
-  const respond = (): void => {
-    res.json({ accepted: true });
-  };
-
   if (!ipOk || !emailOk) {
-    respond();
+    res.status(429).json({ error: "Too many recovery requests. Try again in a few minutes.", code: "rate_limited" });
     return;
   }
 
   try {
-    const rows = await db
-      .select({
-        id: coupleSessionsTable.id,
-        status: coupleSessionsTable.status,
-        coupleName: coupleSessionsTable.coupleName,
-        shareToken: coupleSessionsTable.shareToken,
-        createdAt: coupleSessionsTable.createdAt,
-        venueName: venuesTable.name,
-      })
-      .from(coupleSessionsTable)
-      .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
-      .where(ilike(coupleSessionsTable.coupleEmail, email))
-      .orderBy(sql`${coupleSessionsTable.createdAt} desc`)
-      .limit(50);
-
+    const rows = await recoverableSessionsQuery(email);
     if (rows.length > 0) {
       void sendRecoveryEmail(email, rows);
     }
@@ -631,27 +935,34 @@ router.post("/sessions/recover", async (req, res): Promise<void> => {
     logger.error({ err }, "recovery lookup failed");
   }
 
-  respond();
+  res.json({ accepted: true });
 });
+
+function galleryEmailOptions(
+  venue: { name: string; bookingUrl: string | null; websiteUrl: string | null; contactEmail: string | null },
+  session: { weddingMonth: string | null; coupleName: string | null },
+) {
+  return {
+    venueName: venue.name,
+    bookingCta: bookingCtaFor(venue, { weddingMonth: session.weddingMonth, coupleName: session.coupleName, medium: "email" }),
+  };
+}
 
 // POST /sessions/:id/send-email  (owner-only, can override recipient)
 router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
   const sessionId = Number(req.params.id);
-  if (Number.isNaN(sessionId)) {
+  if (!Number.isInteger(sessionId) || sessionId <= 0) {
     res.status(400).json({ error: "Invalid session id" });
     return;
   }
 
-  const [session] = await db
-    .select()
-    .from(coupleSessionsTable)
-    .where(eq(coupleSessionsTable.id, sessionId));
-  if (!session) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
+  // Authenticate before any lookup: the send bucket is keyed on the caller's
+  // organization, and unknown or foreign sessions are a uniform 404.
+  const owner = await resolveOwnerSession(req, res, sessionId);
+  if (!owner) return;
+  const { ctx, session, venue } = owner;
 
-  if (!rateLimit(`send:owner:${session.venueId}`, 30, 60 * 60 * 1000)) {
+  if (!rateLimit(`send:owner:${ctx.org.id}`, 30, 60 * 60 * 1000)) {
     res.status(429).json({ error: "Owner send-email rate limit reached. Try again later." });
     return;
   }
@@ -662,19 +973,6 @@ router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Provide a valid email address." });
     return;
   }
-
-  const [venue] = await db
-    .select({ name: venuesTable.name, slug: venuesTable.slug })
-    .from(venuesTable)
-    .where(eq(venuesTable.id, session.venueId));
-
-  if (!venue) {
-    res.status(404).json({ error: "Venue not found" });
-    return;
-  }
-
-  const ownerVenue = await requireOrgVenue(req, res, venue.slug);
-  if (!ownerVenue) return;
 
   if (session.status !== "ready" || !(await hasReadyEmailGalleryBundle(session.id))) {
     res.status(409).json({ error: "This gallery is not ready to email yet." });
@@ -690,12 +988,15 @@ router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
       .where(eq(coupleSessionsTable.id, session.id));
   }
 
-  const result = await sendGalleryToCouple(recipient, session, venue);
+  const result = await sendGalleryToCouple(recipient, session, venue, galleryEmailOptions(venue, session));
   if (!result.sent) {
     // The owner can act on the real cause (missing key, unverified sender
     // domain), so return it instead of a 200 that reads as success.
     res.status(502).json({ error: `Email not sent: ${result.reason}` });
     return;
+  }
+  if (session.kind === "couple") {
+    void recordGalleryEvent({ sessionId: session.id, venueId: session.venueId, eventType: "sent", source: "dashboard" });
   }
   res.json({ sent: true });
 });
@@ -751,7 +1052,12 @@ router.post("/sessions/by-token/:shareToken/send-email", async (req, res): Promi
   }
 
   const [venue] = await db
-    .select({ name: venuesTable.name })
+    .select({
+      name: venuesTable.name,
+      bookingUrl: venuesTable.bookingUrl,
+      websiteUrl: venuesTable.websiteUrl,
+      contactEmail: venuesTable.contactEmail,
+    })
     .from(venuesTable)
     .where(eq(venuesTable.id, session.venueId));
 
@@ -760,7 +1066,7 @@ router.post("/sessions/by-token/:shareToken/send-email", async (req, res): Promi
     return;
   }
 
-  const result = await sendGalleryToCouple(recipient, session, venue);
+  const result = await sendGalleryToCouple(recipient, session, venue, galleryEmailOptions(venue, session));
   if (!result.sent) {
     // Couple-facing: keep the response gentle; the actionable detail is in
     // the server logs and the owner-side send flow.
@@ -769,6 +1075,9 @@ router.post("/sessions/by-token/:shareToken/send-email", async (req, res): Promi
         "We couldn't send the email right now. Copy your gallery link to keep it, and try again soon.",
     });
     return;
+  }
+  if (session.kind === "couple") {
+    void recordGalleryEvent({ sessionId: session.id, venueId: session.venueId, eventType: "sent", source: "share_page" });
   }
   res.json({ sent: true });
 });
