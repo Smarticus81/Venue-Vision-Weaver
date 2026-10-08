@@ -18,7 +18,7 @@ import { clerkEnabled, clerkPublishableKey } from "./lib/orgAuth.js";
 import { corsOptions, securityHeaders } from "./lib/httpSecurity.js";
 import { forwardedForIgnored, trustProxySetting } from "./lib/trustProxy.js";
 import { hasCompletePublicGalleryAssets } from "./lib/sessionVisibility.js";
-import { absoluteUrl } from "./lib/appUrl.js";
+import { absoluteUrl, getAppBaseUrl } from "./lib/appUrl.js";
 import { buildPublicConfig, publicConfigMetaTag } from "./lib/publicConfig.js";
 import {
   escapeHtml,
@@ -230,6 +230,7 @@ async function serveIndexHtml(res: Response, options: ShellOptions): Promise<voi
       replaceMetaWith: options.replaceMetaWith,
       noindex,
       noscript: renderNoscriptShell(config, options.path),
+      assetBaseUrl: getAppBaseUrl(),
     }),
   );
 }

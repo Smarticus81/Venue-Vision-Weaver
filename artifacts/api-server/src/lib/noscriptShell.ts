@@ -165,11 +165,19 @@ export interface ShellRenderOptions {
   noindex?: boolean;
   /** Markup inserted directly after <div id="root"></div>. */
   noscript?: string;
+  /**
+   * Public origin ("https://host"). The built shell references its default
+   * og:image/twitter:image by site-relative path, which link-preview crawlers
+   * ignore; when set, those defaults are rewritten to absolute URLs.
+   */
+  assetBaseUrl?: string;
 }
 
 const SHELL_META_PATTERN =
   /<title>[\s\S]*?<\/title>\s*|<meta\s+(?:name="(?:description|twitter:[a-z:]+)"|property="og:[a-z:_]+")[^>]*\/?>\s*/gi;
 const ROBOTS_META_PATTERN = /<meta\s+name="robots"[^>]*\/?>/i;
+const RELATIVE_IMAGE_META_PATTERN =
+  /(<meta\s+(?:property="og:image"|name="twitter:image")\s+content=")(\/[^/"][^"]*)(")/gi;
 const ROOT_DIV = '<div id="root"></div>';
 
 /** Compose the final shell HTML. Pure; the caller sets headers. */
@@ -178,6 +186,11 @@ export function renderShellHtml(options: ShellRenderOptions): string {
 
   if (options.replaceMetaWith) {
     html = html.replace(SHELL_META_PATTERN, "");
+  } else if (options.assetBaseUrl) {
+    const base = options.assetBaseUrl.replace(/\/$/, "");
+    html = html.replace(RELATIVE_IMAGE_META_PATTERN, (_match, open: string, path: string, close: string) => {
+      return `${open}${escapeHtml(base)}${path}${close}`;
+    });
   }
   if (options.noindex) {
     const noindexTag = `<meta name="robots" content="noindex, nofollow" />`;

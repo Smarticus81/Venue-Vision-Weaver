@@ -431,6 +431,24 @@ test("gallery Open Graph tags are absolute and replace the shell's defaults inst
   assert.ok(html.includes('<link rel="icon" href="/favicon.ico" />'));
 });
 
+test("shell default preview images become absolute when no page-specific meta replaces them", () => {
+  const html = shell.renderShellHtml({ html: shellHtml, assetBaseUrl: "https://dreemer.example.com/" });
+  assert.ok(html.includes('<meta property="og:image" content="https://dreemer.example.com/og-image.png" />'));
+  assert.ok(html.includes('<meta name="twitter:image" content="https://dreemer.example.com/og-image.png" />'));
+  assert.ok(!html.includes('content="/og-image.png"'));
+  // Other relative attributes (icons) are untouched, and width/height stay.
+  assert.ok(html.includes('<link rel="icon" href="/favicon.ico" />'));
+  assert.ok(html.includes('og:image:width" content="1200"'));
+  // Page-specific tags win; nothing is rewritten twice.
+  const replaced = shell.renderShellHtml({
+    html: shellHtml,
+    assetBaseUrl: "https://dreemer.example.com",
+    replaceMetaWith: '<meta property="og:image" content="https://cdn.example.com/x.jpg" />',
+  });
+  assert.equal((replaced.match(/og:image"/g) ?? []).length, 1);
+  assert.ok(replaced.includes("https://cdn.example.com/x.jpg"));
+});
+
 test("noindex applies to private paths only", () => {
   for (const path of ["/v/abc", "/preview/ivy-hall", "/dashboard", "/dashboard/ivy-hall", "/control", "/claim/tok"]) {
     assert.equal(shell.isNoindexPath(path), true, path);
@@ -493,6 +511,61 @@ test("Grok request errors classify provider trouble as transient", () => {
   assert.equal(grok.grokRequestTimeoutMs({} as NodeJS.ProcessEnv), 60_000);
   assert.equal(grok.grokRequestTimeoutMs({ GROK_TIMEOUT_MS: "1000" } as NodeJS.ProcessEnv), 5_000);
   assert.equal(grok.grokRequestTimeoutMs({ GROK_TIMEOUT_MS: "90000" } as NodeJS.ProcessEnv), 90_000);
+});
+
+test("agent run budget clamps to one to thirty minutes", () => {
+  assert.equal(grok.agentRunBudgetMs({} as NodeJS.ProcessEnv), 8 * 60_000);
+  assert.equal(grok.agentRunBudgetMs({ CONTROL_PLANE_RUN_BUDGET_MS: "1000" } as NodeJS.ProcessEnv), 60_000);
+  assert.equal(grok.agentRunBudgetMs({ CONTROL_PLANE_RUN_BUDGET_MS: "99999999" } as NodeJS.ProcessEnv), 30 * 60_000);
+  assert.equal(grok.agentRunBudgetMs({ CONTROL_PLANE_RUN_BUDGET_MS: "abc" } as NodeJS.ProcessEnv), 8 * 60_000);
+});
+
+test("agent loop stops at its wall-clock budget without executing further tools", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const savedKey = process.env.XAI_API_KEY;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (savedKey === undefined) delete process.env.XAI_API_KEY;
+    else process.env.XAI_API_KEY = savedKey;
+  });
+  process.env.XAI_API_KEY = "xai-test-key";
+
+  // Every response asks for another tool call, so only the budget can end the run.
+  let requests = 0;
+  globalThis.fetch = (async () => {
+    requests += 1;
+    const payload = {
+      id: `resp_${requests}`,
+      output: [
+        { type: "function_call", call_id: `call_${requests}`, name: "get_business_metrics", arguments: "{}" },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  let executed = 0;
+  const result = await grok.runAgentLoop({
+    systemPrompt: "s",
+    userMessage: "u",
+    tools: [{ name: "get_business_metrics", description: "KPIs" }],
+    budgetMs: 50,
+    executeTool: async () => {
+      executed += 1;
+      // The first tool call outlives the budget; nothing after it may run.
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return { ok: true };
+    },
+  });
+
+  assert.equal(requests, 1, `expected the loop to stop after the budget, made ${requests} requests`);
+  assert.equal(executed, 1);
+  assert.match(result.finalText, /time budget/);
+  const lastResult = [...result.transcript].reverse().find((step) => step.type === "tool_result");
+  assert.ok(lastResult);
 });
 
 /* ————— Upload tokens, proxy, TLS, cleanup knobs ————— */

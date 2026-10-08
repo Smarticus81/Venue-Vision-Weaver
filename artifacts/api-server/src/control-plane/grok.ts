@@ -81,12 +81,25 @@ const MAX_TOOL_CALLS = 24;
 const MAX_TOOL_RESULT_CHARS = 24000;
 const MAX_STRING_CHARS = 2000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_RUN_BUDGET_MS = 8 * 60_000;
 
 /** Per-request wall clock for one xAI call (GROK_TIMEOUT_MS, 5s-10min). */
 export function grokRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = Number(env.GROK_TIMEOUT_MS?.trim());
   if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_REQUEST_TIMEOUT_MS;
   return Math.min(10 * 60_000, Math.max(5_000, Math.floor(raw)));
+}
+
+/**
+ * Wall-clock budget for one whole agent run (CONTROL_PLANE_RUN_BUDGET_MS,
+ * 1-30 min, default 8). The scheduler runs agents one after another, so a
+ * single run that keeps calling tools would otherwise hold the queue for
+ * MAX_ITERATIONS × the request timeout plus every tool's own latency.
+ */
+export function agentRunBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.CONTROL_PLANE_RUN_BUDGET_MS?.trim());
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_RUN_BUDGET_MS;
+  return Math.min(30 * 60_000, Math.max(60_000, Math.floor(raw)));
 }
 
 /**
@@ -158,8 +171,20 @@ export function truncateForModel(value: unknown): unknown {
   return { truncated: true, originalLength: json.length, result: compact };
 }
 
-async function callGrok(apiKey: string, body: Record<string, unknown>): Promise<ResponsesApiResponse> {
-  const timeoutMs = grokRequestTimeoutMs();
+async function callGrok(
+  apiKey: string,
+  body: Record<string, unknown>,
+  options: { deadline?: number } = {},
+): Promise<ResponsesApiResponse> {
+  // One request never outlives the run it belongs to.
+  const remaining = options.deadline === undefined ? Infinity : options.deadline - Date.now();
+  if (remaining <= 0) {
+    throw new GrokRequestError("Agent run budget exhausted before the request was sent", {
+      status: 0,
+      timedOut: true,
+    });
+  }
+  const timeoutMs = Math.max(1_000, Math.min(grokRequestTimeoutMs(), remaining));
   let res: Response;
   let text: string;
   try {
@@ -293,12 +318,17 @@ export async function runAgentLoop(params: {
   tools: ToolDeclaration[];
   executeTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   enableWebSearch?: boolean;
+  /** Overrides CONTROL_PLANE_RUN_BUDGET_MS for this run. */
+  budgetMs?: number;
 }): Promise<AgentLoopResult> {
   const apiKey = process.env.XAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("XAI_API_KEY is required for control-plane agent reasoning.");
   }
   const model = controlPlaneModel();
+  const startedAt = Date.now();
+  const deadline = startedAt + (params.budgetMs ?? agentRunBudgetMs());
+  let budgetExhausted = false;
 
   const toolsPayload: Array<Record<string, unknown>> = params.tools.map((tool) => ({
     type: "function",
@@ -323,12 +353,20 @@ export async function runAgentLoop(params: {
   let previousResponseId: string | undefined;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
-    const response = await callGrok(apiKey, {
-      model,
-      input,
-      tools: toolsPayload,
-      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
-    });
+    if (Date.now() >= deadline) {
+      budgetExhausted = true;
+      break;
+    }
+    const response = await callGrok(
+      apiKey,
+      {
+        model,
+        input,
+        tools: toolsPayload,
+        ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
+      },
+      { deadline },
+    );
 
     promptTokens += response.usage?.input_tokens ?? 0;
     completionTokens += response.usage?.output_tokens ?? 0;
@@ -367,8 +405,17 @@ export async function runAgentLoop(params: {
       toolCallCount += 1;
       transcript.push({ type: "tool_call", name, args });
 
-      if (toolCallCount > MAX_TOOL_CALLS) {
-        const overBudget = { error: "Tool budget exhausted. Summarize your findings and finish." };
+      // Past the wall clock, pending calls are answered with the budget
+      // notice instead of being executed: the model still gets a valid
+      // function_call_output for every call_id, and the run ends on the
+      // next iteration without another tool round.
+      if (toolCallCount > MAX_TOOL_CALLS || Date.now() >= deadline) {
+        const overBudget = {
+          error:
+            Date.now() >= deadline
+              ? "Run time budget exhausted. Summarize your findings and finish."
+              : "Tool budget exhausted. Summarize your findings and finish.",
+        };
         transcript.push({ type: "tool_result", name, result: overBudget });
         outputs.push({
           type: "function_call_output",
@@ -412,12 +459,21 @@ export async function runAgentLoop(params: {
   }
 
   if (!finalText) {
-    finalText =
-      transcript
-        .filter((step): step is Extract<TranscriptStep, { type: "text" }> => step.type === "text")
-        .map((step) => step.text)
-        .join("\n")
-        .trim() || "Run ended without a final summary (iteration budget reached).";
+    const texts = transcript
+      .filter((step): step is Extract<TranscriptStep, { type: "text" }> => step.type === "text")
+      .map((step) => step.text)
+      .join("\n")
+      .trim();
+    const reason = budgetExhausted
+      ? `time budget of ${Math.round((deadline - startedAt) / 1000)}s reached`
+      : "iteration budget reached";
+    finalText = texts || `Run ended without a final summary (${reason}).`;
+    if (budgetExhausted) {
+      logger.warn(
+        { toolCallCount, elapsedMs: Date.now() - startedAt },
+        "Control-plane agent run stopped at its wall-clock budget",
+      );
+    }
   }
 
   return { finalText, transcript, toolCallCount, promptTokens, completionTokens };
