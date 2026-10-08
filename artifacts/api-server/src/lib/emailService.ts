@@ -1,7 +1,18 @@
+import crypto from "crypto";
 import { Resend } from "resend";
 import { brand, font, semantic } from "@workspace/brand";
 import { logger } from "./logger.js";
 import { getAppBaseUrl, shareUrlForToken } from "./appUrl.js";
+
+/**
+ * Recipients are logged as a short keyed hash, never as the address: logs are
+ * long-lived and shipped elsewhere, while the address is personal data.
+ */
+export function hashRecipient(email: string | null | undefined): string | null {
+  const value = email?.trim().toLowerCase();
+  if (!value) return null;
+  return crypto.createHash("sha256").update(value).digest("base64url").slice(0, 16);
+}
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.EMAIL_FROM ?? "Dreemer <onboarding@resend.dev>";
@@ -105,13 +116,13 @@ function ctaButton(href: string, label: string): string {
 
 async function sendEmail(to: string, subject: string, html: string): Promise<EmailSendResult> {
   if (!resend) {
-    logger.warn({ to, subject }, "RESEND_API_KEY not set - skipping email");
+    logger.warn({ to: hashRecipient(to), subject }, "RESEND_API_KEY not set - skipping email");
     return { sent: false, reason: NOT_CONFIGURED_REASON };
   }
   try {
     const { error } = await resend.emails.send({ from: fromEmail, to, subject, html });
     if (error) {
-      logger.error({ error, to, subject, from: fromEmail }, "Resend email failed");
+      logger.error({ error, to: hashRecipient(to), subject, from: fromEmail }, "Resend email failed");
       const providerMessage = error.message || "The email provider rejected the send.";
       return {
         sent: false,
@@ -120,7 +131,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<Ema
     }
     return { sent: true };
   } catch (err) {
-    logger.error({ err, to, subject }, "Email send threw");
+    logger.error({ err, to: hashRecipient(to), subject }, "Email send threw");
     return {
       sent: false,
       reason: "The email provider request failed. Check server connectivity and RESEND_API_KEY.",
@@ -145,7 +156,7 @@ export async function sendRawEmail(message: {
   replyTo?: string | null;
 }): Promise<RawEmailSendResult> {
   if (!resend) {
-    logger.warn({ to: message.to, subject: message.subject }, "RESEND_API_KEY not set - skipping email");
+    logger.warn({ to: hashRecipient(message.to), subject: message.subject }, "RESEND_API_KEY not set - skipping email");
     return { sent: false, reason: NOT_CONFIGURED_REASON };
   }
   try {
@@ -159,13 +170,13 @@ export async function sendRawEmail(message: {
       ...(message.replyTo ? { replyTo: message.replyTo } : {}),
     });
     if (error) {
-      logger.error({ error, to: message.to, subject: message.subject, from: fromEmail }, "Resend email failed");
+      logger.error({ error, to: hashRecipient(message.to), subject: message.subject, from: fromEmail }, "Resend email failed");
       const providerMessage = error.message || "The email provider rejected the send.";
       return { sent: false, reason: `${providerMessage}${usingSandboxSender ? SANDBOX_HINT : ""}` };
     }
     return { sent: true, id: data?.id ?? null };
   } catch (err) {
-    logger.error({ err, to: message.to, subject: message.subject }, "Email send threw");
+    logger.error({ err, to: hashRecipient(message.to), subject: message.subject }, "Email send threw");
     return {
       sent: false,
       reason: "The email provider request failed. Check server connectivity and RESEND_API_KEY.",
@@ -193,7 +204,7 @@ export interface TransactionalEmail {
  */
 export async function sendTransactionalEmail(message: TransactionalEmail): Promise<{ id: string } | null> {
   if (!resend) {
-    logger.warn({ to: message.to, subject: message.subject }, "RESEND_API_KEY not set - skipping email");
+    logger.warn({ to: hashRecipient(message.to), subject: message.subject }, "RESEND_API_KEY not set - skipping email");
     return null;
   }
   try {
@@ -208,12 +219,12 @@ export async function sendTransactionalEmail(message: TransactionalEmail): Promi
       ...(message.tags?.length ? { tags: message.tags } : {}),
     });
     if (error) {
-      logger.error({ error, to: message.to, subject: message.subject, from: fromEmail }, "Resend email failed");
+      logger.error({ error, to: hashRecipient(message.to), subject: message.subject, from: fromEmail }, "Resend email failed");
       return null;
     }
     return data?.id ? { id: data.id } : null;
   } catch (err) {
-    logger.error({ err, to: message.to, subject: message.subject }, "Email send threw");
+    logger.error({ err, to: hashRecipient(message.to), subject: message.subject }, "Email send threw");
     return null;
   }
 }
@@ -361,4 +372,109 @@ export async function sendRecoveryEmail(
     "Your Dreemer gallery links",
     emailLayout("Your galleries", body),
   );
+}
+
+/* ————— Owner billing nudges (sessions workstream) ————— */
+
+/**
+ * Where owner emails send venues to pick a plan or add credits. Honors
+ * GROWTH_PRICING_URL (shared-contract D23); defaults to the dashboard
+ * upgrade panel anchor.
+ */
+export function billingDeepLink(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.GROWTH_PRICING_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).toString();
+    } catch {
+      /* fall through to the default */
+    }
+  }
+  return `${getAppBaseUrl()}/dashboard#pricing`;
+}
+
+export interface OwnerCreditsExhaustedEmail {
+  ownerEmail: string | null | undefined;
+  venue: { name: string; slug: string };
+  coupleName?: string | null;
+  /** trial_expired: the clock ran out; insufficient_credits: the balance did. */
+  reason: "trial_expired" | "insufficient_credits";
+  billingUrl?: string;
+}
+
+export interface RenderedOwnerEmail {
+  subject: string;
+  title: string;
+  html: string;
+  text: string;
+}
+
+/**
+ * Rendered copy for the credits-exhausted owner email. Exported so the words
+ * and the deep link can be checked without a mail provider.
+ */
+export function renderOwnerCreditsExhausted(input: OwnerCreditsExhaustedEmail): RenderedOwnerEmail {
+  const billingUrl = input.billingUrl ?? billingDeepLink();
+  const who = input.coupleName?.trim() ? input.coupleName.trim() : "A couple";
+  const venueName = input.venue.name;
+  const trial = input.reason === "trial_expired";
+  const subject = trial
+    ? `A couple at ${venueName} is waiting on your plan`
+    : `A couple at ${venueName} could not start a gallery`;
+  const title = trial ? "Your free trial has ended" : "Your credits ran out";
+  const cause = trial
+    ? "your free trial has ended. Any credits you still have stay on your account; picking a plan unlocks them again."
+    : "your organization has no gallery credits left.";
+  const action = trial ? "Pick a plan" : "Add credits";
+  const paragraphs = [
+    `${who} just tried to start a gallery at ${venueName}, but ${cause}`,
+    'Until then, couples at your venue see a short "check back soon" notice instead of their gallery.',
+  ];
+  const footnote = "Credits are shared across every venue in your organization.";
+  const html = `<p>${escapeHtml(paragraphs[0]!)}</p>
+    <p>${escapeHtml(paragraphs[1]!)}</p>
+    ${ctaButton(billingUrl, action)}
+    <p style="margin:20px 0 0;font-size:13px;color:${semantic.textMuted};">${escapeHtml(footnote)}</p>`;
+  const text = `${paragraphs[0]}\n\n${paragraphs[1]}\n\n${action}: ${billingUrl}\n\n${footnote}`;
+  return { subject, title, html, text };
+}
+
+export async function sendOwnerCreditsExhausted(input: OwnerCreditsExhaustedEmail): Promise<EmailSendResult> {
+  if (!input.ownerEmail) return { sent: false, reason: "No owner email on file." };
+  const rendered = renderOwnerCreditsExhausted(input);
+  return sendEmail(input.ownerEmail, rendered.subject, emailLayout(rendered.title, rendered.html));
+}
+
+export interface OwnerLowCreditEmail {
+  ownerEmail: string | null | undefined;
+  venue: { name: string; slug: string };
+  creditsLeft: number;
+  billingUrl?: string;
+}
+
+export function renderOwnerLowCredit(input: OwnerLowCreditEmail): RenderedOwnerEmail {
+  const billingUrl = input.billingUrl ?? billingDeepLink();
+  const n = Math.max(0, Math.floor(input.creditsLeft));
+  const unit = n === 1 ? "credit" : "credits";
+  const subject =
+    n === 0
+      ? `No gallery credits left for ${input.venue.name}`
+      : `${n} gallery ${unit} left for ${input.venue.name}`;
+  const title = n === 0 ? "You are out of credits" : "You are almost out of credits";
+  const paragraphs = [
+    n === 0 ? "Your organization has no gallery credits left." : `Your organization has ${n} gallery ${unit} left.`,
+    'Each couple gallery uses one credit. When they run out, couples at your venue see a short "check back soon" notice instead of their gallery.',
+  ];
+  const action = "Add credits";
+  const html = `<p>${escapeHtml(paragraphs[0]!)}</p>
+    <p>${escapeHtml(paragraphs[1]!)}</p>
+    ${ctaButton(billingUrl, action)}`;
+  const text = `${paragraphs[0]}\n\n${paragraphs[1]}\n\n${action}: ${billingUrl}`;
+  return { subject, title, html, text };
+}
+
+export async function sendOwnerLowCredit(input: OwnerLowCreditEmail): Promise<EmailSendResult> {
+  if (!input.ownerEmail) return { sent: false, reason: "No owner email on file." };
+  const rendered = renderOwnerLowCredit(input);
+  return sendEmail(input.ownerEmail, rendered.subject, emailLayout(rendered.title, rendered.html));
 }
