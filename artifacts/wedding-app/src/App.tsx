@@ -9,6 +9,7 @@ import {
 } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import VenueLandingPage from "@/pages/VenueLandingPage";
 
 const queryClient = new QueryClient();
 
@@ -39,9 +40,11 @@ function lazyRoute<T extends ComponentType>(loader: () => Promise<{ default: T }
   );
 }
 
-const LandingPage = lazyRoute(() => import("@/pages/LandingPage"));
-const VenueLandingPage = lazyRoute(() => import("@/pages/VenueLandingPage"));
-const CoupleEntryPage = lazyRoute(() => import("@/pages/CoupleEntryPage"));
+// The landing page is imported statically above so prospects never see the
+// route-loading fallback; every other route stays lazy.
+const PricingPage = lazyRoute(() => import("@/pages/PricingPage"));
+const PrivacyPage = lazyRoute(() => import("@/pages/PrivacyPage"));
+const ClaimPage = lazyRoute(() => import("@/pages/ClaimPage"));
 const CreateVenuePage = lazyRoute(() => import("@/pages/CreateVenuePage"));
 const VenueOwnerPage = lazyRoute(() => import("@/pages/VenueOwnerPage"));
 const CouplePage = lazyRoute(() => import("@/pages/CouplePage"));
@@ -62,8 +65,11 @@ function Router() {
       <Switch>
         {/* Venue-facing main site */}
         <Route path="/">{() => <VenueLandingPage />}</Route>
-        <Route path="/couple">{() => <LandingPage />}</Route>
-        <Route path="/couple-entry">{() => <CoupleEntryPage />}</Route>
+        <Route path="/pricing">{() => <PricingPage />}</Route>
+        <Route path="/privacy">{() => <PrivacyPage />}</Route>
+        {/* Retired consumer-era couple entry; couples arrive via venue QR codes and links */}
+        <Route path="/couple">{() => <Redirect to="/" />}</Route>
+        <Route path="/couple-entry">{() => <Redirect to="/" />}</Route>
 
         {/* Venue owners - marketing, sign-in, registration */}
         <Route path="/venues">{() => <Redirect to="/" />}</Route>
@@ -73,13 +79,13 @@ function Router() {
         {/* Legacy magic-link path; Clerk owns sign-in now */}
         <Route path="/owner/login">{() => <Redirect to="/login" />}</Route>
         <Route path="/find-my-gallery">{() => <FindMyGalleryPage />}</Route>
-        <Route path="/find-my-videos">
-          {() => <Redirect to="/find-my-gallery" />}
-        </Route>
 
         {/* Venue creation */}
         <Route path="/create-venue">{() => <CreateVenuePage />}</Route>
         <Route path="/venue/new">{() => <Redirect to="/create-venue" />}</Route>
+
+        {/* Outreach invitations (claim links in prospect emails) */}
+        <Route path="/claim/:token">{() => <ClaimPage />}</Route>
 
         {/* Platform operators - Autonomous Business Control Plane */}
         <Route path="/control">{() => <ControlPlanePage />}</Route>
@@ -96,17 +102,13 @@ function Router() {
           {() => <Redirect to="/dashboard" />}
         </Route>
 
-        {/* Couple venue experience */}
+        {/* Couple venue experience; /venue/:slug stays for printed QR codes */}
         <Route path="/preview/:slug">{() => <CouplePage />}</Route>
         <Route path="/venue/:slug" component={RedirectVenueToPreview} />
 
         {/* Session share links (couple-facing) */}
         <Route path="/v/:shareToken">{() => <GallerySharePage />}</Route>
 
-        {/* Legacy integer-id routes */}
-        <Route path="/session/:id/processing">
-          {() => <Redirect to="/couple" />}
-        </Route>
         <Route>{() => <NotFound />}</Route>
       </Switch>
     </Suspense>

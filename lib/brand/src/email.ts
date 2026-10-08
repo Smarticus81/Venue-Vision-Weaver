@@ -97,9 +97,6 @@ export const BRAND_EMAIL = {
   contentWidth: 600,
   gutter: 32,
   heroImageWidth: 1200,
-  heroImageHeight: 750,
-  secondaryImageWidth: 600,
-  secondaryImageHeight: 450,
   /** JPEG quality for stored outreach images (mozjpeg-style tradeoff). */
   imageQuality: 82,
 } as const;
