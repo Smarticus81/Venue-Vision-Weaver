@@ -63,42 +63,6 @@ const router: IRouter = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-async function organizationPayload(ctx: OrgContext) {
-  const venues = await db
-    .select({
-      id: venuesTable.id,
-      name: venuesTable.name,
-      slug: venuesTable.slug,
-      tagline: venuesTable.tagline,
-      createdAt: venuesTable.createdAt,
-    })
-    .from(venuesTable)
-    .where(eq(venuesTable.organizationId, ctx.org.id))
-    .orderBy(venuesTable.createdAt);
-
-  return {
-    organization: {
-      id: ctx.org.id,
-      name: ctx.org.name,
-      plan: ctx.org.plan,
-      creditsBalance: ctx.org.creditsBalance,
-      billingPeriodEnd: ctx.org.billingPeriodEnd,
-      clerkOrgId: ctx.org.clerkOrgId,
-      contactEmail: ctx.org.contactEmail,
-      firstPaidAt: ctx.org.firstPaidAt,
-      churnedAt: ctx.org.churnedAt,
-      shareAggregates: ctx.org.shareAggregates,
-      trial: trialState(ctx.org),
-      role: ctx.orgRole,
-      billingConfigured: isStripeConfigured(),
-      // Additive lifecycle fields (not yet in OrganizationResponse; see WS-A contract follow-ups).
-      subscriptionStatus: ctx.org.subscriptionStatus,
-      cancelAtPeriodEnd: ctx.org.cancelAtPeriodEnd,
-    },
-    venues,
-  };
-}
-
 // GET /org — the caller's organization: plan, credits, trial clock, and its venues.
 router.get("/org", async (req, res): Promise<void> => {
   const ctx = await requireOrg(req, res);
@@ -181,6 +145,43 @@ router.get("/org/credit-history", async (req, res): Promise<void> => {
 
   res.json({ transactions: rows });
 });
+
+/** Shared GET/PATCH /org body. Declared after the routes (hoisted) so the venues query reads next to them. */
+async function organizationPayload(ctx: OrgContext) {
+  const venues = await db
+    .select({
+      id: venuesTable.id,
+      name: venuesTable.name,
+      slug: venuesTable.slug,
+      tagline: venuesTable.tagline,
+      createdAt: venuesTable.createdAt,
+    })
+    .from(venuesTable)
+    .where(eq(venuesTable.organizationId, ctx.org.id))
+    .orderBy(venuesTable.createdAt);
+
+  return {
+    organization: {
+      id: ctx.org.id,
+      name: ctx.org.name,
+      plan: ctx.org.plan,
+      creditsBalance: ctx.org.creditsBalance,
+      billingPeriodEnd: ctx.org.billingPeriodEnd,
+      clerkOrgId: ctx.org.clerkOrgId,
+      contactEmail: ctx.org.contactEmail,
+      firstPaidAt: ctx.org.firstPaidAt,
+      churnedAt: ctx.org.churnedAt,
+      shareAggregates: ctx.org.shareAggregates,
+      trial: trialState(ctx.org),
+      role: ctx.orgRole,
+      billingConfigured: isStripeConfigured(),
+      // Additive lifecycle fields (not yet in OrganizationResponse; see WS-A contract follow-ups).
+      subscriptionStatus: ctx.org.subscriptionStatus,
+      cancelAtPeriodEnd: ctx.org.cancelAtPeriodEnd,
+    },
+    venues,
+  };
+}
 
 /* ————— Stripe billing (organization-scoped) ————— */
 
