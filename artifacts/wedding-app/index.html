@@ -8,7 +8,7 @@
     <meta name="robots" content="index, follow" />
     <meta property="og:site_name" content="Dreemer" />
     <meta property="og:title" content="Dreemer - Turn tours into bookings" />
-    <meta property="og:description" content="The couple sees themselves married in your space during or right after the tour, shares it with family, and is more likely to book." />
+    <meta property="og:description" content="The couple sees themselves married in your space right after the tour, shares it with family, and is more likely to book." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -16,16 +16,21 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="/og-image.png" />
     <meta name="twitter:title" content="Dreemer - Turn tours into bookings" />
-    <meta name="twitter:description" content="Realistic AI images and a short reel of each touring couple, married at your venue." />
+    <meta name="twitter:description" content="Realistic AI previews and a short reel of each touring couple, married at your venue." />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="theme-color" content="#E9E6DB" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Keep in sync with fontImportUrl in lib/brand/src/tokens.ts -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600&family=Figtree:wght@400;500;600&display=swap" />
+    <!--
+      Display and body faces are self-hosted (public/fonts, latin subsets of the
+      same Outfit and Figtree variable fonts lib/brand names) so the first paint
+      never waits on a third-party stylesheet. @font-face lives in src/index.css.
+      The API server injects <meta name="dreemer-public-config"> and, on "/",
+      the hero image preload into this head at request time.
+    -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/outfit-latin-variable.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/figtree-latin-variable.woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>
