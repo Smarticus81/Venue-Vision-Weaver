@@ -3,8 +3,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
-const rawPort = process.env.PORT ?? "8081";
-const port = Number(rawPort);
+/*
+ * Ports: the Vite dev server listens on WEB_PORT (default 8081) and proxies
+ * /api to the Express server on API_PORT (default 5000, the port the API
+ * server itself defaults to). PORT is left to the API server so the two never
+ * collide when both read the same shell environment.
+ */
+const port = Number(process.env.WEB_PORT ?? "8081");
+const apiPort = Number(process.env.API_PORT ?? "5000");
 
 const basePath = process.env.BASE_PATH ?? "/";
 
@@ -31,7 +37,7 @@ export default defineConfig({
       allow: ["../.."],
     },
     proxy: {
-      "/api": "http://localhost:3001",
+      "/api": `http://localhost:${apiPort}`,
     },
   },
   preview: {
