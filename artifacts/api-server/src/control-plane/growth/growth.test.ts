@@ -258,8 +258,8 @@ test("kpiMath: outbound funnel, rates, segments, variants and steps", () => {
     ),
   ];
   prospects[0] = { ...prospects[0]!, status: "replied", repliedAt: daysAgo(2), replySentiment: "positive" };
-  prospects[1] = { ...prospects[1]!, status: "replied", repliedAt: daysAgo(2), replySentiment: "neutral" };
-  prospects[2] = { ...prospects[2]!, status: "converted", convertedAt: daysAgo(1), convertedOrganizationId: 1, contactCount: 1 };
+  // A converted prospect counts as replied (once), so the signup is the neutral replier.
+  prospects[1] = { ...prospects[1]!, status: "converted", repliedAt: daysAgo(2), replySentiment: "neutral", convertedAt: daysAgo(1), convertedOrganizationId: 1, contactCount: 1 };
   const emails = prospects.map((p, i) =>
     makeEmail({
       id: 100 + i,
@@ -332,7 +332,9 @@ test("kpiMath: deliverability status thresholds and policy guard precedence", ()
   assert.equal(status(100, 4, 0), "paused");
   assert.equal(status(100, 3, 0), "throttled");
   assert.equal(status(100, 2, 0), "warn");
-  assert.equal(status(100, 0, 1), "warn");
+  assert.equal(status(100, 0, 1), "paused", "1 complaint in 100 is 1%, far above the 0.08% hard limit");
+  assert.equal(status(2500, 0, 1), "warn", "any complaint below the throttle rate still warns");
+  assert.equal(status(2000, 0, 1), "throttled", "0.05% complaints throttle");
   assert.equal(status(100, 0, 0), "ok");
   const paused = kpiMath.buildDeliverability(batch(100, 0, 0), since14, 50, { status: "paused", since: NOW.toISOString(), reason: "operator", okDays: 0 }, 15, 0);
   assert.equal(paused.status, "ok", "computed status reflects the window");
@@ -504,8 +506,10 @@ test("adaptation R1: pause, throttle, warn and restore within the base-cap bound
   assert.equal(warn.action, "warn");
   assert.equal(warn.after.cap, 15, "a warning never changes the cap");
 
-  const complaint = adaptation.deriveGuardChange(adaptationInput(withWindow(await fixtureKpis({}), 100, 0, 1)))!;
-  assert.equal(complaint.action, "warn");
+  const complaint = adaptation.deriveGuardChange(adaptationInput(withWindow(await fixtureKpis({}), 2500, 0, 1)))!;
+  assert.equal(complaint.action, "warn", "a single complaint under the throttle rate warns");
+  const complaintPause = adaptation.deriveGuardChange(adaptationInput(withWindow(await fixtureKpis({}), 100, 0, 1)))!;
+  assert.equal(complaintPause.action, "pause", "1 complaint in 100 sends crosses the 0.08% limit");
 
   const restore = adaptation.deriveGuardChange(
     adaptationInput(withWindow(await fixtureKpis({}), 100, 0), {
@@ -541,7 +545,7 @@ test("adaptation R2: segment guidance prioritizes the best three and pauses dead
   kpis.outbound.bySegment = [
     makeSegment({ segment: "Austin, TX", sent: 40, positiveReplied: 6, signups: 1 }),
     makeSegment({ segment: "Hill Country", sent: 30, positiveReplied: 3 }),
-    makeSegment({ segment: "Dallas, TX", sent: 25, positiveReplied: 1 }),
+    makeSegment({ segment: "Dallas, TX", sent: 20, positiveReplied: 1 }),
     makeSegment({ segment: "Houston, TX", sent: 22, positiveReplied: 1 }),
     makeSegment({ segment: "Waco, TX", sent: 35, positiveReplied: 0, signups: 0 }),
     makeSegment({ segment: "Tiny", sent: 5, positiveReplied: 1 }),
