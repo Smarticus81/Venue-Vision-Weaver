@@ -3,6 +3,85 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-10-08 (eighteenth pass) — Owner acquisition funnel: `/`, `/pricing`, `/privacy`, `/claim/:token`
+
+**Conversion spine:** this page exists to get a wedding-venue owner or sales
+manager to create a venue account and run their first gallery this week,
+because a couple who sees themselves married at the venue before they tour
+the next one is more likely to book, and the venue can finally see which
+toured couples opened, shared, clicked for a date, and booked.
+
+**Signature moment:** *the room, then the couple in the room.* The hero is
+one diptych (`/brand/hero-{800,1200,1400}.webp`, 74 KB at 800w): the empty
+orangery on the left, the couple in it on the right. It ships **static**. The
+spec's reveal handle (one composition, `clip-path` driven by a range input)
+needs a same-angle before/after pair, and none exists among the committed
+assets; decision E11 forbids external generation this session, so the reveal
+slipped. Fallback per spec 3.2: single hero figure, and the two halves of the
+diptych as a 2-up in the compare section with no handle. The reveal stays
+the required deliverable for the next pass that has a paired asset. The ROI
+readout ("Do the math for your venue") is the page's only live element: three
+inputs the venue already knows, bookings and money out, defaults labelled as
+placeholders, the +3-point lift labelled as an assumption.
+
+**Layout (one sentence):** an editorial two-column page where the left column
+argues in short declarative sentences and the right column shows the product,
+collapsing to one column at 760px with the product frame first; prices and
+proof sit above the plan cards.
+
+**Narrative order:** hero → value strip (your rooms, their faces, your date
+link, you see who booked) → proof (partner mode: "Numbers, not adjectives"
+plus the founding-venue offer from config, the four sample frames labelled
+"Example gallery, AI preview") → how it works (ink band, tour-day first) →
+ROI → pricing cards from the public config with the "Launch prices" pill →
+compare (2-up + a plain table, no competitor names) → FAQ (native
+`details`) → final ask.
+
+**Prices, proof and copy are data, not strings:** every figure comes from
+`<meta name="dreemer-public-config">` (server-injected) → `GET /api/public/config`
+→ defaults (`lib/publicConfig.ts`). Proof flips to three real figures when the
+server reports `proof.mode = "aggregate"`. Nothing on the page states a number
+we did not get from config or from the visitor's own inputs.
+
+**Coral budget:** one coral button per viewport. The header's Start free is
+now **ink**, so the hero button is the single coral action above the fold;
+Growth is the only coral card button; the final ask is coral. Eyebrows and the
+hero `em` stay `coral.700`.
+
+**Performance:** the landing route is in the main chunk (no "Opening Dreemer"
+fallback); framer-motion's `MotionConfig` moved behind the lazy product
+routes, which took 41 KB gzipped off the landing path. Fonts are self-hosted
+latin subsets of the Outfit and Figtree variable faces (`public/fonts`,
+preloaded, `font-display: swap`), replacing the render-blocking Google Fonts
+stylesheet. The hero `<img>` carries srcset/sizes, width/height and
+`fetchpriority="high"`; the box takes the image's own ratio so the diptych is
+never cropped. Still in the critical path and not this pass's file:
+`@clerk/clerk-react` from `main.tsx` (~100 KB gz) — flagged for WS-F/WS-I.
+
+**Responsive:** screenshotted the built pages at 360, 768 and 1440 with
+headless Chromium; no horizontal overflow on any of the four routes. Below
+480px the two header anchors hide (logo, Sign in, Start free on one line), the
+compare table stacks into per-row blocks that name their column, the hero
+`<br>` drops. Reduced motion: no JS motion on these routes; the global rule
+now keeps `.animate-spin` turning slowly instead of freezing it (the text
+half of that fix, a `role=status` line, belongs to the dashboard pass).
+
+**Tracking:** `lib/track.ts` posts funnel events to `POST /api/events` with
+the browser's first touch (claim token > utm > ref > referrer > direct) so a
+signup can be attributed to an outreach email. `landing_view` once per tab
+per page; `cta_click` with a placement on every Start free.
+
+**Kills:** the dashed "reserved for proof" placeholder slots; the hard-coded
+plan cards without prices; the Google Fonts link; the `For couples` nav link
+and the footer "Find my gallery" (the couple utility stays linked from the
+footer as "Couples: find your gallery"); the pricing "prices lock for twelve
+months" sentence (a policy no decision has confirmed; see open questions).
+
+**Not done / next:** the paired reveal asset; a measured LCP on a deployed
+URL (the server-side preload for `/` must point at `/brand/hero-800.webp`
+with the srcset, not the spec's `hero-couple.webp`); the venue's own name in
+the value strip's date-link copy once a personalised landing exists.
+
 ## 2026-10-03 (seventeenth pass) — Dreemer rebrand
 
 Full rebrand from the old name to **Dreemer** (dreemer.co). Brief: coral

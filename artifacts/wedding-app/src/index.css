@@ -12,6 +12,32 @@
 @import "./styles/dashboard.css";
 @import "./styles/couple.css";
 
+/*
+ * Self-hosted faces (public/fonts): latin subsets of the same Outfit and
+ * Figtree variable fonts lib/brand names, preloaded from index.html so the
+ * first paint never waits on a third-party stylesheet. `swap` keeps the
+ * headline readable in the fallback face while the file arrives; the
+ * fallback stacks in tokens.css are metric-close geometric sans faces.
+ */
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/outfit-latin-variable.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("/fonts/figtree-latin-variable.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme inline {
   /* surfaces */
   --color-background: var(--dm-canvas);
@@ -277,16 +303,21 @@
   color: var(--dm-text);
   box-shadow: inset 0 -2px var(--dm-accent);
 }
+/*
+ * The header's Start free is ink, not coral: the hero's button is the one
+ * coral action in the first viewport, so coral stays under a tenth of the
+ * screen and the apex is unambiguous.
+ */
 .nav-cta {
-  background: var(--dm-accent);
-  color: var(--dm-text-on-accent) !important;
+  background: var(--dm-text);
+  color: var(--dm-ink-text) !important;
   padding: 0 18px;
   border-radius: var(--dm-radius-md);
   gap: 8px;
   transition: background var(--dm-motion-fast);
 }
 .nav-cta:hover {
-  background: var(--dm-accent-hover);
+  background: var(--dm-ink-surface-raised);
 }
 
 /* ------------------------------------------------------------ actions */
@@ -316,6 +347,64 @@
 }
 .action-primary:active {
   transform: translateY(1px);
+}
+.action-primary:disabled {
+  background: var(--dm-ivory-400);
+  color: var(--dm-text-secondary);
+  cursor: not-allowed;
+}
+/* The quiet sibling of .action-primary: ink hairline, ink text, same size. */
+.action-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 14px 24px;
+  border-radius: var(--dm-radius-md);
+  border: 1.5px solid var(--dm-text);
+  background: transparent;
+  color: var(--dm-text);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background var(--dm-motion-fast),
+    color var(--dm-motion-fast),
+    transform var(--dm-motion-fast);
+}
+.action-secondary:hover {
+  background: var(--dm-text);
+  color: var(--dm-ink-text);
+}
+.action-secondary:active {
+  transform: translateY(1px);
+}
+.action-secondary:disabled {
+  border-color: var(--dm-border-strong);
+  color: var(--dm-text-muted);
+  background: transparent;
+  cursor: not-allowed;
+}
+/* Small ink label: "Recommended", "Launch prices", "Your plan". Never coral. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 10px;
+  border-radius: var(--dm-radius-sm);
+  background: var(--dm-text);
+  color: var(--dm-ink-text);
+  font: 600 12px/1.4 var(--dm-font-body);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.section-copy {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
+  max-width: 56ch;
+  margin-top: 16px;
 }
 .text-link {
   display: inline-flex;
@@ -389,9 +478,15 @@
   overflow: hidden;
   box-shadow: var(--dm-shadow-md);
 }
+/*
+ * The hero diptych is never cropped: the argument is the empty room beside
+ * the couple in it, so the box takes the image's own ratio. width/height
+ * on the <img> plus this ratio reserve the space before the file arrives.
+ */
 .hero-photo img {
   width: 100%;
-  height: 520px;
+  height: auto;
+  aspect-ratio: 1400 / 1045;
   object-fit: cover;
 }
 .hero-photo figcaption {
@@ -403,9 +498,12 @@
   color: var(--dm-text-muted);
 }
 
-.value-strip > div {
+.value-strip ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 32px;
   padding-block: 40px;
   border-bottom: 1px solid var(--dm-border);
@@ -432,15 +530,13 @@
 .section-heading h2,
 .how-section h2,
 .start-section h2,
-.proof-section h2,
-.plans-section h2 {
+.proof-section h2 {
   font-size: clamp(30px, 3.4vw, 44px);
   line-height: 1.12;
   margin-block: 14px 0;
 }
 .section-heading > p,
-.journey-list p,
-.plans-section li p {
+.journey-list p {
   font-size: 16px;
   line-height: 1.6;
   color: var(--dm-text-secondary);
@@ -527,46 +623,353 @@
   gap: 48px;
   align-items: start;
 }
-.proof-slot {
-  border: 1.5px dashed var(--dm-border-strong);
+.proof-grid + .sample-gallery {
+  margin-top: 48px;
+}
+/* The founding-venue offer, or the three shared figures once venues opt in. Solid border, never dashed. */
+.proof-card {
+  border: 1px solid var(--dm-border-strong);
   border-radius: var(--dm-radius-lg);
   padding: 32px;
   background: var(--dm-surface);
 }
-.proof-slot .eyebrow {
+.proof-card .eyebrow {
   margin-bottom: 12px;
 }
-.proof-slot p {
+.proof-card h3 {
+  font-size: 26px;
+  margin-bottom: 12px;
+}
+.proof-card > p:not(.eyebrow):not(.caption) {
   color: var(--dm-text-secondary);
   line-height: 1.6;
 }
+.proof-card .action-secondary {
+  margin-top: 24px;
+}
+.proof-figures dl {
+  margin: 0;
+  display: grid;
+  gap: 20px;
+}
+.proof-figures dl > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+.proof-figures dt {
+  font-size: 14px;
+  color: var(--dm-text-secondary);
+}
+.proof-figures dd {
+  margin: 0;
+  font: 600 clamp(34px, 3.6vw, 48px) / 1.05 var(--dm-font-display);
+  letter-spacing: var(--dm-tracking-display);
+  font-variant-numeric: tabular-nums;
+}
 
-.plans-section {
+/* ROI: three inputs the venue already knows, one readout in bookings and money. */
+.roi-section {
   padding-block: 88px;
   border-top: 1px solid var(--dm-border);
 }
-.plans-section ul {
+.roi-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 48px;
+  align-items: start;
+}
+.roi-form {
+  display: grid;
+  gap: 24px;
+  margin: 0;
+}
+.roi-field label {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.roi-field input {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 14px;
+  background: var(--dm-surface-raised);
+  border: 1px solid var(--dm-border-strong);
+  border-radius: var(--dm-radius-md);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dm-text);
+  transition: border-color var(--dm-motion-fast);
+}
+.roi-field input:focus {
+  border-color: var(--dm-text);
+}
+.roi-field small {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--dm-text-muted);
+}
+.roi-unit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.roi-unit > span {
+  font-size: 18px;
+  color: var(--dm-text-muted);
+}
+.roi-output {
+  display: block;
+  background: var(--dm-ink-surface);
+  color: var(--dm-ink-text);
+  border-radius: var(--dm-radius-xl);
+  padding: 36px;
+}
+.roi-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+.roi-figure strong {
+  font: 600 clamp(48px, 6vw, 80px) / 1 var(--dm-font-display);
+  letter-spacing: -0.03em;
+  color: var(--dm-coral-400);
+  font-variant-numeric: tabular-nums;
+}
+.roi-figure span {
+  font-size: 18px;
+  color: var(--dm-ink-text-muted);
+}
+.roi-money {
+  margin-top: 12px;
+  font-size: 20px;
+  color: var(--dm-ink-text-muted);
+}
+.roi-money strong {
+  color: var(--dm-ink-text);
+  font-variant-numeric: tabular-nums;
+}
+.roi-detail {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--dm-ink-border);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--dm-ink-text-muted);
+}
+
+/* Pricing cards: three cards, Growth recommended, the pack narrower. One coral button. */
+.pricing-section {
+  padding-block: 88px;
+  border-top: 1px solid var(--dm-border);
+}
+.pricing-cards ul {
   list-style: none;
   padding: 0;
-  margin: 40px 0 0;
+  margin: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr);
   gap: 20px;
+  align-items: stretch;
 }
-.plans-section li {
+.pricing-cards li {
+  display: flex;
+  flex-direction: column;
   background: var(--dm-surface);
   border: 1px solid var(--dm-border);
   border-radius: var(--dm-radius-lg);
   padding: 28px;
 }
-.plans-section li h3 {
-  font-size: 22px;
-  margin-bottom: 8px;
+.pricing-cards li.is-recommended {
+  border-color: var(--dm-text);
+  background: var(--dm-surface-raised);
 }
-.plans-section li p + p {
-  margin-top: 12px;
-  font-size: 14px;
+.pricing-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pricing-card-head h3 {
+  font-size: 22px;
+}
+.pricing-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 18px;
+}
+.pricing-price strong {
+  font: 600 clamp(36px, 3.2vw, 44px) / 1 var(--dm-font-display);
+  letter-spacing: var(--dm-tracking-display);
+  font-variant-numeric: tabular-nums;
+}
+.pricing-price span {
+  font-size: 15px;
   color: var(--dm-text-muted);
+}
+.pricing-quota {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.pricing-who {
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
+}
+.pricing-detail {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dm-text-muted);
+  flex: 1;
+}
+.pricing-cards li > .action-primary,
+.pricing-cards li > .action-secondary {
+  margin-top: 24px;
+  width: 100%;
+}
+.pricing-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-top: 28px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
+}
+.pricing-reason {
+  margin-top: 16px;
+  color: var(--dm-warning-text);
+}
+
+/* Compare: the diptych as a 2-up (the reveal's fallback), then a plain table. */
+.compare-section {
+  padding-block: 88px;
+  border-top: 1px solid var(--dm-border);
+}
+.compare-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-width: 760px;
+  margin-bottom: 40px;
+}
+.compare-pair img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--dm-radius-lg);
+}
+.compare-pair figcaption {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.compare-pair figcaption span {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--dm-text-muted);
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.compare-table th,
+.compare-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 16px 18px 16px 0;
+  border-top: 1px solid var(--dm-border);
+}
+.compare-table thead th {
+  border-top: 0;
+  padding-top: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: var(--dm-tracking-label);
+  text-transform: uppercase;
+  color: var(--dm-text-muted);
+}
+.compare-table tbody th {
+  font-weight: 500;
+  color: var(--dm-text);
+  width: 22%;
+}
+.compare-table td {
+  color: var(--dm-text-secondary);
+}
+.compare-table td.is-dreemer {
+  color: var(--dm-text);
+  font-weight: 600;
+}
+.compare-table thead th:last-child {
+  color: var(--dm-accent-text);
+}
+.compare-table td::before {
+  display: none;
+}
+
+/* FAQ: native disclosure, works without JavaScript. */
+.faq-section {
+  padding-block: 88px;
+  border-top: 1px solid var(--dm-border);
+}
+.faq-list {
+  border-top: 1px solid var(--dm-border);
+}
+.faq-list details {
+  border-bottom: 1px solid var(--dm-border);
+}
+.faq-list summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0;
+  font-family: var(--dm-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: var(--dm-tracking-display);
+  list-style: none;
+}
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+.faq-list summary::after {
+  content: "+";
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--dm-border-strong);
+  font: 500 18px/1 var(--dm-font-body);
+  color: var(--dm-text-secondary);
+  transition: transform var(--dm-motion-fast);
+}
+.faq-list details[open] summary::after {
+  content: "–";
+}
+.faq-list details > p {
+  padding: 0 0 22px;
+  max-width: 64ch;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
 }
 
 .start-section {
@@ -691,6 +1094,152 @@
 }
 .form-content input:focus {
   border-color: var(--dm-text);
+}
+
+/* ------------------------------------------------------------ public pages (/pricing, /privacy, /claim) */
+
+.page-intro {
+  padding-block: 56px 8px;
+  max-width: 720px;
+}
+.page-intro .eyebrow {
+  color: var(--dm-accent-text);
+}
+.page-intro h1 {
+  font-size: clamp(36px, 4.4vw, 56px);
+  line-height: 1.08;
+  margin: 16px 0 20px;
+}
+.page-intro > p:not(.eyebrow) {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
+}
+.prose-page {
+  max-width: 720px;
+  padding-bottom: 88px;
+}
+.prose-page .page-intro {
+  padding-top: 56px;
+}
+.page-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 28px 0 8px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--dm-border);
+}
+.page-toc a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dm-secondary);
+  text-decoration: none;
+  text-underline-offset: 4px;
+}
+.page-toc a:hover {
+  text-decoration: underline;
+}
+.prose-page section {
+  padding-top: 40px;
+}
+.prose-page section h2 {
+  font-size: 26px;
+  margin-bottom: 14px;
+}
+.prose-page section p {
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--dm-text-secondary);
+}
+.prose-page section p + p {
+  margin-top: 14px;
+}
+
+.claim-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 56px;
+  align-items: center;
+  padding-block: 48px 88px;
+}
+.claim-copy .eyebrow {
+  color: var(--dm-accent-text);
+}
+.claim-copy h1 {
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.08;
+  margin: 16px 0 20px;
+}
+.claim-copy > p:not(.eyebrow):not(.hero-note) {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
+  max-width: 54ch;
+}
+.claim-photos {
+  min-width: 0;
+}
+.claim-photo-grid {
+  display: grid;
+  gap: 12px;
+}
+.claim-photo-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--dm-radius-lg);
+  background: var(--dm-surface);
+}
+.claim-photo-grid.count-1 {
+  grid-template-columns: 1fr;
+}
+.claim-photo-grid.count-1 img {
+  aspect-ratio: 4 / 3;
+}
+.claim-photo-grid.count-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.claim-photo-grid.count-2 img {
+  aspect-ratio: 3 / 4;
+}
+.claim-photo-grid.count-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+}
+.claim-photo-grid.count-3 img:first-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 10;
+}
+.claim-photo-grid.count-3 img:not(:first-child) {
+  aspect-ratio: 4 / 3;
+}
+.claim-photos figcaption {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dm-text-muted);
+}
+.claim-aside {
+  display: block;
+  padding: 24px 28px;
+  border-left: 3px solid var(--dm-accent);
+  background: var(--dm-band);
+  border-radius: 0 var(--dm-radius-md) var(--dm-radius-md) 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--dm-text-secondary);
+}
+.claim-aside strong {
+  display: block;
+  font-family: var(--dm-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--dm-text);
+  margin-bottom: 6px;
 }
 
 /* ------------------------------------------------------------ owner workspace */
@@ -1069,11 +1618,6 @@
 
 /* ------------------------------------------------------------ responsive */
 
-@media (min-width: 1600px) {
-  .hero-photo img {
-    height: 560px;
-  }
-}
 @media (max-width: 1050px) {
   .page-width {
     width: calc(100% - 48px);
@@ -1081,12 +1625,21 @@
   .venue-hero {
     gap: 32px;
   }
-  .hero-photo img {
-    height: 440px;
+  .value-strip ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .how-section,
-  .proof-grid {
+  .proof-grid,
+  .roi-grid,
+  .claim-page {
     gap: 40px;
+  }
+  .pricing-cards ul {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .pricing-cards li {
+    padding: 22px;
   }
   .section-heading {
     gap: 32px;
@@ -1136,11 +1689,14 @@
   .hero-description {
     font-size: 16px;
   }
-  .hero-photo img {
-    height: 320px;
-    object-position: 60% center;
+  /* The product frame comes first above the fold on a phone. */
+  .hero-photo {
+    order: -1;
   }
-  .value-strip > div {
+  .hero-copy h1 br {
+    display: none;
+  }
+  .value-strip ul {
     grid-template-columns: 1fr;
     gap: 20px;
     padding-block: 32px;
@@ -1148,8 +1704,91 @@
   .section,
   .how-section,
   .proof-section,
-  .plans-section {
+  .roi-section,
+  .pricing-section,
+  .compare-section,
+  .faq-section {
     padding-block: 56px;
+  }
+  .proof-card {
+    padding: 24px;
+  }
+  .proof-grid + .sample-gallery {
+    margin-top: 32px;
+  }
+  .roi-grid,
+  .pricing-cards ul,
+  .claim-page {
+    grid-template-columns: 1fr;
+  }
+  .roi-output {
+    padding: 24px;
+  }
+  .compare-pair {
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .compare-pair figcaption {
+    font-size: 14px;
+  }
+  /* The compare table stacks: each row becomes a block, each cell names its column. */
+  .compare-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .compare-table,
+  .compare-table tbody,
+  .compare-table tr,
+  .compare-table th,
+  .compare-table td {
+    display: block;
+  }
+  .compare-table tbody tr {
+    padding: 18px 0;
+    border-top: 1px solid var(--dm-border);
+  }
+  .compare-table tbody th {
+    width: auto;
+    padding: 0 0 10px;
+    border: 0;
+    font-family: var(--dm-font-display);
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .compare-table td {
+    padding: 4px 0;
+    border: 0;
+  }
+  .compare-table td::before {
+    content: attr(data-col);
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: var(--dm-tracking-label);
+    text-transform: uppercase;
+    color: var(--dm-text-muted);
+  }
+  .compare-table td.is-dreemer::before {
+    color: var(--dm-accent-text);
+  }
+  .faq-list summary {
+    font-size: 17px;
+    padding-block: 16px;
+  }
+  .page-intro {
+    padding-top: 28px;
+  }
+  .prose-page {
+    padding-bottom: 56px;
+  }
+  .prose-page section {
+    padding-top: 28px;
+  }
+  .claim-page {
+    padding-block: 28px 56px;
   }
   .section-heading {
     grid-template-columns: 1fr;
@@ -1303,6 +1942,31 @@
     padding: 24px;
   }
 }
+@media (max-width: 480px) {
+  /* 360px phone: logo, Sign in, Start free on one line; the anchors live in the footer. */
+  .site-header nav > .nav-anchor {
+    display: none;
+  }
+  .site-header nav {
+    width: auto;
+    justify-content: flex-end;
+  }
+  .site-header {
+    flex-wrap: nowrap;
+  }
+  .hero-copy h1 {
+    font-size: 36px;
+  }
+  .action-row > .action-primary {
+    width: 100%;
+  }
+  .roi-figure strong {
+    font-size: 44px;
+  }
+  .sample-gallery {
+    grid-template-columns: 1fr 1fr;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1311,5 +1975,10 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  /* A progress spinner is information, not decoration: keep it turning, slowly, instead of freezing it into a glyph. */
+  .animate-spin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
   }
 }
