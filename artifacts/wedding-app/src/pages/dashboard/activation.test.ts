@@ -2,10 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeActivation,
+  localSpendCheck,
   nextCoverageFor,
   trialDaysLeft,
   venueReadiness,
 } from "./activation.ts";
+
+test("localSpendCheck mirrors the server's trial-then-balance order", () => {
+  assert.deepEqual(localSpendCheck({ creditsBalance: 3, trial: { onTrial: true, expired: true } }), { ok: false, reason: "trial_expired" });
+  assert.deepEqual(localSpendCheck({ creditsBalance: 0, trial: { onTrial: true, expired: false } }), { ok: false, reason: "insufficient_credits" });
+  assert.deepEqual(localSpendCheck({ creditsBalance: 0, trial: null }), { ok: false, reason: "insufficient_credits" });
+  assert.deepEqual(localSpendCheck({ creditsBalance: 1, trial: { onTrial: false, expired: false } }), { ok: true });
+});
 
 const five = ["exterior", "ceremony", "reception", "detail", "natural_light"].map(
   (coverage) => ({ coverage }),

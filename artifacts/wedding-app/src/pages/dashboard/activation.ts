@@ -129,6 +129,24 @@ export function computeActivation(input: ActivationInput): ActivationState {
   return { steps, doneCount, total: steps.length, complete: next === null, next };
 }
 
+export type SpendCheck =
+  | { ok: true }
+  | { ok: false; reason: "trial_expired" | "insufficient_credits" };
+
+/**
+ * The dashboard's local copy of the server's spend rule (lib/trial.ts): an
+ * expired trial blocks by time even with credits left; otherwise one credit
+ * per gallery. The server re-checks and answers 402 with the same codes.
+ */
+export function localSpendCheck(org: {
+  creditsBalance: number;
+  trial?: { onTrial: boolean; expired: boolean } | null;
+}): SpendCheck {
+  if (org.trial?.onTrial && org.trial.expired) return { ok: false, reason: "trial_expired" };
+  if (org.creditsBalance < 1) return { ok: false, reason: "insufficient_credits" };
+  return { ok: true };
+}
+
 /** Days left on a trial, floored at zero; null when no end date is known. */
 export function trialDaysLeft(endsAt: string | null | undefined, now: Date = new Date()): number | null {
   if (!endsAt) return null;
