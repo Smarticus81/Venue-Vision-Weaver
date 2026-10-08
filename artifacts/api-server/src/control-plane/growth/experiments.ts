@@ -390,8 +390,16 @@ function evaluationRecord(evaluation: Evaluation): Record<string, unknown> {
   return { ...evaluation };
 }
 
-/** Evaluate one card against the latest snapshot (taking one when none exists); persists the readout, never the status. */
-export async function evaluateExperimentById(experimentId: number, now = new Date()): Promise<{ experiment: ControlExperiment; evaluation: Evaluation }> {
+/**
+ * Evaluate one card against the latest snapshot (taking one when none exists).
+ * Persists the readout (evaluation / observedValue / observedN) unless
+ * `persist` is false; never changes the status.
+ */
+export async function evaluateExperimentById(
+  experimentId: number,
+  now = new Date(),
+  options: { persist?: boolean } = {},
+): Promise<{ experiment: ControlExperiment; evaluation: Evaluation }> {
   const [row] = await db.select().from(controlExperimentsTable).where(eq(controlExperimentsTable.id, experimentId)).limit(1);
   if (!row) throw new ExperimentStateError(`Experiment ${experimentId} not found.`);
   let source = await latestSource();
@@ -412,6 +420,7 @@ export async function evaluateExperimentById(experimentId: number, now = new Dat
         reason: "no KPI snapshot available yet",
         evaluatedAt: now.toISOString(),
       };
+  if (options.persist === false) return { experiment: row, evaluation };
   const [updated] = await db
     .update(controlExperimentsTable)
     .set({ evaluation: evaluationRecord(evaluation), observedValue: evaluation.observedValue, observedN: evaluation.n, updatedAt: now })

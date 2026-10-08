@@ -9,16 +9,14 @@ import {
   type ControlDigest,
   type ControlExperiment,
 } from "@workspace/db";
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { proposeAction } from "../actions.js";
 import type { BusinessMetrics } from "../metrics.js";
 import { growthSnapshotNearest, latestGrowthSnapshot, snapshotMetrics } from "../metrics.js";
 import { operatorEmails } from "../operatorAuth.js";
-import { normalizeSegmentGuidance } from "./adaptationTypes.js";
 import { digestHourUtc, digestWeekday, growthLoopEnabled } from "./config.js";
 import { escapeHtml, growthCtaButton, growthEmailLayout } from "./emailRender.js";
-import { getPolicy } from "../policies.js";
 import { DAY_MS, kpiDeltas, mondayOf, rate, type KpiDelta } from "./kpiMath.js";
 import type { GrowthKpis } from "./kpiTypes.js";
 import { controlUrl } from "./config.js";
@@ -535,10 +533,3 @@ export function resetDigestClock(): void {
   lastNudgeCheckAt = 0;
   warnedNoOperators = false;
 }
-
-/** Segment guidance as stored in policy (for the Growth tab). */
-export async function loadSegmentGuidance() {
-  return normalizeSegmentGuidance(await getPolicy("segment_guidance"));
-}
-
-export const digestInArray = inArray;

@@ -114,18 +114,29 @@ export function backoffMs(consecutiveFailures: number): number {
 
 /* ————— Retention ————— */
 
-let lastRetentionAt = 0;
+let lastRetentionDay: string | null = null;
 const DAY_MS = 86_400_000;
+/** The sweep runs once per UTC day, at or after this hour (quiet period for the US venues the business serves). */
+export const RETENTION_HOUR_UTC = 3;
 
 export interface RetentionResult {
   transcriptsCleared: number;
   auditDeleted: number;
 }
 
-/** Null old run transcripts and delete old audit rows. Once per process day. */
+function utcDayKey(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** Pure: is the nightly sweep due at `now`, given the UTC day it last ran? */
+export function retentionDue(now: Date, lastRunDay: string | null, hourUtc = RETENTION_HOUR_UTC): boolean {
+  return now.getUTCHours() >= hourUtc && lastRunDay !== utcDayKey(now);
+}
+
+/** Null old run transcripts and delete old audit rows. Nightly: once per UTC day after RETENTION_HOUR_UTC. */
 export async function runRetention(now: Date = new Date(), force = false): Promise<RetentionResult | null> {
-  if (!force && now.getTime() - lastRetentionAt < DAY_MS) return null;
-  lastRetentionAt = now.getTime();
+  if (!force && !retentionDue(now, lastRetentionDay)) return null;
+  lastRetentionDay = utcDayKey(now);
   const transcriptCutoff = new Date(now.getTime() - transcriptRetentionDays() * DAY_MS);
   const auditCutoff = new Date(now.getTime() - auditRetentionDays() * DAY_MS);
   const cleared = await db
@@ -146,5 +157,5 @@ export async function runRetention(now: Date = new Date(), force = false): Promi
 
 /** Test seam. */
 export function resetRetentionClock(): void {
-  lastRetentionAt = 0;
+  lastRetentionDay = null;
 }
