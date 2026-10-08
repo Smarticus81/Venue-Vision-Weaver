@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import { useGetPublicConfig, type PublicConfig } from "@workspace/api-client-react";
+import {
+  getGetPublicConfigQueryKey,
+  useGetPublicConfig,
+  type PublicConfig,
+} from "@workspace/api-client-react";
 
 /*
  * Published prices, trial terms, founding offer, proof mode and contact
@@ -134,6 +138,7 @@ export function usePublicConfig(): PublicConfig {
   const fromMeta = useMemo(() => readPublicConfigFromDocument(), []);
   const query = useGetPublicConfig({
     query: {
+      queryKey: getGetPublicConfigQueryKey(),
       enabled: fromMeta === null,
       staleTime: 5 * 60_000,
       retry: 1,

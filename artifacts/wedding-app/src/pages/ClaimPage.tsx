@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { Link, useParams } from "wouter";
-import { useGetOutreachClaim, type ErrorType } from "@workspace/api-client-react";
+import { getGetOutreachClaimQueryKey, useGetOutreachClaim, type ErrorType } from "@workspace/api-client-react";
 import { SiteHeader, SiteFooter } from "@/components/layout/SiteChrome";
 import { usePublicConfig } from "@/lib/publicConfig";
 import { rememberFirstTouch, track, trackOnce } from "@/lib/track";
@@ -27,7 +27,13 @@ export default function ClaimPage() {
   const { token = "" } = useParams<{ token: string }>();
   const config = usePublicConfig();
   const claim = useGetOutreachClaim(token, {
-    query: { enabled: token.length > 0, retry: 1, staleTime: 5 * 60_000, refetchOnWindowFocus: false },
+    query: {
+      queryKey: getGetOutreachClaimQueryKey(token),
+      enabled: token.length > 0,
+      retry: 1,
+      staleTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+    },
   });
 
   useEffect(() => {
