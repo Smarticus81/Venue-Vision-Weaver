@@ -6,34 +6,50 @@ import {
   controlProspectAssetsTable,
   controlProspectResearchTable,
   controlProspectsTable,
+  type ControlCampaign,
   type ControlOutreachEmail,
   type ControlProspect,
   type ControlProspectAsset,
+  type ControlProspectFact,
   type ControlProspectResearch,
+  type ControlProspectVetting,
 } from "@workspace/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { recordAuditEvent } from "../audit.js";
 import { proposeAction } from "../actions.js";
+import { getPolicyBoolean } from "../policies.js";
+import { afterResearch, beforeDraft } from "../growth/studioHooks.js";
+import { isFreeMail, splitEmail } from "../vetting/domain.js";
+import { attributeFacts, citableFacts, citedFactsIn, loadFacts, upsertFacts } from "../vetting/facts.js";
+import type { VettingDeps } from "../vetting/deps.js";
+import type { CitableFact } from "../vetting/types.js";
+import { assertVettingAllowsOutreach, ensureVetted, loadVetting, vettingIsFresh } from "../vetting/vet.js";
+import { newClaimToken } from "./claim.js";
 import { assertProspectContactableNow } from "./contactGuards.js";
 import {
+  RESEARCH_FAILED_RETRY_HOURS,
   RESEARCH_STALE_DAYS,
   outreachDefaultCtaUrl,
   outreachPostalAddress,
+  outreachReplyTo,
   outreachUnsubscribeMailbox,
   postalAddressIsPlaceholder,
   publicObjectUrl,
+  senderIsSandbox,
 } from "./config.js";
-import { writeCopy, type CopyResult } from "./copywriter.js";
+import { COPY_RULES, writeCopy, type CopyResult } from "./copywriter.js";
 import { renderEmailRow } from "./sender.js";
+import { loadGuard, type GuardState } from "./sendingHealth.js";
 import { newUnsubscribeToken } from "./unsubscribe.js";
 import { defaultResearchDeps, researchVenue, type ResearchDeps, type VenueFacts } from "./venueResearch.js";
-import { afterResearch, beforeDraft } from "../growth/studioHooks.js";
 
 /**
- * Studio orchestration: research a prospect's venue, write the personal
- * draft, persist it, and raise the governed send action. Operators review,
- * edit, regenerate, and approve from /control; sending is the action's job.
+ * Studio orchestration: vet the prospect, research the venue's own site,
+ * write a personal draft that cites verified facts, persist it with a claim
+ * link, and raise the governed send action. Operators review, edit,
+ * regenerate, and approve from /control; sending is the action's job and
+ * sender.ts re-checks every gate at send time.
  */
 
 export const SEND_OUTREACH_ACTION = "send_outreach_email";
@@ -41,6 +57,7 @@ export const SEND_OUTREACH_ACTION = "send_outreach_email";
 export interface StudioWarnings {
   research: string[];
   config: string[];
+  vetting: string[];
 }
 
 export async function loadProspectById(prospectId: number): Promise<ControlProspect | null> {
@@ -64,9 +81,15 @@ export async function loadProspectAssets(prospectId: number): Promise<ControlPro
     .orderBy(desc(controlProspectAssetsTable.selected), desc(controlProspectAssetsTable.score), desc(controlProspectAssetsTable.createdAt));
 }
 
-function researchIsFresh(research: ControlProspectResearch): boolean {
-  const ageMs = Date.now() - research.fetchedAt.getTime();
-  return research.status === "ok" && ageMs < RESEARCH_STALE_DAYS * 24 * 60 * 60 * 1000;
+/**
+ * Pure: successful research is reused for RESEARCH_STALE_DAYS; a failed
+ * crawl is not retried on every draft but waits RESEARCH_FAILED_RETRY_HOURS
+ * (a forced refresh always re-runs).
+ */
+export function researchIsFresh(research: Pick<ControlProspectResearch, "status" | "fetchedAt">, now: Date = new Date()): boolean {
+  const ageMs = now.getTime() - research.fetchedAt.getTime();
+  if (research.status === "fetch_failed") return ageMs < RESEARCH_FAILED_RETRY_HOURS * 60 * 60 * 1000;
+  return ageMs < RESEARCH_STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
 export async function ensureResearch(
@@ -107,6 +130,14 @@ export async function ensureResearch(
     })
     .returning();
   if (!research) throw new Error("Failed to persist venue research.");
+
+  // Attribution runs on what the site said (result.facts + its pages), never on
+  // the merged view that defaults location to the agent-typed region.
+  try {
+    await upsertFacts(prospect.id, attributeFacts(result.facts, result.pages), options.actor);
+  } catch (err) {
+    logger.error({ err, prospectId: prospect.id }, "Outreach research: failed to persist attributed facts");
+  }
   // Growth hook: re-classify the venue type from what the site actually says.
   await afterResearch(prospect.id, result.facts);
 
@@ -156,7 +187,7 @@ export async function ensureResearch(
   return { research, assets: await loadProspectAssets(prospect.id), refreshed: true };
 }
 
-function factsFromResearch(research: ControlProspectResearch | null, prospect: ControlProspect): VenueFacts {
+export function factsFromResearch(research: ControlProspectResearch | null, prospect: ControlProspect): VenueFacts {
   const raw = (research?.facts ?? {}) as Partial<VenueFacts>;
   return {
     name: typeof raw.name === "string" && raw.name ? raw.name : prospect.name,
@@ -178,16 +209,167 @@ async function stepGuidanceFor(campaignId: number | null, step: number | null): 
   return typeof match?.guidance === "string" ? match.guidance : null;
 }
 
-export function configWarnings(): string[] {
-  const warnings: string[] = [];
-  if (postalAddressIsPlaceholder()) {
-    warnings.push("OUTREACH_POSTAL_ADDRESS is not set; the footer shows a placeholder address (CAN-SPAM requires a real one before sending).");
+/* ————— Campaign rules ————— */
+
+/**
+ * Pure: which campaign and step a draft belongs to. An explicit campaign must
+ * be active, the prospect must be enrolled in it, and the step must be the
+ * next one in the sequence. A campaign inherited from the prospect's
+ * enrollment is used only while it is active (otherwise the note is a
+ * standalone touch).
+ */
+export function resolveCampaignTouch(input: {
+  requestedCampaignId: number | null;
+  requestedStep: number | null;
+  prospect: Pick<ControlProspect, "id" | "campaignId" | "campaignStep">;
+  campaign: Pick<ControlCampaign, "id" | "status" | "steps"> | null;
+}): { campaignId: number | null; step: number | null } {
+  const { prospect, campaign } = input;
+  const explicit = input.requestedCampaignId != null;
+  const campaignId = input.requestedCampaignId ?? prospect.campaignId ?? null;
+  if (campaignId == null) return { campaignId: null, step: input.requestedStep };
+  if (!campaign || campaign.id !== campaignId) {
+    if (explicit) throw new Error(`Campaign ${campaignId} not found.`);
+    return { campaignId: null, step: input.requestedStep };
   }
-  if (!process.env.RESEND_API_KEY?.trim()) {
+  if (campaign.status !== "active") {
+    if (explicit) throw new Error(`Campaign ${campaign.id} is "${campaign.status}"; only active campaigns may draft or send.`);
+    return { campaignId: null, step: input.requestedStep };
+  }
+  if (prospect.campaignId !== campaign.id) {
+    throw new Error(`Prospect ${prospect.id} is not enrolled in campaign ${campaign.id}; enroll it first.`);
+  }
+  const expected = prospect.campaignStep + 1;
+  const step = input.requestedStep ?? expected;
+  if (step !== expected) {
+    throw new Error(`Campaign ${campaign.id}: prospect ${prospect.id} is due step ${expected}, not step ${step}.`);
+  }
+  if (step > campaign.steps.length) {
+    throw new Error(`Campaign ${campaign.id} has ${campaign.steps.length} step(s); prospect ${prospect.id} has completed the sequence.`);
+  }
+  return { campaignId: campaign.id, step };
+}
+
+async function loadCampaign(campaignId: number | null): Promise<ControlCampaign | null> {
+  if (!campaignId) return null;
+  const [row] = await db.select().from(controlCampaignsTable).where(eq(controlCampaignsTable.id, campaignId));
+  return row ?? null;
+}
+
+/* ————— Readiness: config, guard and vetting warnings, approvability ————— */
+
+export interface SendReadiness {
+  postalPlaceholder: boolean;
+  resendConfigured: boolean;
+  replyTo: string | null;
+  replyToFreeMail: boolean;
+  sandboxSender: boolean;
+  sendsEnabled: boolean;
+  requireReplyTo: boolean;
+  guard: GuardState;
+}
+
+export async function loadSendReadiness(): Promise<SendReadiness> {
+  const replyTo = outreachReplyTo();
+  const [guard, sendsEnabled, requireReplyTo] = await Promise.all([
+    loadGuard(),
+    getPolicyBoolean("outreach_sends_enabled", "enabled", true),
+    getPolicyBoolean("outreach_require_reply_to", "enabled", true),
+  ]);
+  return {
+    postalPlaceholder: postalAddressIsPlaceholder(),
+    resendConfigured: Boolean(process.env.RESEND_API_KEY?.trim()),
+    replyTo,
+    replyToFreeMail: replyTo ? isFreeMail(splitEmail(replyTo)?.domain ?? "") : false,
+    sandboxSender: senderIsSandbox(),
+    sendsEnabled,
+    requireReplyTo,
+    guard,
+  };
+}
+
+/** Pure: operator-facing configuration warnings (vetting.md 6.4). */
+export function configWarningsFor(state: SendReadiness): string[] {
+  const warnings: string[] = [];
+  if (state.postalPlaceholder) {
+    warnings.push("OUTREACH_POSTAL_ADDRESS is not set; the footer shows a placeholder address and sends are refused until a real one is configured (CAN-SPAM).");
+  }
+  if (!state.resendConfigured) {
     warnings.push("RESEND_API_KEY is not set; approving will fail until email delivery is configured.");
+  }
+  if (state.sandboxSender) {
+    warnings.push("EMAIL_FROM is unset or the Resend sandbox sender; sends are refused until a sender on a verified domain is configured.");
+  }
+  if (!state.replyTo) {
+    warnings.push("OUTREACH_REPLY_TO is not set; sends are refused until a monitored mailbox is configured.");
+  } else if (state.replyToFreeMail) {
+    warnings.push("OUTREACH_REPLY_TO is a free-mail address; mailbox providers treat a company From with a Gmail Reply-To as spam.");
+  }
+  if (!state.sendsEnabled) {
+    warnings.push("Outbound prospect email is frozen (policy outreach_sends_enabled = false); approvals wait until it is turned back on.");
+  }
+  if (state.guard.status === "paused") {
+    warnings.push(
+      `Outreach sending is paused by the deliverability guard${state.guard.reason ? `: ${state.guard.reason}` : ""}. Reset it in /control → Outreach once the cause is understood.`,
+    );
+  } else if (state.guard.status === "warn" || state.guard.status === "throttled") {
+    warnings.push(`Deliverability guard (${state.guard.status})${state.guard.reason ? `: ${state.guard.reason}` : ""}.`);
   }
   return warnings;
 }
+
+export async function configWarnings(): Promise<string[]> {
+  return configWarningsFor(await loadSendReadiness());
+}
+
+/** Pure: why the vetting state would stop (or delay) this email. */
+export function vettingWarningsFor(
+  vetting: Pick<ControlProspectVetting, "status" | "score" | "expiresAt" | "summary"> | null,
+  now: Date = new Date(),
+): string[] {
+  if (!vetting) return ["Vetting has not run for this venue; it runs before drafting and again on approve."];
+  const warnings: string[] = [];
+  if (vetting.status === "review") warnings.push(`Legitimacy ${vetting.score}/100 needs an operator decision (Pipeline → Evidence → Override).`);
+  if (vetting.status === "failed") warnings.push(`Vetting failed: ${vetting.summary}`);
+  if (vetting.status === "error") warnings.push(`Vetting could not complete (${vetting.summary}); re-run it from Pipeline → Evidence.`);
+  if (vetting.status === "passed" && vetting.expiresAt.getTime() <= now.getTime()) {
+    const days = Math.max(1, Math.round((now.getTime() - vetting.expiresAt.getTime()) / 86_400_000));
+    warnings.push(`Vetting expired ${days} day${days === 1 ? "" : "s"} ago; it will re-run on approve.`);
+  }
+  return warnings;
+}
+
+/**
+ * Pure: can an operator approve this email right now and expect it to send?
+ * (vetting.md 3.6, plus the sender's hard blocks: sandbox sender, frozen
+ * sends.) The UI disables Approve with the warnings as the reason.
+ */
+export function computeApprovable(input: {
+  editable: boolean;
+  vetting: Pick<ControlProspectVetting, "status" | "expiresAt"> | null;
+  citedFacts: number;
+  readiness: Pick<SendReadiness, "postalPlaceholder" | "replyTo" | "sandboxSender" | "sendsEnabled" | "requireReplyTo" | "guard">;
+  now?: Date;
+}): boolean {
+  const { readiness } = input;
+  return (
+    input.editable &&
+    input.vetting?.status === "passed" &&
+    vettingIsFresh(input.vetting, input.now ?? new Date()) &&
+    input.citedFacts >= COPY_RULES.minCitedFacts &&
+    readiness.guard.status !== "paused" &&
+    readiness.sendsEnabled &&
+    !readiness.postalPlaceholder &&
+    !readiness.sandboxSender &&
+    (Boolean(readiness.replyTo) || !readiness.requireReplyTo)
+  );
+}
+
+function tooFewFactsMessage(prospectId: number, count: number): string {
+  return `Prospect ${prospectId} has ${count} verified venue fact(s) (need ${COPY_RULES.minCitedFacts}: named space, location, capacity, or a published owner name). Re-run research, or add a fact with its source in Pipeline → Evidence.`;
+}
+
+/* ————— Drafting ————— */
 
 export interface CreateDraftInput {
   prospectId: number;
@@ -200,6 +382,7 @@ export interface CreateDraftInput {
   actor: string;
   forceResearch?: boolean;
   researchDeps?: ResearchDeps;
+  vettingDeps?: VettingDeps;
   /** Force a control_copy_variants key; null/omitted lets the growth hook choose. */
   variantKey?: string | null;
 }
@@ -220,7 +403,12 @@ export async function createDraft(input: CreateDraftInput): Promise<{
     .select({ id: controlOutreachEmailsTable.id, actionId: controlOutreachEmailsTable.actionId })
     .from(controlOutreachEmailsTable)
     .innerJoin(agentActionsTable, eq(controlOutreachEmailsTable.actionId, agentActionsTable.id))
-    .where(and(eq(controlOutreachEmailsTable.prospectId, prospect.id), eq(agentActionsTable.status, "pending")))
+    .where(
+      and(
+        eq(controlOutreachEmailsTable.prospectId, prospect.id),
+        sql`${agentActionsTable.status} in ('pending', 'approved', 'executing')`,
+      ),
+    )
     .limit(1);
   if (pendingExisting) {
     throw new Error(
@@ -228,33 +416,68 @@ export async function createDraft(input: CreateDraftInput): Promise<{
     );
   }
 
+  // Campaign membership and step order before any spend.
+  const requestedCampaignId = input.campaignId ?? null;
+  const campaign = await loadCampaign(requestedCampaignId ?? prospect.campaignId ?? null);
+  const touch = resolveCampaignTouch({
+    requestedCampaignId,
+    requestedStep: input.step ?? null,
+    prospect,
+    campaign,
+  });
+
+  // Legitimacy gate: refresh when missing/expired, then refuse anything but "passed".
+  const { vetting } = await ensureVetted(prospect, { requestedBy: input.actor, deps: input.vettingDeps });
+  assertVettingAllowsOutreach(vetting, prospect.id);
+
   const { research, assets } = await ensureResearch(prospect, {
     force: input.forceResearch,
     actor: input.actor,
     deps: input.researchDeps,
   });
+  const factRows = await loadFacts(prospect.id);
+  if (research.status === "fetch_failed" && !factRows.some((row) => row.sourceKind === "operator")) {
+    throw new Error(
+      `The website for prospect ${prospect.id} could not be loaded (${research.warnings[0] ?? "fetch failed"}); a generic note will not be drafted. Retry research later, or add verified facts with their sources in Pipeline → Evidence.`,
+    );
+  }
   const facts = factsFromResearch(research, prospect);
-  const campaignId = input.campaignId ?? prospect.campaignId ?? null;
-  const step = input.step ?? null;
+  const citable = citableFacts(factRows);
+  if (citable.length < COPY_RULES.minCitedFacts) throw new Error(tooFewFactsMessage(prospect.id, citable.length));
+  const verifiedOwner = citable.find((fact) => fact.kind === "owner_name")?.value ?? null;
+
   // Growth hook: copy-variant choice (and the max_campaign_steps refusal once growth lands).
-  const growth = await beforeDraft({ prospect, campaignId, step, requestedVariantKey: input.variantKey ?? null });
+  const growth = await beforeDraft({
+    prospect,
+    campaignId: touch.campaignId,
+    step: touch.step,
+    requestedVariantKey: input.variantKey ?? null,
+  });
   const copy = await writeCopy({
     facts,
+    verifiedFacts: citable,
     prospectName: prospect.name,
-    contactName: prospect.contactName,
+    contactName: verifiedOwner,
     ask: input.ask ?? (prospect.contactCount > 0 ? "call" : "preview"),
     contactCount: prospect.contactCount,
-    stepGuidance: await stepGuidanceFor(campaignId, step),
+    stepGuidance: await stepGuidanceFor(touch.campaignId, touch.step),
     variantAngle: growth.variantAngle,
   });
+  const cited = citedFactsIn(copy, citable);
+  if (cited.length < COPY_RULES.minCitedFacts) {
+    throw new Error(
+      `The draft for prospect ${prospect.id} cites ${cited.length} verified venue fact(s); at least ${COPY_RULES.minCitedFacts} are required. Add a fact with its source in Pipeline → Evidence and draft again.`,
+    );
+  }
 
+  const claimToken = newClaimToken();
   const selectedImageIds = assets.filter((asset) => asset.selected && asset.kind === "venue_image").map((asset) => asset.id);
   const [email] = await db
     .insert(controlOutreachEmailsTable)
     .values({
       prospectId: prospect.id,
-      campaignId,
-      step,
+      campaignId: touch.campaignId,
+      step: touch.step,
       variantKey: growth.variantKey,
       status: "draft",
       subjectOptions: copy.subjects,
@@ -263,16 +486,29 @@ export async function createDraft(input: CreateDraftInput): Promise<{
       greeting: copy.greeting,
       signOff: copy.signOff,
       ctaLabel: copy.ctaLabel,
-      ctaUrl: outreachDefaultCtaUrl(facts.name ?? prospect.name),
+      ctaUrl: outreachDefaultCtaUrl(facts.name ?? prospect.name, {
+        token: claimToken,
+        campaignId: touch.campaignId,
+        variantKey: growth.variantKey,
+        step: touch.step,
+      }),
       imageAssetIds: selectedImageIds,
       draftNotes: { ...copy.notes, research: { status: research.status, warnings: research.warnings } },
+      citedFacts: cited,
+      vettingSnapshot: { status: vetting.status, score: vetting.score, vettedAt: vetting.vettedAt.toISOString() },
       unsubscribeToken: newUnsubscribeToken(),
+      claimToken,
       createdByAgent: input.agentKey,
     })
     .returning();
   if (!email) throw new Error("Failed to persist outreach draft.");
 
-  const warnings: StudioWarnings = { research: research.warnings, config: configWarnings() };
+  const readiness = await loadSendReadiness();
+  const warnings: StudioWarnings = {
+    research: research.warnings,
+    config: configWarningsFor(readiness),
+    vetting: vettingWarningsFor(vetting),
+  };
   const action = await proposeAction({
     agentKey: input.agentKey,
     runId: input.runId,
@@ -282,6 +518,8 @@ export async function createDraft(input: CreateDraftInput): Promise<{
       `Studio draft #${email.id} for ${prospect.email} (${prospect.status}, ${prospect.contactCount} prior emails).`,
       `Copy source: ${copy.notes.source}; ${copy.notes.wordCount} words; ${selectedImageIds.length} venue photo(s) from ${research.sourceUrls[0] ?? "no site"}.`,
       `Variant: ${growth.variantKey ?? "none"}`,
+      `Vetting: ${vetting.summary}`,
+      `Cites: ${cited.map((fact) => `${fact.kind}=${fact.value}`).join(", ")}`,
       ...research.warnings.map((warning) => `Research: ${warning}`),
     ].join("\n"),
     params: { emailId: email.id },
@@ -298,7 +536,15 @@ export async function createDraft(input: CreateDraftInput): Promise<{
     eventType: "outreach_email_drafted",
     subjectType: "outreach_email",
     subjectId: email.id,
-    detail: { prospectId: prospect.id, actionId: action.id, copySource: copy.notes.source, images: selectedImageIds.length },
+    detail: {
+      prospectId: prospect.id,
+      actionId: action.id,
+      copySource: copy.notes.source,
+      images: selectedImageIds.length,
+      citedFacts: cited.length,
+      campaignId: touch.campaignId,
+      step: touch.step,
+    },
   });
 
   return { email: linked ?? email, actionId: action.id, actionStatus: action.status, copy: copy.notes, warnings };
@@ -308,15 +554,25 @@ export async function createDraft(input: CreateDraftInput): Promise<{
 
 export interface EmailListRow {
   email: ControlOutreachEmail;
-  prospect: Pick<ControlProspect, "id" | "name" | "email" | "contactName" | "status" | "website" | "region">;
+  prospect: Pick<ControlProspect, "id" | "name" | "email" | "contactName" | "status" | "vettingStatus" | "website" | "region">;
   actionStatus: string | null;
   imageCount: number;
 }
 
-export async function listEmails(filter: { status?: string | null; prospectId?: number | null; limit: number }): Promise<EmailListRow[]> {
+export async function listEmails(filter: {
+  status?: string | null;
+  prospectId?: number | null;
+  /** Only drafts whose send action is still waiting for an operator. */
+  awaiting?: boolean;
+  limit: number;
+  offset?: number;
+}): Promise<EmailListRow[]> {
   const conditions = [];
   if (filter.status) conditions.push(eq(controlOutreachEmailsTable.status, filter.status));
   if (filter.prospectId) conditions.push(eq(controlOutreachEmailsTable.prospectId, filter.prospectId));
+  if (filter.awaiting) {
+    conditions.push(eq(controlOutreachEmailsTable.status, "draft"), eq(agentActionsTable.status, "pending"));
+  }
   const rows = await db
     .select({
       email: controlOutreachEmailsTable,
@@ -326,6 +582,7 @@ export async function listEmails(filter: { status?: string | null; prospectId?: 
         email: controlProspectsTable.email,
         contactName: controlProspectsTable.contactName,
         status: controlProspectsTable.status,
+        vettingStatus: controlProspectsTable.vettingStatus,
         website: controlProspectsTable.website,
         region: controlProspectsTable.region,
       },
@@ -335,8 +592,9 @@ export async function listEmails(filter: { status?: string | null; prospectId?: 
     .innerJoin(controlProspectsTable, eq(controlOutreachEmailsTable.prospectId, controlProspectsTable.id))
     .leftJoin(agentActionsTable, eq(controlOutreachEmailsTable.actionId, agentActionsTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(controlOutreachEmailsTable.updatedAt))
-    .limit(filter.limit);
+    .orderBy(desc(controlOutreachEmailsTable.updatedAt), desc(controlOutreachEmailsTable.id))
+    .limit(filter.limit)
+    .offset(filter.offset ?? 0);
   return rows.map((row) => ({
     email: row.email,
     prospect: row.prospect,
@@ -361,15 +619,36 @@ export interface AssetView {
   createdAt: Date;
 }
 
+export function toAssetView(asset: ControlProspectAsset, inEmail: Set<number>): AssetView {
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    url: publicObjectUrl(asset.objectKey),
+    sourceUrl: asset.sourceUrl,
+    pageUrl: asset.pageUrl,
+    width: asset.width,
+    height: asset.height,
+    bytes: asset.bytes,
+    altText: asset.altText,
+    score: asset.score,
+    selected: asset.selected,
+    inEmail: inEmail.has(asset.id),
+    createdAt: asset.createdAt,
+  };
+}
+
 export interface EmailDetail {
   email: ControlOutreachEmail;
   prospect: ControlProspect;
   action: { id: number; status: string; decidedBy: string | null; decisionNote: string | null; error: string | null } | null;
   research: { status: string; facts: VenueFacts; sourceUrls: string[]; warnings: string[]; fetchedAt: Date } | null;
+  vetting: ControlProspectVetting | null;
+  facts: ControlProspectFact[];
   assets: AssetView[];
   preview: { html: string; htmlDark: string; text: string; headers: Record<string, string> };
   warnings: StudioWarnings;
   editable: boolean;
+  approvable: boolean;
 }
 
 export async function getEmailDetail(emailId: number): Promise<EmailDetail | null> {
@@ -377,7 +656,7 @@ export async function getEmailDetail(emailId: number): Promise<EmailDetail | nul
   if (!email) return null;
   const prospect = await loadProspectById(email.prospectId);
   if (!prospect) return null;
-  const [research, assets, actionRow] = await Promise.all([
+  const [research, assets, actionRow, vetting, facts, readiness] = await Promise.all([
     loadResearch(prospect.id),
     loadProspectAssets(prospect.id),
     email.actionId
@@ -393,6 +672,9 @@ export async function getEmailDetail(emailId: number): Promise<EmailDetail | nul
           .where(eq(agentActionsTable.id, email.actionId))
           .then((rows) => rows[0] ?? null)
       : Promise.resolve(null),
+    loadVetting(prospect.id),
+    loadFacts(prospect.id),
+    loadSendReadiness(),
   ]);
 
   const options = {
@@ -403,6 +685,12 @@ export async function getEmailDetail(emailId: number): Promise<EmailDetail | nul
   const light = renderEmailRow(email, prospect, assets, options);
   const dark = renderEmailRow(email, prospect, assets, { ...options, forceScheme: "dark" });
   const inEmail = new Set(email.imageAssetIds);
+  const editable = email.status === "draft" && (actionRow === null || actionRow.status === "pending");
+  const researchWarnings = [...(research?.warnings ?? [])];
+  const notes = (email.draftNotes ?? {}) as { source?: unknown };
+  if (notes.source === "fallback" && email.imageAssetIds.length === 0) {
+    researchWarnings.push("Template copy with no venue photos: consider regenerating or adding photos before approving.");
+  }
   return {
     email,
     prospect,
@@ -416,24 +704,13 @@ export async function getEmailDetail(emailId: number): Promise<EmailDetail | nul
           fetchedAt: research.fetchedAt,
         }
       : null,
-    assets: assets.map((asset) => ({
-      id: asset.id,
-      kind: asset.kind,
-      url: publicObjectUrl(asset.objectKey),
-      sourceUrl: asset.sourceUrl,
-      pageUrl: asset.pageUrl,
-      width: asset.width,
-      height: asset.height,
-      bytes: asset.bytes,
-      altText: asset.altText,
-      score: asset.score,
-      selected: asset.selected,
-      inEmail: inEmail.has(asset.id),
-      createdAt: asset.createdAt,
-    })),
+    vetting,
+    facts,
+    assets: assets.map((asset) => toAssetView(asset, inEmail)),
     preview: { html: light.html, htmlDark: dark.html, text: light.text, headers: light.headers },
-    warnings: { research: research?.warnings ?? [], config: configWarnings() },
-    editable: email.status === "draft" && (actionRow === null || actionRow.status === "pending"),
+    warnings: { research: researchWarnings, config: configWarningsFor(readiness), vetting: vettingWarningsFor(vetting) },
+    editable,
+    approvable: computeApprovable({ editable, vetting, citedFacts: email.citedFacts?.length ?? 0, readiness }),
   };
 }
 
@@ -446,6 +723,9 @@ export interface EmailPatch {
   ctaUrl?: string;
   imageAssetIds?: number[];
 }
+
+export const EDIT_TOO_FEW_FACTS =
+  "This edit leaves fewer than two verified venue facts in the email (named space, location, capacity, or published owner name). Keep at least two so the note is unmistakably about this venue.";
 
 export async function updateEmail(emailId: number, patch: EmailPatch, operatorEmail: string): Promise<EmailDetail> {
   const detail = await getEmailDetail(emailId);
@@ -464,9 +744,20 @@ export async function updateEmail(emailId: number, patch: EmailPatch, operatorEm
     throw new Error("The call-to-action link must be an http(s) or mailto URL.");
   }
   const subject = patch.subject?.trim();
+  if (subject !== undefined && /^\s*(re|fwd?)\s*:/i.test(subject)) {
+    throw new Error("Subject must not fake a reply or forward.");
+  }
   const subjectOptions = subject && !detail.email.subjectOptions.includes(subject)
     ? [...detail.email.subjectOptions.slice(0, 2), subject].slice(-3)
     : detail.email.subjectOptions;
+
+  let cited: CitableFact[] | undefined;
+  if (patch.body !== undefined || patch.greeting !== undefined) {
+    const nextBody = patch.body !== undefined ? patch.body.trim() : detail.email.body;
+    const nextGreeting = patch.greeting !== undefined ? patch.greeting.trim() : detail.email.greeting;
+    cited = citedFactsIn({ greeting: nextGreeting, body: nextBody }, citableFacts(detail.facts));
+    if (cited.length < COPY_RULES.minCitedFacts) throw new Error(EDIT_TOO_FEW_FACTS);
+  }
 
   await db
     .update(controlOutreachEmailsTable)
@@ -478,6 +769,7 @@ export async function updateEmail(emailId: number, patch: EmailPatch, operatorEm
       ...(patch.ctaLabel !== undefined ? { ctaLabel: patch.ctaLabel.trim() } : {}),
       ...(patch.ctaUrl !== undefined ? { ctaUrl: patch.ctaUrl.trim() } : {}),
       ...(patch.imageAssetIds !== undefined ? { imageAssetIds: patch.imageAssetIds } : {}),
+      ...(cited !== undefined ? { citedFacts: cited } : {}),
       editedBy: operatorEmail,
       updatedAt: new Date(),
     })
@@ -495,7 +787,7 @@ export async function updateEmail(emailId: number, patch: EmailPatch, operatorEm
     eventType: "outreach_email_edited",
     subjectType: "outreach_email",
     subjectId: emailId,
-    detail: { fields: Object.keys(patch) },
+    detail: { fields: Object.keys(patch), citedFacts: cited?.length ?? null },
   });
   const updated = await getEmailDetail(emailId);
   if (!updated) throw new Error("Email vanished during update.");
@@ -527,14 +819,23 @@ export async function regenerateEmail(
   }
   if (mode === "copy" || mode === "both") {
     const facts = factsFromResearch(research, prospect);
+    const citable = citableFacts(await loadFacts(prospect.id));
+    if (citable.length < COPY_RULES.minCitedFacts) throw new Error(tooFewFactsMessage(prospect.id, citable.length));
     const copy = await writeCopy({
       facts,
+      verifiedFacts: citable,
       prospectName: prospect.name,
-      contactName: prospect.contactName,
+      contactName: citable.find((fact) => fact.kind === "owner_name")?.value ?? null,
       ask: options.ask ?? (prospect.contactCount > 0 ? "call" : "preview"),
       contactCount: prospect.contactCount,
       stepGuidance: await stepGuidanceFor(detail.email.campaignId, detail.email.step),
     });
+    const cited = citedFactsIn(copy, citable);
+    if (cited.length < COPY_RULES.minCitedFacts) {
+      throw new Error(
+        `The regenerated draft cites ${cited.length} verified venue fact(s); at least ${COPY_RULES.minCitedFacts} are required. The previous copy was kept.`,
+      );
+    }
     await db
       .update(controlOutreachEmailsTable)
       .set({
@@ -544,6 +845,7 @@ export async function regenerateEmail(
         greeting: copy.greeting,
         signOff: copy.signOff,
         ctaLabel: copy.ctaLabel,
+        citedFacts: cited,
         draftNotes: { ...copy.notes, regeneratedBy: operatorEmail, research: { status: research?.status ?? null, warnings: research?.warnings ?? [] } },
         editedBy: operatorEmail,
         updatedAt: new Date(),
@@ -581,10 +883,56 @@ export async function markEmailsRejectedForAction(actionId: number): Promise<voi
   }
 }
 
-/** Record a bounce/complaint/delivery from the provider against the email. */
+/* ————— Provider events ————— */
+
+export type DeliveryEventType = "sent" | "delivered" | "bounced" | "complained" | "delivery_delayed" | "opened" | "clicked";
+
+/**
+ * Pure: the column changes one provider event makes to an email. Status is
+ * monotonic (draft < sent < delivered < bounced < complained): a late
+ * "delivered" never overwrites a bounce or complaint, and opens/clicks only
+ * stamp their first timestamp (a click implies an open).
+ */
+export function deliveryEventPatch(
+  email: Pick<ControlOutreachEmail, "status" | "deliveredAt" | "openedAt" | "clickedAt">,
+  event: { eventType: DeliveryEventType; reason?: string | null; at: Date },
+): Partial<typeof controlOutreachEmailsTable.$inferInsert> {
+  const rank: Record<string, number> = { draft: 0, failed: 0, rejected: 0, sent: 1, delivered: 2, bounced: 3, complained: 4 };
+  const current = rank[email.status] ?? 0;
+  const patch: Partial<typeof controlOutreachEmailsTable.$inferInsert> = {};
+  switch (event.eventType) {
+    case "delivered":
+      if (!email.deliveredAt) patch.deliveredAt = event.at;
+      if (current < rank.delivered!) patch.status = "delivered";
+      break;
+    case "bounced":
+      if (current < rank.bounced!) {
+        patch.status = "bounced";
+        patch.bouncedAt = event.at;
+        patch.bounceReason = event.reason ?? "bounced";
+      }
+      break;
+    case "complained":
+      if (current < rank.complained!) patch.status = "complained";
+      break;
+    case "opened":
+      if (!email.openedAt) patch.openedAt = event.at;
+      break;
+    case "clicked":
+      if (!email.openedAt) patch.openedAt = event.at;
+      if (!email.clickedAt) patch.clickedAt = event.at;
+      break;
+    case "sent":
+    case "delivery_delayed":
+      break;
+  }
+  return patch;
+}
+
+/** Record a delivery or engagement event from the provider against the studio email it belongs to. */
 export async function recordDeliveryEvent(input: {
   providerMessageId: string;
-  eventType: "sent" | "delivered" | "bounced" | "complained" | "delivery_delayed";
+  eventType: DeliveryEventType;
   reason?: string | null;
   at: Date;
 }): Promise<ControlOutreachEmail | null> {
@@ -594,26 +942,12 @@ export async function recordDeliveryEvent(input: {
     .where(eq(controlOutreachEmailsTable.providerMessageId, input.providerMessageId))
     .limit(1);
   if (!email) return null;
-  const set: Partial<typeof controlOutreachEmailsTable.$inferInsert> = { updatedAt: input.at };
-  if (input.eventType === "delivered") {
-    set.status = "delivered";
-    set.deliveredAt = input.at;
-  } else if (input.eventType === "bounced") {
-    set.status = "bounced";
-    set.bouncedAt = input.at;
-    set.bounceReason = input.reason ?? "bounced";
-  } else if (input.eventType === "complained") {
-    set.status = "complained";
-  }
+  const patch = deliveryEventPatch(email, input);
+  if (Object.keys(patch).length === 0) return email;
   const [updated] = await db
     .update(controlOutreachEmailsTable)
-    .set(set)
+    .set({ ...patch, updatedAt: new Date() })
     .where(eq(controlOutreachEmailsTable.id, email.id))
     .returning();
   return updated ?? email;
-}
-
-export async function loadAssetsByIds(ids: number[]): Promise<ControlProspectAsset[]> {
-  if (ids.length === 0) return [];
-  return db.select().from(controlProspectAssetsTable).where(inArray(controlProspectAssetsTable.id, ids));
 }

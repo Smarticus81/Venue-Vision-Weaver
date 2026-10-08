@@ -8,21 +8,25 @@ import {
   agentActionsTable,
   controlProspectsTable,
   controlCampaignsTable,
+  creditTransactionsTable,
   type AgentAction,
   type ActionRiskLevel,
 } from "@workspace/db";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { grantCreditsToOrg } from "../lib/credits.js";
-import { sendControlPlaneEmail } from "../lib/emailService.js";
+import { sendRawEmail } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
 import { recordAuditEvent } from "./audit.js";
 import { executedTodayCount, startOfUtcDay } from "./actionCounts.js";
 import { getAgentDefinition } from "./agents.js";
 import { growthActions } from "./growth/actions.js";
-import { getPolicyBoolean, getPolicyNumber, setPolicy } from "./policies.js";
-import { assertProspectContactableNow } from "./outreach/contactGuards.js";
-import { defaultSendDeps, prospectEmailsSentToday, sendOutreachEmail } from "./outreach/sender.js";
+import { getPolicyBoolean, getPolicyNumber, setPolicy, validatePolicyUpdate } from "./policies.js";
+import { outreachPostalAddress, outreachReplyTo, outreachUnsubscribeMailbox } from "./outreach/config.js";
+import { isDeferredSendError } from "./outreach/sendErrors.js";
+import { defaultSendDeps, sendOutreachEmail } from "./outreach/sender.js";
 import { markEmailsRejectedForAction } from "./outreach/studio.js";
+import { isSuppressed } from "./outreach/unsubscribe.js";
+import { renderVenueEmail } from "./outreach/venueEmail.js";
 
 /**
  * The only way agents touch the business is through this catalog. Every
@@ -131,8 +135,9 @@ const sendOutreachEmailSchema = z
   })
   .strict();
 
-const OPT_OUT_FOOTER =
-  'If you would rather not hear from us, just reply "unsubscribe" and we will not contact you again.';
+/** Shown (and thrown) for the retired plain-text prospect email. */
+export const SEND_PROSPECT_EMAIL_RETIRED =
+  "send_prospect_email is retired: prospects are emailed only through the outreach studio (draft_outreach_email → send_outreach_email). Reject this action and draft through the studio.";
 
 const CORE_ACTIONS: Record<string, ActionDefinition> = {
   send_venue_email: {
@@ -154,85 +159,39 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
         .where(eq(venuesTable.slug, params.venueSlug));
       if (!venue) throw new Error(`Venue "${params.venueSlug}" not found.`);
       if (!venue.ownerEmail) throw new Error(`Venue "${params.venueSlug}" has no owner email.`);
-      const delivery = await sendControlPlaneEmail(
-        venue.ownerEmail,
-        params.subject,
-        params.message.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean),
-      );
+      if (await isSuppressed(venue.ownerEmail)) {
+        throw new Error(`${venue.ownerEmail} is on the suppression list (unsubscribed, bounced, or complained) and must not be emailed.`);
+      }
+      const replyTo = outreachReplyTo();
+      const rendered = renderVenueEmail({
+        subject: params.subject,
+        paragraphs: params.message.split(/\n\s*\n/),
+        venueName: venue.name,
+        postalAddress: outreachPostalAddress(),
+        unsubscribeMailbox: outreachUnsubscribeMailbox() ?? replyTo,
+      });
+      const delivery = await sendRawEmail({
+        to: venue.ownerEmail,
+        subject: params.subject,
+        html: rendered.html,
+        text: rendered.text,
+        headers: rendered.headers,
+        replyTo,
+      });
       if (!delivery.sent) throw new Error(delivery.reason);
-      return { sent: true, to: venue.ownerEmail, venueId: venue.id };
+      return { sent: true, to: venue.ownerEmail, venueId: venue.id, providerId: delivery.id };
     },
   },
   send_prospect_email: {
     type: "send_prospect_email",
     riskLevel: "high",
+    retired: true,
     description:
-      "Legacy plain-text prospect email (no venue photos). Prefer draft_outreach_email, which produces a reviewed studio email. Blocked for prospects who replied, converted, unsubscribed, bounced, or were disqualified; subject to daily send caps and minimum contact gaps.",
+      "RETIRED. Plain-text prospect email that bypassed the outreach studio and vetting. New proposals are refused and pending ones cannot be approved; use draft_outreach_email, which produces a vetted, reviewed studio email.",
+    // Kept so historical rows still parse for display.
     paramsSchema: sendProspectEmailSchema as z.ZodType<Record<string, unknown>>,
-    async execute(rawParams) {
-      const params = sendProspectEmailSchema.parse(rawParams);
-
-      const cap = await getPolicyNumber("max_prospect_emails_per_day", "emails", 15);
-      const sentToday = await prospectEmailsSentToday();
-      if (sentToday >= cap) {
-        throw new Error(`Daily prospect email cap reached (${sentToday}/${cap}).`);
-      }
-
-      const [prospect] = await db
-        .select()
-        .from(controlProspectsTable)
-        .where(eq(controlProspectsTable.id, params.prospectId));
-      if (!prospect) throw new Error(`Prospect ${params.prospectId} not found.`);
-      // Consent, cadence, suppression list, and existing-customer checks.
-      await assertProspectContactableNow(prospect);
-
-      if (params.campaignId) {
-        const [campaign] = await db
-          .select({ id: controlCampaignsTable.id, status: controlCampaignsTable.status })
-          .from(controlCampaignsTable)
-          .where(eq(controlCampaignsTable.id, params.campaignId));
-        if (!campaign) throw new Error(`Campaign ${params.campaignId} not found.`);
-        if (campaign.status !== "active") {
-          throw new Error(
-            `Campaign ${campaign.id} is "${campaign.status}"; only active campaigns may send.`,
-          );
-        }
-        if (prospect.campaignId !== campaign.id) {
-          throw new Error(
-            `Prospect ${prospect.id} is not enrolled in campaign ${campaign.id}; enroll first.`,
-          );
-        }
-      }
-
-      const paragraphs = params.message
-        .split(/\n\s*\n/)
-        .map((p) => p.trim())
-        .filter(Boolean);
-      paragraphs.push(OPT_OUT_FOOTER);
-
-      const delivery = await sendControlPlaneEmail(prospect.email, params.subject, paragraphs);
-      if (!delivery.sent) throw new Error(delivery.reason);
-
-      const now = new Date();
-      await db
-        .update(controlProspectsTable)
-        .set({
-          status: "contacted",
-          contactCount: prospect.contactCount + 1,
-          lastContactedAt: now,
-          campaignStep: params.step ?? prospect.campaignStep,
-          updatedAt: now,
-        })
-        .where(eq(controlProspectsTable.id, prospect.id));
-
-      return {
-        sent: true,
-        to: prospect.email,
-        prospectId: prospect.id,
-        contactCount: prospect.contactCount + 1,
-        campaignId: params.campaignId ?? prospect.campaignId,
-        step: params.step ?? null,
-      };
+    async execute() {
+      throw new Error(SEND_PROSPECT_EMAIL_RETIRED);
     },
   },
   send_outreach_email: {
@@ -409,20 +368,35 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     paramsSchema: requeueFailedSessionSchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = requeueFailedSessionSchema.parse(rawParams);
-      const [updated] = await db
-        .update(coupleSessionsTable)
-        .set({ status: "pending", errorMessage: null, completedAt: null })
-        .where(
-          and(
-            eq(coupleSessionsTable.id, params.sessionId),
-            eq(coupleSessionsTable.status, "failed"),
-          ),
-        )
-        .returning({ id: coupleSessionsTable.id });
-      if (!updated) {
-        throw new Error(`Session ${params.sessionId} is not in a failed state (or does not exist).`);
-      }
-      return { requeued: true, sessionId: updated.id };
+      return db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(coupleSessionsTable)
+          .set({ status: "pending", errorMessage: null, completedAt: null })
+          .where(
+            and(
+              eq(coupleSessionsTable.id, params.sessionId),
+              eq(coupleSessionsTable.status, "failed"),
+            ),
+          )
+          .returning({ id: coupleSessionsTable.id, venueId: coupleSessionsTable.venueId });
+        if (!updated) {
+          throw new Error(`Session ${params.sessionId} is not in a failed state (or does not exist).`);
+        }
+        const [venue] = await tx
+          .select({ organizationId: venuesTable.organizationId })
+          .from(venuesTable)
+          .where(eq(venuesTable.id, updated.venueId));
+        // The rerun is free (the failure was refunded); the zero-delta ledger row
+        // keeps the credit history truthful about which sessions ran twice.
+        await tx.insert(creditTransactionsTable).values({
+          organizationId: venue?.organizationId ?? null,
+          venueId: updated.venueId,
+          sessionId: updated.id,
+          delta: 0,
+          reason: "requeue_grant",
+        });
+        return { requeued: true, sessionId: updated.id, ledger: "requeue_grant" };
+      });
     },
   },
   pause_agent: {
@@ -444,17 +418,12 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
   resume_agent: {
     type: "resume_agent",
     riskLevel: "medium",
-    description: "Resume a paused control-plane agent.",
+    retired: true,
+    description:
+      "RETIRED. Agents no longer resume agents; operators resume a paused agent from /control → Agents (POST /control/agents/{key}/status).",
     paramsSchema: agentKeySchema as z.ZodType<Record<string, unknown>>,
-    async execute(rawParams) {
-      const params = agentKeySchema.parse(rawParams);
-      const [updated] = await db
-        .update(controlAgentsTable)
-        .set({ status: "active", updatedAt: new Date() })
-        .where(eq(controlAgentsTable.key, params.agentKey))
-        .returning({ key: controlAgentsTable.key });
-      if (!updated) throw new Error(`Agent "${params.agentKey}" not found.`);
-      return { resumed: true, agentKey: updated.key };
+    async execute() {
+      throw new Error("resume_agent is retired: an operator resumes paused agents from /control → Agents.");
     },
   },
   update_policy: {
@@ -464,7 +433,9 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     paramsSchema: updatePolicySchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = updatePolicySchema.parse(rawParams);
-      const updated = await setPolicy(params.key, params.value);
+      const validated = validatePolicyUpdate(params.key, params.value);
+      if (!validated.ok) throw new Error(validated.error);
+      const updated = await setPolicy(params.key, validated.value);
       if (!updated) throw new Error(`Failed to update policy "${params.key}".`);
       return { key: updated.key, value: updated.value, note: params.note };
     },
@@ -584,19 +555,40 @@ export async function proposeAction(input: {
   return action;
 }
 
-/** Execute an approved action and persist the outcome + audit trail. */
+/**
+ * Execute an approved action exactly once and persist the outcome + audit
+ * trail. The executor first claims the row atomically (approved → executing);
+ * a second executor (the scheduler drain racing an inline approval) finds
+ * nothing to claim and gets the current row back without running anything.
+ * A DeferredSendError (fixable precondition) returns the action to "pending"
+ * with the reason, so the reviewed draft waits instead of failing.
+ */
 export async function executeAction(actionId: number, executor: string): Promise<AgentAction> {
-  const [action] = await db
-    .select()
-    .from(agentActionsTable)
-    .where(eq(agentActionsTable.id, actionId));
-  if (!action) throw new Error(`Action ${actionId} not found.`);
-  if (action.status !== "approved") {
-    throw new Error(`Action ${actionId} is "${action.status}", expected "approved".`);
+  const [claimed] = await db
+    .update(agentActionsTable)
+    .set({ status: "executing" })
+    .where(and(eq(agentActionsTable.id, actionId), eq(agentActionsTable.status, "approved")))
+    .returning();
+  if (!claimed) {
+    const [current] = await db.select().from(agentActionsTable).where(eq(agentActionsTable.id, actionId));
+    if (!current) throw new Error(`Action ${actionId} not found.`);
+    if (current.status === "executing" || current.status === "executed") return current;
+    throw new Error(`Action ${actionId} is "${current.status}", expected "approved".`);
   }
+  const action = claimed;
 
   const definition = ACTION_CATALOG[action.actionType];
-  if (!definition) throw new Error(`Action type "${action.actionType}" is no longer supported.`);
+  if (!definition || definition.retired) {
+    const message = definition
+      ? `Action type "${action.actionType}" is retired and is never executed.`
+      : `Action type "${action.actionType}" is no longer supported.`;
+    const [updated] = await db
+      .update(agentActionsTable)
+      .set({ status: "failed", executedAt: new Date(), error: message })
+      .where(eq(agentActionsTable.id, actionId))
+      .returning();
+    return updated ?? action;
+  }
 
   try {
     const result = await definition.execute(action.params);
@@ -616,6 +608,23 @@ export async function executeAction(actionId: number, executor: string): Promise
     return updated ?? action;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (isDeferredSendError(err)) {
+      logger.warn({ actionId, actionType: action.actionType, reason: message }, "Control-plane action deferred");
+      const [updated] = await db
+        .update(agentActionsTable)
+        .set({ status: "pending", decidedBy: null, decidedAt: null, error: message })
+        .where(eq(agentActionsTable.id, actionId))
+        .returning();
+      await recordAuditEvent({
+        actorType: "system",
+        actor: executor,
+        eventType: "action_deferred",
+        subjectType: "action",
+        subjectId: actionId,
+        detail: { actionType: action.actionType, reason: message },
+      });
+      return updated ?? action;
+    }
     logger.error({ err, actionId, actionType: action.actionType }, "Control-plane action failed");
     const [updated] = await db
       .update(agentActionsTable)
@@ -632,6 +641,39 @@ export async function executeAction(actionId: number, executor: string): Promise
     });
     return updated ?? action;
   }
+}
+
+/**
+ * Rows left in "executing" by a crashed process are never re-run (the side
+ * effect may have happened); they are failed with an explanation so an
+ * operator can check and re-propose. The scheduler may call this on boot.
+ */
+export async function recoverStaleExecutingActions(olderThanMinutes = 15, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - olderThanMinutes * 60_000);
+  const stale = await db
+    .update(agentActionsTable)
+    .set({
+      status: "failed",
+      executedAt: now,
+      error: "Execution was interrupted (server restart); the outcome is unknown. Check the target before re-proposing.",
+    })
+    .where(
+      and(
+        eq(agentActionsTable.status, "executing"),
+        sql`coalesce(${agentActionsTable.decidedAt}, ${agentActionsTable.createdAt}) < ${cutoff}`,
+      ),
+    )
+    .returning({ id: agentActionsTable.id });
+  for (const row of stale) {
+    await recordAuditEvent({
+      actorType: "system",
+      actor: "system:recovery",
+      eventType: "action_execution_interrupted",
+      subjectType: "action",
+      subjectId: row.id,
+    });
+  }
+  return stale.length;
 }
 
 /** Operator decision on a pending action; approval triggers execution. */

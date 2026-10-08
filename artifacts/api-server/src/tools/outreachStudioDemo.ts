@@ -25,6 +25,7 @@ process.env.OUTREACH_POSTAL_ADDRESS ??= "Dreemer · 1234 Example Street · Austi
 
 const research = await import("../control-plane/outreach/venueResearch.js");
 const { writeCopy } = await import("../control-plane/outreach/copywriter.js");
+const { attributeFacts, citableFacts } = await import("../control-plane/vetting/facts.js");
 const { renderOutreachEmail, buildListUnsubscribeHeaders, splitParagraphs } = await import(
   "../control-plane/outreach/emailTemplate.js"
 );
@@ -118,8 +119,12 @@ async function main(): Promise<void> {
     console.log(`  research: ${result.status}; ${result.images.length} photo(s); spaces: ${result.facts.spaces.join(", ") || "—"}`);
     for (const warning of result.warnings) console.log(`  ! ${warning}`);
 
+    // Only facts attributed to a page the demo actually fetched may be cited.
+    const verifiedFacts = citableFacts(attributeFacts(result.facts, result.pages));
+    console.log(`  verified facts: ${verifiedFacts.map((fact) => `${fact.kind}=${fact.value}`).join(", ") || "none (a real draft would be refused)"}`);
     const copy = await writeCopy({
       facts: result.facts,
+      verifiedFacts,
       prospectName: result.facts.name ?? slug,
       contactName: args.contact,
       ask: "preview",
