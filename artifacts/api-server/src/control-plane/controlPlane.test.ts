@@ -360,9 +360,10 @@ test("safety model: external contact and spend always require operator approval"
     assert.ok(action, `action "${actionType}" must exist`);
     assert.equal(action.riskLevel, riskLevel, `${actionType} risk level`);
   }
-  // Only growth's lifecycle/digest emails may be low risk (and they gate on a policy flag);
+  // Only growth's lifecycle email and the two internal operator emails (digest,
+  // aging-approvals nudge) may be low risk, and each gates on a policy flag;
   // nothing else in the catalog may auto-execute.
-  const LOW_RISK_ALLOWED = new Set(["send_lifecycle_email", "send_operator_digest"]);
+  const LOW_RISK_ALLOWED = new Set(["send_lifecycle_email", "send_operator_digest", "send_operator_nudge"]);
   for (const action of Object.values(ACTION_CATALOG)) {
     if (action.riskLevel === "low") {
       assert.ok(LOW_RISK_ALLOWED.has(action.type), `${action.type} must not be low risk`);
