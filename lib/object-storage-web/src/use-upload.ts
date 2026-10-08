@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import type { UppyFile } from "@uppy/core";
 
 interface UploadMetadata {
   name: string;
@@ -23,23 +22,31 @@ interface UseUploadOptions {
   onError?: (error: Error) => void;
 }
 
-type AllowedImageContentType = "image/jpeg" | "image/png" | "image/webp";
+const ALLOWED_IMAGE_CONTENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+type AllowedImageContentType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number];
 
 const MAX_IMAGE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MIN_IMAGE_EDGE_PX = 256;
 
 function allowedImageContentType(type: string | null | undefined): AllowedImageContentType {
-  if (type === "image/jpeg" || type === "image/png" || type === "image/webp") {
-    return type;
+  if (type && (ALLOWED_IMAGE_CONTENT_TYPES as readonly string[]).includes(type)) {
+    return type as AllowedImageContentType;
   }
-  throw new Error("Upload must be a JPG, PNG, or WebP image.");
+  throw new Error("Upload must be a JPG, PNG, WebP, or HEIC image.");
 }
 
-function fileSizeBytes(file: File | UppyFile<Record<string, unknown>, Record<string, unknown>>): number {
-  const size = typeof file.size === "number" ? file.size : undefined;
-  if (typeof size === "number" && Number.isFinite(size)) return size;
-  const data = (file as UppyFile<Record<string, unknown>, Record<string, unknown>>).data;
-  return data instanceof Blob ? data.size : 0;
+function isHeic(contentType: AllowedImageContentType): boolean {
+  return contentType === "image/heic" || contentType === "image/heif";
+}
+
+function fileSizeBytes(file: File): number {
+  return typeof file.size === "number" && Number.isFinite(file.size) ? file.size : 0;
 }
 
 async function imageDimensionsFromBlob(blob: Blob): Promise<{ width: number; height: number }> {
@@ -65,21 +72,22 @@ async function imageDimensionsFromBlob(blob: Blob): Promise<{ width: number; hei
   });
 }
 
-async function assertValidImageUpload(file: File | UppyFile<Record<string, unknown>, Record<string, unknown>>): Promise<AllowedImageContentType> {
+async function assertValidImageUpload(file: File): Promise<AllowedImageContentType> {
   const contentType = allowedImageContentType(file.type);
   const size = fileSizeBytes(file);
   if (size > MAX_IMAGE_UPLOAD_BYTES) {
     throw new Error("Upload images up to 50MB.");
   }
 
-  const blob = file instanceof Blob
-    ? file
-    : (file as UppyFile<Record<string, unknown>, Record<string, unknown>>).data;
-  if (!(blob instanceof Blob)) {
-    throw new Error("Upload image could not be read.");
+  let dimensions: { width: number; height: number };
+  try {
+    dimensions = await imageDimensionsFromBlob(file);
+  } catch (error) {
+    // Most non-Safari browsers cannot decode HEIC/HEIF; the server validates
+    // dimensions after upload, so skip the client-side check for those files.
+    if (isHeic(contentType)) return contentType;
+    throw error instanceof Error ? error : new Error("Upload image could not be read.");
   }
-
-  const dimensions = await imageDimensionsFromBlob(blob);
   if (dimensions.width < MIN_IMAGE_EDGE_PX || dimensions.height < MIN_IMAGE_EDGE_PX) {
     throw new Error(`Upload images at least ${MIN_IMAGE_EDGE_PX}px wide and tall.`);
   }
@@ -200,47 +208,8 @@ export function useUpload(options: UseUploadOptions = {}) {
     [requestUploadUrl, uploadToPresignedUrl, options]
   );
 
-  const getUploadParameters = useCallback(
-    async (
-      file: UppyFile<Record<string, unknown>, Record<string, unknown>>
-    ): Promise<{
-      method: "PUT";
-      url: string;
-      headers?: Record<string, string>;
-    }> => {
-      const contentType = await assertValidImageUpload(file);
-      const response = await fetch(`${basePath}/uploads/request-url`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType,
-          purpose: options.purpose,
-          venueSlug: options.venueSlug,
-          uploadToken: options.uploadToken,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to get upload URL");
-      }
-
-      const data = await response.json();
-      return {
-        method: "PUT",
-        url: data.uploadURL,
-        headers: { "Content-Type": contentType },
-      };
-    },
-    [basePath, options.purpose, options.uploadToken, options.venueSlug]
-  );
-
   return {
     uploadFile,
-    getUploadParameters,
     isUploading,
     error,
     progress,

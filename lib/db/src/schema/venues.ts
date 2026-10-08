@@ -1,6 +1,4 @@
 import { pgTable, text, serial, timestamp, integer, uniqueIndex } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 
 export const VENUE_PLANS = ["trial", "starter", "growth", "none"] as const;
 export type VenuePlan = (typeof VENUE_PLANS)[number];
@@ -58,12 +56,6 @@ export const venueMediaTable = pgTable(
     ),
   }),
 );
-
-export const insertVenueSchema = createInsertSchema(venuesTable).omit({ id: true, createdAt: true });
-export const selectVenueSchema = createSelectSchema(venuesTable);
-
-export const insertVenueMediaSchema = createInsertSchema(venueMediaTable).omit({ id: true, createdAt: true });
-export const selectVenueMediaSchema = createSelectSchema(venueMediaTable);
 
 export type Venue = typeof venuesTable.$inferSelect;
 export type InsertVenue = typeof venuesTable.$inferInsert;

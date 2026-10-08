@@ -1,5 +1,4 @@
 import { pgTable, text, serial, timestamp, integer, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { venuesTable } from "./venues";
 
 export const coupleSessionsTable = pgTable("couple_sessions", {
@@ -46,9 +45,6 @@ export const generatedAssetsTable = pgTable(
     ),
   }),
 );
-
-export const insertSessionSchema = createInsertSchema(coupleSessionsTable).omit({ id: true, createdAt: true });
-export const selectSessionSchema = createSelectSchema(coupleSessionsTable);
 
 export type CoupleSession = typeof coupleSessionsTable.$inferSelect;
 export type InsertCoupleSession = typeof coupleSessionsTable.$inferInsert;
