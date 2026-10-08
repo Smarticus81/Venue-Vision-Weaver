@@ -383,6 +383,18 @@ const adoptionAttempted = new Set<string>();
 const contactEmailAttempted = new Set<number>();
 const trialClaimAttempted = new Set<string>();
 
+/**
+ * The acting user is offered as trial claimant once per (org, user) per
+ * process: the claim is a single conditional UPDATE, but there is no reason
+ * to repeat it on every request once it has run.
+ */
+function trialClaimantOnce(clerkOrgId: string, clerkUserId: string): string | null {
+  const key = `${clerkOrgId}:${clerkUserId}`;
+  if (trialClaimAttempted.has(key)) return null;
+  trialClaimAttempted.add(key);
+  return clerkUserId;
+}
+
 /** Test hook: forget the per-process memos. */
 export function resetOrgAuthMemos(): void {
   adoptionAttempted.clear();
@@ -478,11 +490,8 @@ export async function requireOrg(req: Request, res: Response): Promise<OrgContex
     return null;
   }
 
-  const claimKey = `${auth.orgId}:${auth.userId}`;
-  const attemptClaim = !trialClaimAttempted.has(claimKey);
-  if (attemptClaim) trialClaimAttempted.add(claimKey);
   let org = await ensureOrganizationByClerkId(auth.orgId, undefined, {
-    clerkUserId: attemptClaim ? auth.userId : null,
+    clerkUserId: trialClaimantOnce(auth.orgId, auth.userId),
   });
 
   org = await runFirstTouchPasses(org, auth.userId);
@@ -503,7 +512,9 @@ export async function getCallerOrgDbId(req: Request): Promise<number | null> {
   if (!clerkEnabled()) return null;
   const auth = getAuth(req);
   if (!auth.userId || !auth.orgId) return null;
-  const org = await ensureOrganizationByClerkId(auth.orgId, undefined, { clerkUserId: auth.userId });
+  const org = await ensureOrganizationByClerkId(auth.orgId, undefined, {
+    clerkUserId: trialClaimantOnce(auth.orgId, auth.userId),
+  });
   return org.id;
 }
 
