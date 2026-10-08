@@ -9,4 +9,5 @@
 export type ControlOutreachEmailDetailWarnings = {
   research: string[];
   config: string[];
+  vetting: string[];
 };

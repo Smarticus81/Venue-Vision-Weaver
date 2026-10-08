@@ -3,6 +3,7 @@ import {
   assertReferenceImageQuality,
   hammingDistance,
   MIN_REFERENCE_EDGE_PX,
+  NEAR_DUPLICATE_HAMMING,
   type ReferenceImageQuality,
 } from "./referenceImageQuality.js";
 
@@ -10,8 +11,10 @@ type ImageRef = { buffer: Buffer; mimeType: string };
 
 export type ReferenceAspectRatio = "3:4" | "4:3" | "16:9" | "1:1" | "9:16";
 
-const MIN_COUPLE_REFERENCES = 2;
-const MIN_VENUE_REFERENCES = 5;
+/** Couple photos needed for a faithful likeness; the upload API enforces the same floor. */
+export const MIN_COUPLE_REFERENCES = 2;
+/** Venue photos needed before any gallery renders; venue readiness reads this. */
+export const MIN_VENUE_REFERENCES = 5;
 
 async function assertImageLargeEnough(label: string, image: ImageRef): Promise<void> {
   const meta = await sharp(image.buffer).rotate().metadata();
@@ -62,7 +65,10 @@ export async function assertReferenceImagesValid(
 
   for (let i = 0; i < coupleQualities.length; i++) {
     for (let j = i + 1; j < coupleQualities.length; j++) {
-      if (hammingDistance(coupleQualities[i]!.perceptualHash, coupleQualities[j]!.perceptualHash) <= 4) {
+      if (
+        hammingDistance(coupleQualities[i]!.perceptualHash, coupleQualities[j]!.perceptualHash) <=
+        NEAR_DUPLICATE_HAMMING
+      ) {
         throw new Error(
           `Couple photos ${i + 1} and ${j + 1} look nearly identical. Upload distinct angles or expressions for better likeness.`,
         );

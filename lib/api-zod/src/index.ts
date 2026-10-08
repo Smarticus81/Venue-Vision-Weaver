@@ -4,6 +4,12 @@ import {
   CreateVenueBody as CreateVenueBodySchema,
   ListVenueMediaResponse as ListVenueMediaResponseSchema,
   ListGalleryStylesResponse as ListGalleryStylesResponseSchema,
+  UpdateOrganizationBody as UpdateOrganizationBodySchema,
+  SetSessionBookedBody as SetSessionBookedBodySchema,
+  VetControlProspectBody as VetControlProspectBodySchema,
+  OverrideControlProspectVettingBody as OverrideControlProspectVettingBodySchema,
+  AddControlProspectFactBody as AddControlProspectFactBodySchema,
+  SetControlOutreachSendingBody as SetControlOutreachSendingBodySchema,
 } from "./generated/api";
 
 import type {
@@ -12,11 +18,17 @@ import type {
   CreateVenueBody as CreateVenueBodyType,
   ListVenueMediaResponse as ListVenueMediaResponseType,
   ListGalleryStylesResponse as ListGalleryStylesResponseType,
+  UpdateOrganizationBody as UpdateOrganizationBodyType,
+  SetSessionBookedBody as SetSessionBookedBodyType,
+  VetControlProspectBody as VetControlProspectBodyType,
+  OverrideControlProspectVettingBody as OverrideControlProspectVettingBodyType,
+  AddControlProspectFactBody as AddControlProspectFactBodyType,
+  SetControlOutreachSendingBody as SetControlOutreachSendingBodyType,
   ErrorEnvelope,
   GeneratedAsset,
   GeneratedAssetAssetType,
   HealthStatus,
-  ListSessionsResponse,
+  OwnerSessionDetailResponse,
   SessionDetailResponse,
   SessionDetailResponseStatus,
   SessionResponse,
@@ -31,8 +43,39 @@ import type {
   VenueMediaItem,
   VenuePublicResponse,
   VenueResponse,
-  VenueStatsResponse,
   GalleryStyleSummary,
+  ReadinessStatus,
+  TrialState,
+  PricingConfig,
+  TrialConfig,
+  FoundingOffer,
+  ProofAggregates,
+  PublicConfig,
+  GalleryEventBody,
+  GalleryEventResponse,
+  ImportWebsiteMediaBody,
+  ImportWebsiteMediaResponse,
+  FunnelEventBody,
+  FunnelEventResponse,
+  OutreachClaimResponse,
+  ControlProspect,
+  ControlProspectVetting,
+  ControlProspectFact,
+  ControlProspectEvidenceResponse,
+  ControlCitedFact,
+  ControlOutreachEmail,
+  ControlOutreachEmailDetail,
+  ControlOutreachSendingState,
+  ControlDeliverabilityGuard,
+  GrowthKpis,
+  ControlGrowthResponse,
+  ControlCopyVariant,
+  ControlAdaptation,
+  ControlDigest,
+  ControlExperiment,
+  ControlExperimentEvaluation,
+  ControlCampaign,
+  ControlPolicy,
 } from "./generated/types";
 
 // Wildcard export everything from api (explicitly overriding the merged ones below)
@@ -54,12 +97,33 @@ export type ListVenueMediaResponse = ListVenueMediaResponseType;
 export const ListGalleryStylesResponse = ListGalleryStylesResponseSchema;
 export type ListGalleryStylesResponse = ListGalleryStylesResponseType;
 
+export const UpdateOrganizationBody = UpdateOrganizationBodySchema;
+export type UpdateOrganizationBody = UpdateOrganizationBodyType;
+
+export const SetSessionBookedBody = SetSessionBookedBodySchema;
+export type SetSessionBookedBody = SetSessionBookedBodyType;
+
+export const VetControlProspectBody = VetControlProspectBodySchema;
+export type VetControlProspectBody = VetControlProspectBodyType;
+
+export const OverrideControlProspectVettingBody =
+  OverrideControlProspectVettingBodySchema;
+export type OverrideControlProspectVettingBody =
+  OverrideControlProspectVettingBodyType;
+
+export const AddControlProspectFactBody = AddControlProspectFactBodySchema;
+export type AddControlProspectFactBody = AddControlProspectFactBodyType;
+
+export const SetControlOutreachSendingBody =
+  SetControlOutreachSendingBodySchema;
+export type SetControlOutreachSendingBody = SetControlOutreachSendingBodyType;
+
 export type {
   ErrorEnvelope,
   GeneratedAsset,
   GeneratedAssetAssetType,
   HealthStatus,
-  ListSessionsResponse,
+  OwnerSessionDetailResponse,
   SessionDetailResponse,
   SessionDetailResponseStatus,
   SessionResponse,
@@ -74,6 +138,37 @@ export type {
   VenueMediaItem,
   VenuePublicResponse,
   VenueResponse,
-  VenueStatsResponse,
   GalleryStyleSummary,
+  ReadinessStatus,
+  TrialState,
+  PricingConfig,
+  TrialConfig,
+  FoundingOffer,
+  ProofAggregates,
+  PublicConfig,
+  GalleryEventBody,
+  GalleryEventResponse,
+  ImportWebsiteMediaBody,
+  ImportWebsiteMediaResponse,
+  FunnelEventBody,
+  FunnelEventResponse,
+  OutreachClaimResponse,
+  ControlProspect,
+  ControlProspectVetting,
+  ControlProspectFact,
+  ControlProspectEvidenceResponse,
+  ControlCitedFact,
+  ControlOutreachEmail,
+  ControlOutreachEmailDetail,
+  ControlOutreachSendingState,
+  ControlDeliverabilityGuard,
+  GrowthKpis,
+  ControlGrowthResponse,
+  ControlCopyVariant,
+  ControlAdaptation,
+  ControlDigest,
+  ControlExperiment,
+  ControlExperimentEvaluation,
+  ControlCampaign,
+  ControlPolicy,
 };

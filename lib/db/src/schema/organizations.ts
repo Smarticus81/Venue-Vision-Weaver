@@ -1,8 +1,13 @@
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
-import { TRIAL_CREDITS } from "./venues";
+import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { TRIAL_CREDITS } from "./plans";
 
-export const ORG_PLANS = ["trial", "starter", "growth", "none"] as const;
+/** "payg" = pay as you go: bought a credit pack, no live subscription. */
+export const ORG_PLANS = ["trial", "starter", "growth", "payg", "none"] as const;
 export type OrgPlan = (typeof ORG_PLANS)[number];
+
+/** Stripe subscription status mirrored onto the organization (null = never subscribed). */
+export const ORG_SUBSCRIPTION_STATUSES = ["active", "past_due", "canceled", "paused"] as const;
+export type OrgSubscriptionStatus = (typeof ORG_SUBSCRIPTION_STATUSES)[number];
 
 /**
  * The billing tenant. One organization (backed by a Clerk Organization) owns
@@ -19,8 +24,32 @@ export const organizationsTable = pgTable("organizations", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   billingPeriodEnd: timestamp("billing_period_end"),
+  /** null | active | past_due | canceled | paused (mirrors Stripe). */
+  subscriptionStatus: text("subscription_status"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  // --- growth loop (growth-loop.md 4.1) ---
+  /** Best-known human contact for lifecycle email: first signed-in member email or Stripe billing email. */
+  contactEmail: text("contact_email"),
+  /** Trial clock. Null only for rows created before the clock existed, until the growth backfill runs. */
+  trialEndsAt: timestamp("trial_ends_at"),
+  /** Set once by the trial sweep when plan is still "trial" past trialEndsAt. Spending is blocked by time, not by this column. */
+  trialExpiredAt: timestamp("trial_expired_at"),
+  /** First subscription or credit-pack purchase. "Paid" in every KPI means this is not null. */
+  firstPaidAt: timestamp("first_paid_at"),
+  /** Set when a Stripe subscription is deleted. */
+  churnedAt: timestamp("churned_at"),
+  /** Last time the low-credit owner email went out (one per dip below the threshold). */
+  lowCreditNotifiedAt: timestamp("low_credit_notified_at"),
+  /** Clerk user who received this organization's one-time trial grant (trial once per person). */
+  trialGrantedByClerkUserId: text("trial_granted_by_clerk_user_id"),
+  /** Outreach attribution snapshot: the prospect / campaign this signup came from. */
+  attributionProspectId: integer("attribution_prospect_id"),
+  attributionCampaignId: integer("attribution_campaign_id"),
+  // --- funnel (funnel-ux.md 2.2 / 3.4 proof row) ---
+  /** Venue opted in to anonymised aggregate proof on the public site. */
+  shareAggregates: boolean("share_aggregates").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}).enableRLS();
 
 export type Organization = typeof organizationsTable.$inferSelect;
 export type InsertOrganization = typeof organizationsTable.$inferInsert;

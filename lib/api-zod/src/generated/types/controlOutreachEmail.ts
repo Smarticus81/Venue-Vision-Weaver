@@ -5,8 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ControlCitedFact } from "./controlCitedFact";
 import type { ControlOutreachEmailDraftNotes } from "./controlOutreachEmailDraftNotes";
 import type { ControlOutreachEmailStatus } from "./controlOutreachEmailStatus";
+import type { ControlOutreachEmailVettingSnapshot } from "./controlOutreachEmailVettingSnapshot";
 
 export interface ControlOutreachEmail {
   id: number;
@@ -23,6 +25,9 @@ export interface ControlOutreachEmail {
   ctaLabel: string;
   ctaUrl: string;
   imageAssetIds: number[];
+  variantKey?: string | null;
+  citedFacts?: ControlCitedFact[] | null;
+  vettingSnapshot?: ControlOutreachEmailVettingSnapshot;
   draftNotes?: ControlOutreachEmailDraftNotes;
   providerMessageId?: string | null;
   sentTo?: string | null;
@@ -30,6 +35,8 @@ export interface ControlOutreachEmail {
   deliveredAt?: Date | null;
   bouncedAt?: Date | null;
   bounceReason?: string | null;
+  openedAt?: Date | null;
+  clickedAt?: Date | null;
   lastError?: string | null;
   createdByAgent?: string | null;
   editedBy?: string | null;

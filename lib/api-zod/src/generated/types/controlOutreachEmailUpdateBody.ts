@@ -9,7 +9,7 @@
 export interface ControlOutreachEmailUpdateBody {
   /**
    * @minLength 3
-   * @maxLength 80
+   * @maxLength 50
    */
   subject?: string;
   /**

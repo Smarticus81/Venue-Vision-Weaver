@@ -11,16 +11,20 @@ import type { ControlOutreachEmailDetailAction } from "./controlOutreachEmailDet
 import type { ControlOutreachEmailDetailPreview } from "./controlOutreachEmailDetailPreview";
 import type { ControlOutreachEmailDetailWarnings } from "./controlOutreachEmailDetailWarnings";
 import type { ControlProspect } from "./controlProspect";
+import type { ControlProspectFact } from "./controlProspectFact";
 import type { ControlProspectResearch } from "./controlProspectResearch";
+import type { ControlProspectVetting } from "./controlProspectVetting";
 
 export interface ControlOutreachEmailDetail {
   email: ControlOutreachEmail;
   prospect: ControlProspect;
   action?: ControlOutreachEmailDetailAction;
   research?: ControlProspectResearch | null;
+  vetting?: ControlProspectVetting | null;
+  facts: ControlProspectFact[];
+  approvable: boolean;
   assets: ControlOutreachAsset[];
   preview: ControlOutreachEmailDetailPreview;
   warnings: ControlOutreachEmailDetailWarnings;
   editable: boolean;
-  samplePreviewsEnabled: boolean;
 }

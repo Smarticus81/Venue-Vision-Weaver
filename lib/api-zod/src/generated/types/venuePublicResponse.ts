@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { VenueMediaCoverage } from "./venueMediaCoverage";
 import type { VenueMediaItem } from "./venueMediaItem";
 
 /**
@@ -28,6 +29,14 @@ export interface VenuePublicResponse {
   media: VenueMediaItem[];
   /** True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves. */
   isReady: boolean;
+  /** True when the venue has a booking URL, website, or contact email the share-page date CTA can use. */
+  bookingReady: boolean;
+  /** Cloudflare Turnstile site key when bot protection is enabled on session creation; null otherwise. */
+  turnstileSiteKey: string | null;
+  /** Coverage roles the venue still lacks reference photos for (empty when ready). */
+  missingCoverages: VenueMediaCoverage[];
+  /** One line the venue shows under the reel on the share page. */
+  incentiveText?: string | null;
   /** Short-lived venue-scoped token required for couple photo upload URL requests. */
   uploadToken?: string;
 }

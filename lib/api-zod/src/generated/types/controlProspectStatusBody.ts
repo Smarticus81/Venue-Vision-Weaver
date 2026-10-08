@@ -5,9 +5,16 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ControlProspectStatusBodyReplySentiment } from "./controlProspectStatusBodyReplySentiment";
 import type { ControlProspectStatusBodyStatus } from "./controlProspectStatusBodyStatus";
 
 export interface ControlProspectStatusBody {
   /** Operator-recorded outcome. "contacted" is reserved for the governed send action and cannot be set here. */
   status: ControlProspectStatusBodyStatus;
+  /** Only with status replied. */
+  replySentiment?: ControlProspectStatusBodyReplySentiment;
+  /** Only with status converted; the organization that signed up. */
+  organizationId?: number | null;
+  /** @maxLength 400 */
+  note?: string;
 }

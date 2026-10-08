@@ -35,6 +35,8 @@ export type ReadinessStatusChecks = {
   qualityGate: ReadinessCheckState;
   imageModel: ReadinessCheckState;
   ffmpeg: ReadinessCheckState;
+  auth?: ReadinessCheckState;
+  rls?: ReadinessCheckState;
 };
 
 export interface ReadinessStatus {
@@ -44,6 +46,8 @@ export interface ReadinessStatus {
 
 export interface ErrorEnvelope {
   error: string;
+  /** Machine-readable reason, e.g. trial_expired, insufficient_credits, no_active_organization. */
+  code?: string;
 }
 
 export interface CreateVenueBody {
@@ -78,6 +82,7 @@ export const VenueResponsePlan = {
   trial: "trial",
   starter: "starter",
   growth: "growth",
+  payg: "payg",
   none: "none",
 } as const;
 
@@ -97,6 +102,10 @@ export interface VenueResponse {
   websiteUrl?: string | null;
   /** Public tour booking URL. */
   bookingUrl?: string | null;
+  /** One line shown under the reel on the share page. */
+  incentiveText?: string | null;
+  tourCardDownloadedAt?: string | null;
+  websiteImportedAt?: string | null;
   /** Billing organization that owns this venue. */
   organizationId?: number | null;
   /** Organization plan (billing lives on the organization). */
@@ -144,14 +153,11 @@ export interface UpdateVenueBody {
   contactPhone?: string | null;
   websiteUrl?: string | null;
   bookingUrl?: string | null;
-}
-
-export interface RecoverOwnerBody {
-  email: string;
-}
-
-export interface SimpleAcceptedResponse {
-  accepted: boolean;
+  /**
+   * One line shown under the reel on the share page. Null clears it.
+   * @maxLength 160
+   */
+  incentiveText?: string | null;
 }
 
 export type OrganizationResponseOrganizationPlan =
@@ -161,8 +167,17 @@ export const OrganizationResponseOrganizationPlan = {
   trial: "trial",
   starter: "starter",
   growth: "growth",
+  payg: "payg",
   none: "none",
 } as const;
+
+export interface TrialState {
+  onTrial: boolean;
+  endsAt: string | null;
+  daysLeft: number | null;
+  expired: boolean;
+  creditsRemaining: number;
+}
 
 export type OrganizationResponseOrganization = {
   id: number;
@@ -171,6 +186,12 @@ export type OrganizationResponseOrganization = {
   creditsBalance: number;
   billingPeriodEnd?: string | null;
   clerkOrgId: string;
+  contactEmail?: string | null;
+  firstPaidAt?: string | null;
+  churnedAt?: string | null;
+  /** Venue opted in to anonymised aggregate proof on the public site. */
+  shareAggregates: boolean;
+  trial: TrialState;
   /** Caller's Clerk role in this organization (e.g. org:admin). */
   role?: string | null;
   /** Whether Stripe billing is configured on this server. */
@@ -247,24 +268,16 @@ export interface VenuePublicResponse {
   media: VenueMediaItem[];
   /** True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves. */
   isReady: boolean;
+  /** True when the venue has a booking URL, website, or contact email the share-page date CTA can use. */
+  bookingReady: boolean;
+  /** Cloudflare Turnstile site key when bot protection is enabled on session creation; null otherwise. */
+  turnstileSiteKey: string | null;
+  /** Coverage roles the venue still lacks reference photos for (empty when ready). */
+  missingCoverages: VenueMediaCoverage[];
+  /** One line the venue shows under the reel on the share page. */
+  incentiveText?: string | null;
   /** Short-lived venue-scoped token required for couple photo upload URL requests. */
   uploadToken?: string;
-}
-
-export interface VenueDirectoryItem {
-  id: number;
-  name: string;
-  slug: string;
-  tagline?: string | null;
-  description?: string | null;
-  createdAt: string;
-  /** Number of venue photos on file. Always >= 1 for listed venues. */
-  mediaCount: number;
-  thumbnailObjectKey?: string | null;
-}
-
-export interface ListVenuesResponse {
-  venues: VenueDirectoryItem[];
 }
 
 export interface ListVenueMediaResponse {
@@ -287,6 +300,23 @@ export const SessionSummaryStatus = {
   failed: "failed",
 } as const;
 
+export type SessionSummaryKind =
+  (typeof SessionSummaryKind)[keyof typeof SessionSummaryKind];
+
+export const SessionSummaryKind = {
+  couple: "couple",
+  sample: "sample",
+} as const;
+
+export type SessionSummaryCreatedVia =
+  (typeof SessionSummaryCreatedVia)[keyof typeof SessionSummaryCreatedVia];
+
+export const SessionSummaryCreatedVia = {
+  couple_link: "couple_link",
+  tour_day: "tour_day",
+  sample: "sample",
+} as const;
+
 export interface SessionSummary {
   id: number;
   venueId: number;
@@ -297,8 +327,16 @@ export interface SessionSummary {
   coupleName?: string | null;
   coupleEmail?: string | null;
   shareToken?: string | null;
-  /** Estimated USD cost to generate this gallery. */
-  estimatedCostUsd?: number;
+  kind: SessionSummaryKind;
+  createdVia: SessionSummaryCreatedVia;
+  weddingMonth?: string | null;
+  /** First "sent" gallery event. */
+  emailedAt?: string | null;
+  firstViewedAt?: string | null;
+  viewCount: number;
+  sharedCount: number;
+  ctaClicks: number;
+  bookedAt?: string | null;
 }
 
 export interface VenueDashboardResponse {
@@ -306,19 +344,20 @@ export interface VenueDashboardResponse {
   sessions: SessionSummary[];
 }
 
-export interface VenueStatsResponse {
-  totalSessions: number;
-  readySessions: number;
-  processingSessions: number;
-  failedSessions: number;
-  avgCompletionSeconds: number | null;
-  /** Sum of estimated USD costs across all sessions for this venue. */
-  totalEstimatedCostUsd: number;
-}
+/**
+ * couple_link (default) or tour_day when a coordinator starts it for the couple.
+ */
+export type CreateSessionBodyCreatedVia =
+  (typeof CreateSessionBodyCreatedVia)[keyof typeof CreateSessionBodyCreatedVia];
+
+export const CreateSessionBodyCreatedVia = {
+  couple_link: "couple_link",
+  tour_day: "tour_day",
+} as const;
 
 export interface CreateSessionBody {
   /**
-   * @minItems 1
+   * @minItems 2
    * @maxItems 3
    */
   couplePhotoKeys: string[];
@@ -328,6 +367,17 @@ export interface CreateSessionBody {
   coupleName?: string;
   /** Required. Used for recovery emails and notifications. */
   coupleEmail: string;
+  /** Cloudflare Turnstile response token. Verified only when TURNSTILE_SECRET_KEY is set on the server. */
+  turnstileToken?: string;
+  /**
+   * The month the couple is thinking of, "YYYY-MM". Passed to the venue's date CTA.
+   * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+   */
+  weddingMonth?: string;
+  /** Both partners agree to the AI preview and photo handling. The server rejects couple sessions without it. */
+  consent?: boolean;
+  /** couple_link (default) or tour_day when a coordinator starts it for the couple. */
+  createdVia?: CreateSessionBodyCreatedVia;
 }
 
 export interface GalleryStyleSummary {
@@ -400,6 +450,23 @@ export const SessionDetailResponseStatus = {
   failed: "failed",
 } as const;
 
+export type SessionDetailResponseKind =
+  (typeof SessionDetailResponseKind)[keyof typeof SessionDetailResponseKind];
+
+export const SessionDetailResponseKind = {
+  couple: "couple",
+  sample: "sample",
+} as const;
+
+export type SessionDetailResponseCreatedVia =
+  (typeof SessionDetailResponseCreatedVia)[keyof typeof SessionDetailResponseCreatedVia];
+
+export const SessionDetailResponseCreatedVia = {
+  couple_link: "couple_link",
+  tour_day: "tour_day",
+  sample: "sample",
+} as const;
+
 /**
  * image is one generated gallery still; video is the branded motion reel.
  */
@@ -446,8 +513,9 @@ export interface SessionDetailResponse {
   /** True if an email is on file. The email itself is never returned to non-owners. */
   hasCoupleEmail?: boolean;
   shareToken?: string | null;
-  /** Estimated USD cost to generate this gallery. */
-  estimatedCostUsd?: number;
+  kind: SessionDetailResponseKind;
+  createdVia: SessionDetailResponseCreatedVia;
+  weddingMonth?: string | null;
   createdAt: string;
   completedAt?: string | null;
   venue?: VenuePublicResponse;
@@ -457,11 +525,18 @@ export interface SessionDetailResponse {
 export type OwnerSessionDetailResponse = SessionDetailResponse & {
   /** Couple email on file. Only returned from owner-session protected endpoints. */
   coupleEmail?: string | null;
+  viewCount: number;
+  ctaClicks: number;
+  firstViewedAt?: string | null;
+  bookedAt?: string | null;
+  consentAt?: string | null;
+  /** Operator-facing failure detail (never shown to couples). */
+  failureDetail?: string | null;
+  qualitySummary?: {
+    belowTarget: boolean;
+    attempts: number;
+  } | null;
 };
-
-export interface ListSessionsResponse {
-  sessions: SessionSummary[];
-}
 
 export type UploadUrlRequestContentType =
   (typeof UploadUrlRequestContentType)[keyof typeof UploadUrlRequestContentType];
@@ -511,6 +586,7 @@ export type BusinessMetricsOrganizations = {
   totalCreditsBalance: number;
   lowCreditCount: number;
   paidCount: number;
+  paidSubscriptionCount?: number;
 };
 
 export type BusinessMetricsVenues = {
@@ -551,6 +627,314 @@ export type BusinessMetricsAssets = {
   generated7d: number;
 };
 
+export interface GrowthRateTriple {
+  orgs: number;
+  paid: number;
+  rate: number | null;
+}
+
+export type GrowthKpisRevenuePricesSource =
+  (typeof GrowthKpisRevenuePricesSource)[keyof typeof GrowthKpisRevenuePricesSource];
+
+export const GrowthKpisRevenuePricesSource = {
+  env: "env",
+  stripe: "stripe",
+} as const;
+
+export type GrowthSegmentStatSegmentType =
+  (typeof GrowthSegmentStatSegmentType)[keyof typeof GrowthSegmentStatSegmentType];
+
+export const GrowthSegmentStatSegmentType = {
+  region: "region",
+  venue_type: "venue_type",
+} as const;
+
+export type GrowthSegmentStatGuidance =
+  | (typeof GrowthSegmentStatGuidance)[keyof typeof GrowthSegmentStatGuidance]
+  | null;
+
+export const GrowthSegmentStatGuidance = {
+  prioritize: "prioritize",
+  pause: "pause",
+} as const;
+
+export interface GrowthSegmentStat {
+  segmentType: GrowthSegmentStatSegmentType;
+  segment: string;
+  prospects: number;
+  sent: number;
+  delivered: number;
+  replied: number;
+  positiveReplied: number;
+  signups: number;
+  activated: number;
+  paid: number;
+  replyRate: number | null;
+  positiveReplyRate: number | null;
+  signupRate: number | null;
+  guidance: GrowthSegmentStatGuidance;
+}
+
+export interface GrowthVariantStat {
+  variantKey: string;
+  name: string;
+  isControl: boolean;
+  active: boolean;
+  weight: number;
+  sent: number;
+  delivered: number;
+  replied: number;
+  positiveReplied: number;
+  signups: number;
+  replyRate: number | null;
+  positiveReplyRate: number | null;
+  signupRate: number | null;
+  smoothedPositiveReplyRate: number;
+}
+
+export type GrowthKpisDeliverabilityStatus =
+  (typeof GrowthKpisDeliverabilityStatus)[keyof typeof GrowthKpisDeliverabilityStatus];
+
+export const GrowthKpisDeliverabilityStatus = {
+  ok: "ok",
+  warn: "warn",
+  throttled: "throttled",
+  paused: "paused",
+  insufficient_data: "insufficient_data",
+} as const;
+
+export type GrowthKpisWindow = {
+  start30d: string;
+  start14d: string;
+  start7d: string;
+  cohortStart: string;
+};
+
+export type GrowthKpisSignupsByWeekItem = {
+  weekStart: string;
+  orgs: number;
+  venues: number;
+  attributed: number;
+};
+
+export type GrowthKpisSignups = {
+  orgs7d: number;
+  orgs30d: number;
+  venues7d: number;
+  venues30d: number;
+  attributedToOutbound30d: number;
+  byWeek: GrowthKpisSignupsByWeekItem[];
+};
+
+export type GrowthKpisActivationFunnel = {
+  orgs: number;
+  withVenue: number;
+  photosReady: number;
+  firstGallery: number;
+  galleryViewed: number;
+  secondGallery14d: number;
+};
+
+export type GrowthKpisActivationRates = {
+  withVenue: number | null;
+  photosReady: number | null;
+  firstGallery: number | null;
+  galleryViewed: number | null;
+  secondGallery14d: number | null;
+};
+
+export type GrowthKpisActivationTimeToFirstGalleryHours = {
+  median: number | null;
+  p75: number | null;
+  n: number;
+};
+
+export type GrowthKpisActivationByCohortWeekItem = {
+  weekStart: string;
+  orgs: number;
+  photosReady: number;
+  firstGallery: number;
+  galleryViewed: number;
+  secondGallery14d: number;
+  paid: number;
+  matured: boolean;
+};
+
+export type GrowthKpisActivation = {
+  minPhotos: number;
+  funnel: GrowthKpisActivationFunnel;
+  rates: GrowthKpisActivationRates;
+  timeToFirstGalleryHours: GrowthKpisActivationTimeToFirstGalleryHours;
+  firstGalleryWithin7d: number | null;
+  firstGalleryWithin14d: number | null;
+  byCohortWeek: GrowthKpisActivationByCohortWeekItem[];
+};
+
+export type GrowthKpisTrialToPaidByActivation = {
+  activated: GrowthRateTriple;
+  notActivated: GrowthRateTriple;
+};
+
+export type GrowthKpisTrialToPaidByCohortWeekItem = {
+  weekStart: string;
+  orgs: number;
+  paid: number;
+  rate: number | null;
+  matured: boolean;
+};
+
+export type GrowthKpisTrialToPaid = {
+  overall: GrowthRateTriple;
+  byActivation: GrowthKpisTrialToPaidByActivation;
+  byCohortWeek: GrowthKpisTrialToPaidByCohortWeekItem[];
+  medianDaysToPaid: number | null;
+};
+
+export type GrowthKpisRevenuePlanMix = { [key: string]: number };
+
+export type GrowthKpisRevenuePrices = {
+  source: GrowthKpisRevenuePricesSource;
+  starterCents: number;
+  growthCents: number;
+  creditPackCents: number;
+};
+
+export type GrowthKpisRevenue = {
+  planMix: GrowthKpisRevenuePlanMix;
+  paidOrgs: number;
+  subscriptionOrgs: number;
+  mrrCents: number;
+  arpaCents: number | null;
+  packPurchases30d: number;
+  packRevenueCents30d: number;
+  prices: GrowthKpisRevenuePrices;
+};
+
+export type GrowthKpisCredits = {
+  purchased30d: number;
+  subscriptionGranted30d: number;
+  consumed30d: number;
+  refunded30d: number;
+  promo30d: number;
+  trialGranted30d: number;
+  consumedPerPaidOrg30d: number | null;
+  float: number;
+};
+
+export type GrowthKpisChurn = {
+  subscriptionsDeleted30d: number;
+  trialsExpired30d: number;
+  trialsExpiredWithoutPurchase30d: number;
+  paidOrgsAtWindowStart: number;
+  logoChurnRate30d: number | null;
+  trialsExpiringNext7d: number;
+  trialsExpiringNext7dWithoutGallery: number;
+};
+
+export type GrowthKpisOutboundFunnel = {
+  drafted: number;
+  approved: number;
+  sent: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  replied: number;
+  positiveReplied: number;
+  signups: number;
+  activated: number;
+  paid: number;
+  legacySends: number;
+};
+
+export type GrowthKpisOutboundRates = {
+  deliveryRate: number | null;
+  bounceRate: number | null;
+  complaintRate: number | null;
+  replyRate: number | null;
+  positiveReplyRate: number | null;
+  signupRate: number | null;
+  paidRate: number | null;
+};
+
+export type GrowthKpisOutboundByCampaignItem = {
+  campaignId: number;
+  name: string;
+  status: string;
+  sent: number;
+  delivered: number;
+  replied: number;
+  positiveReplied: number;
+  signups: number;
+  replyRate: number | null;
+};
+
+export type GrowthKpisOutboundByStepItem = {
+  step: number;
+  sent: number;
+  delivered: number;
+  replied: number;
+  complained: number;
+  complaintRate: number | null;
+};
+
+export type GrowthKpisOutbound = {
+  funnel: GrowthKpisOutboundFunnel;
+  rates: GrowthKpisOutboundRates;
+  bySegment: GrowthSegmentStat[];
+  byVariant: GrowthVariantStat[];
+  byCampaign: GrowthKpisOutboundByCampaignItem[];
+  byStep: GrowthKpisOutboundByStepItem[];
+};
+
+export type GrowthKpisDeliverabilityWindow14d = {
+  sent: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  bounceRate: number | null;
+  complaintRate: number | null;
+};
+
+export type GrowthKpisDeliverabilityGuard = {
+  status: string;
+  since: string | null;
+  reason: string | null;
+  baseCap: number;
+  effectiveCap: number;
+};
+
+export type GrowthKpisDeliverability = {
+  window14d: GrowthKpisDeliverabilityWindow14d;
+  status: GrowthKpisDeliverabilityStatus;
+  guard: GrowthKpisDeliverabilityGuard;
+};
+
+export type GrowthKpisExperiments = {
+  proposed: number;
+  running: number;
+  decisionsDue7d: number;
+  decided30d: number;
+};
+
+/**
+ * Outcome KPIs computed from production tables (control-plane/growth/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.
+ */
+export interface GrowthKpis {
+  version: number;
+  computedAt: string;
+  window: GrowthKpisWindow;
+  signups: GrowthKpisSignups;
+  activation: GrowthKpisActivation;
+  trialToPaid: GrowthKpisTrialToPaid;
+  revenue: GrowthKpisRevenue;
+  credits: GrowthKpisCredits;
+  churn: GrowthKpisChurn;
+  outbound: GrowthKpisOutbound;
+  deliverability: GrowthKpisDeliverability;
+  experiments: GrowthKpisExperiments;
+  dataQuality: string[];
+}
+
 /**
  * Live business KPIs computed from production tables.
  */
@@ -561,6 +945,7 @@ export interface BusinessMetrics {
   sessions: BusinessMetricsSessions;
   credits: BusinessMetricsCredits;
   assets: BusinessMetricsAssets;
+  growth?: GrowthKpis;
 }
 
 export type ControlAgentDomain =
@@ -575,7 +960,6 @@ export const ControlAgentDomain = {
   product: "product",
   finance: "finance",
   experiments: "experiments",
-  sales: "sales",
   activation: "activation",
   governance: "governance",
 } as const;
@@ -699,6 +1083,7 @@ export const ControlActionStatus = {
   pending: "pending",
   approved: "approved",
   rejected: "rejected",
+  executing: "executing",
   executed: "executed",
   failed: "failed",
 } as const;
@@ -817,6 +1202,23 @@ export const ControlExperimentStatus = {
   aborted: "aborted",
 } as const;
 
+export type ControlExperimentAssignments = { [key: string]: unknown } | null;
+
+export type ControlExperimentDecision =
+  | (typeof ControlExperimentDecision)[keyof typeof ControlExperimentDecision]
+  | null;
+
+export const ControlExperimentDecision = {
+  win: "win",
+  kill: "kill",
+  inconclusive: "inconclusive",
+  extended: "extended",
+} as const;
+
+export type ControlExperimentEvaluationProperty = {
+  [key: string]: unknown;
+} | null;
+
 export interface ControlExperiment {
   id: number;
   name: string;
@@ -828,6 +1230,20 @@ export interface ControlExperiment {
   createdByAgent?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
+  primaryMetricKey?: string | null;
+  baseline?: number | null;
+  minDetectableLift?: number | null;
+  killThreshold?: number | null;
+  decisionDate?: string | null;
+  segment?: string | null;
+  variantKey?: string | null;
+  assignments?: ControlExperimentAssignments;
+  decision?: ControlExperimentDecision;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  observedValue?: number | null;
+  observedN?: number | null;
+  evaluation?: ControlExperimentEvaluationProperty;
   createdAt: string;
   updatedAt: string;
 }
@@ -877,6 +1293,20 @@ export interface ControlPoliciesResponse {
   policies: ControlPolicy[];
 }
 
+/**
+ * The policy's full value object; validated per key (field name and bounds).
+ */
+export type ControlPolicyUpdateBodyValue = { [key: string]: unknown };
+
+export interface ControlPolicyUpdateBody {
+  /** The policy's full value object; validated per key (field name and bounds). */
+  value: ControlPolicyUpdateBodyValue;
+}
+
+export interface ControlPolicyResponse {
+  policy: ControlPolicy;
+}
+
 export interface ControlMetricsSnapshot {
   id: number;
   metrics: BusinessMetrics;
@@ -909,6 +1339,38 @@ export const ControlProspectStatus = {
   disqualified: "disqualified",
 } as const;
 
+export type ControlProspectVettingStatus =
+  (typeof ControlProspectVettingStatus)[keyof typeof ControlProspectVettingStatus];
+
+export const ControlProspectVettingStatus = {
+  unvetted: "unvetted",
+  passed: "passed",
+  review: "review",
+  failed: "failed",
+  error: "error",
+} as const;
+
+export type ControlProspectReplySentiment =
+  | (typeof ControlProspectReplySentiment)[keyof typeof ControlProspectReplySentiment]
+  | null;
+
+export const ControlProspectReplySentiment = {
+  positive: "positive",
+  neutral: "neutral",
+  negative: "negative",
+} as const;
+
+export type ControlProspectAttributionMethod =
+  | (typeof ControlProspectAttributionMethod)[keyof typeof ControlProspectAttributionMethod]
+  | null;
+
+export const ControlProspectAttributionMethod = {
+  email: "email",
+  website_domain: "website_domain",
+  email_domain: "email_domain",
+  manual: "manual",
+} as const;
+
 export interface ControlProspect {
   id: number;
   name: string;
@@ -927,6 +1389,16 @@ export interface ControlProspect {
   lastContactedAt?: string | null;
   statusChangedBy?: string | null;
   createdByAgent?: string | null;
+  vettingStatus: ControlProspectVettingStatus;
+  legitimacyScore?: number | null;
+  vettedAt?: string | null;
+  venueType?: string | null;
+  repliedAt?: string | null;
+  replySentiment?: ControlProspectReplySentiment;
+  convertedAt?: string | null;
+  convertedOrganizationId?: number | null;
+  convertedCampaignId?: number | null;
+  attributionMethod?: ControlProspectAttributionMethod;
   createdAt: string;
   updatedAt: string;
 }
@@ -950,9 +1422,28 @@ export const ControlProspectStatusBodyStatus = {
   disqualified: "disqualified",
 } as const;
 
+/**
+ * Only with status replied.
+ */
+export type ControlProspectStatusBodyReplySentiment =
+  | (typeof ControlProspectStatusBodyReplySentiment)[keyof typeof ControlProspectStatusBodyReplySentiment]
+  | null;
+
+export const ControlProspectStatusBodyReplySentiment = {
+  positive: "positive",
+  neutral: "neutral",
+  negative: "negative",
+} as const;
+
 export interface ControlProspectStatusBody {
   /** Operator-recorded outcome. "contacted" is reserved for the governed send action and cannot be set here. */
   status: ControlProspectStatusBodyStatus;
+  /** Only with status replied. */
+  replySentiment?: ControlProspectStatusBodyReplySentiment;
+  /** Only with status converted; the organization that signed up. */
+  organizationId?: number | null;
+  /** @maxLength 400 */
+  note?: string;
 }
 
 export interface ControlProspectResponse {
@@ -990,6 +1481,25 @@ export interface ControlCampaign {
 
 export interface ControlCampaignsResponse {
   campaigns: ControlCampaign[];
+}
+
+export type ControlCampaignStatusBodyStatus =
+  (typeof ControlCampaignStatusBodyStatus)[keyof typeof ControlCampaignStatusBodyStatus];
+
+export const ControlCampaignStatusBodyStatus = {
+  active: "active",
+  paused: "paused",
+  completed: "completed",
+} as const;
+
+export interface ControlCampaignStatusBody {
+  status: ControlCampaignStatusBodyStatus;
+  /** @maxLength 400 */
+  note?: string;
+}
+
+export interface ControlCampaignResponse {
+  campaign: ControlCampaign;
 }
 
 export interface ControlVenueFacts {
@@ -1042,11 +1552,6 @@ export interface ControlOutreachAsset {
   createdAt: string;
 }
 
-export interface ControlProspectResearchResponse {
-  research: ControlProspectResearch;
-  assets: ControlOutreachAsset[];
-}
-
 export type ControlOutreachEmailStatus =
   (typeof ControlOutreachEmailStatus)[keyof typeof ControlOutreachEmailStatus];
 
@@ -1060,7 +1565,19 @@ export const ControlOutreachEmailStatus = {
   rejected: "rejected",
 } as const;
 
+export type ControlOutreachEmailVettingSnapshot = {
+  status: string;
+  score: number;
+  vettedAt: string;
+} | null;
+
 export type ControlOutreachEmailDraftNotes = { [key: string]: unknown } | null;
+
+export interface ControlCitedFact {
+  kind: string;
+  value: string;
+  sourceUrl: string;
+}
 
 export interface ControlOutreachEmail {
   id: number;
@@ -1077,6 +1594,9 @@ export interface ControlOutreachEmail {
   ctaLabel: string;
   ctaUrl: string;
   imageAssetIds: number[];
+  variantKey?: string | null;
+  citedFacts?: ControlCitedFact[] | null;
+  vettingSnapshot?: ControlOutreachEmailVettingSnapshot;
   draftNotes?: ControlOutreachEmailDraftNotes;
   providerMessageId?: string | null;
   sentTo?: string | null;
@@ -1084,6 +1604,8 @@ export interface ControlOutreachEmail {
   deliveredAt?: string | null;
   bouncedAt?: string | null;
   bounceReason?: string | null;
+  openedAt?: string | null;
+  clickedAt?: string | null;
   lastError?: string | null;
   createdByAgent?: string | null;
   editedBy?: string | null;
@@ -1097,6 +1619,7 @@ export interface ControlOutreachProspectSummary {
   email: string;
   contactName?: string | null;
   status: string;
+  vettingStatus: string;
   website?: string | null;
   region?: string | null;
 }
@@ -1134,18 +1657,133 @@ export type ControlOutreachEmailDetailPreview = {
 export type ControlOutreachEmailDetailWarnings = {
   research: string[];
   config: string[];
+  vetting: string[];
 };
+
+export type ControlProspectVettingTier =
+  (typeof ControlProspectVettingTier)[keyof typeof ControlProspectVettingTier];
+
+export const ControlProspectVettingTier = {
+  A: "A",
+  AB: "AB",
+} as const;
+
+export type ControlVettingCheckOutcome =
+  (typeof ControlVettingCheckOutcome)[keyof typeof ControlVettingCheckOutcome];
+
+export const ControlVettingCheckOutcome = {
+  pass: "pass",
+  warn: "warn",
+  fail: "fail",
+  skip: "skip",
+  error: "error",
+} as const;
+
+export interface ControlVettingEvidence {
+  url: string;
+  excerpt?: string | null;
+  observedAt: string;
+}
+
+export type ControlVettingCheckData = { [key: string]: unknown } | null;
+
+export interface ControlVettingCheck {
+  key: string;
+  outcome: ControlVettingCheckOutcome;
+  points: number;
+  hardFail: boolean;
+  detail: string;
+  evidence: ControlVettingEvidence[];
+  data?: ControlVettingCheckData;
+}
+
+export interface ControlProspectVetting {
+  id: number;
+  prospectId: number;
+  status: ControlProspectVettingStatus;
+  score: number;
+  tier: ControlProspectVettingTier;
+  hardFails: string[];
+  checks: ControlVettingCheck[];
+  summary: string;
+  contactDomain: string;
+  mxProvider?: string | null;
+  domainRegisteredAt?: string | null;
+  firstCaptureAt?: string | null;
+  placesPlaceId?: string | null;
+  vettedAt: string;
+  expiresAt: string;
+  vettedBy: string;
+}
+
+export type ControlProspectFactKind =
+  (typeof ControlProspectFactKind)[keyof typeof ControlProspectFactKind];
+
+export const ControlProspectFactKind = {
+  venue_name: "venue_name",
+  space: "space",
+  location: "location",
+  capacity: "capacity",
+  style: "style",
+  owner_name: "owner_name",
+  email: "email",
+  phone: "phone",
+  address: "address",
+  marketplace: "marketplace",
+  social: "social",
+  google_rating: "google_rating",
+  wedding_signal: "wedding_signal",
+} as const;
+
+export type ControlProspectFactSourceKind =
+  (typeof ControlProspectFactSourceKind)[keyof typeof ControlProspectFactSourceKind];
+
+export const ControlProspectFactSourceKind = {
+  website: "website",
+  json_ld: "json_ld",
+  rdap: "rdap",
+  wayback: "wayback",
+  dns: "dns",
+  places: "places",
+  agent_research: "agent_research",
+  operator: "operator",
+} as const;
+
+export type ControlProspectFactStatus =
+  (typeof ControlProspectFactStatus)[keyof typeof ControlProspectFactStatus];
+
+export const ControlProspectFactStatus = {
+  verified: "verified",
+  unverified: "unverified",
+  stale: "stale",
+} as const;
+
+export interface ControlProspectFact {
+  id: number;
+  prospectId: number;
+  kind: ControlProspectFactKind;
+  value: string;
+  sourceUrl: string;
+  sourceKind: ControlProspectFactSourceKind;
+  excerpt?: string | null;
+  status: ControlProspectFactStatus;
+  verifiedAt?: string | null;
+  createdBy: string;
+  createdAt: string;
+}
 
 export interface ControlOutreachEmailDetail {
   email: ControlOutreachEmail;
   prospect: ControlProspect;
   action?: ControlOutreachEmailDetailAction;
   research?: ControlProspectResearch | null;
+  vetting?: ControlProspectVetting | null;
+  facts: ControlProspectFact[];
+  approvable: boolean;
   assets: ControlOutreachAsset[];
   preview: ControlOutreachEmailDetailPreview;
   warnings: ControlOutreachEmailDetailWarnings;
   editable: boolean;
-  samplePreviewsEnabled: boolean;
 }
 
 export interface ControlOutreachEmailDetailResponse {
@@ -1155,7 +1793,7 @@ export interface ControlOutreachEmailDetailResponse {
 export interface ControlOutreachEmailUpdateBody {
   /**
    * @minLength 3
-   * @maxLength 80
+   * @maxLength 50
    */
   subject?: string;
   /**
@@ -1226,6 +1864,532 @@ export interface ControlOutreachDraftBody {
    */
   step?: number;
   refreshResearch?: boolean;
+  /** Force a control_copy_variants key; omitted = the studio chooses by weight. */
+  variantKey?: string | null;
+}
+
+export interface ControlProspectEvidenceResponse {
+  prospect: ControlProspect;
+  vetting?: ControlProspectVetting | null;
+  facts: ControlProspectFact[];
+  research?: ControlProspectResearch | null;
+  assets: ControlOutreachAsset[];
+}
+
+export interface VetControlProspectBody {
+  refresh?: boolean;
+}
+
+export type OverrideControlProspectVettingBodyDecision =
+  (typeof OverrideControlProspectVettingBodyDecision)[keyof typeof OverrideControlProspectVettingBodyDecision];
+
+export const OverrideControlProspectVettingBodyDecision = {
+  pass: "pass",
+  fail: "fail",
+} as const;
+
+export interface OverrideControlProspectVettingBody {
+  decision: OverrideControlProspectVettingBodyDecision;
+  /**
+   * @minLength 5
+   * @maxLength 400
+   */
+  note: string;
+}
+
+export type AddControlProspectFactBodyKind =
+  (typeof AddControlProspectFactBodyKind)[keyof typeof AddControlProspectFactBodyKind];
+
+export const AddControlProspectFactBodyKind = {
+  space: "space",
+  location: "location",
+  capacity: "capacity",
+  style: "style",
+  owner_name: "owner_name",
+  phone: "phone",
+  address: "address",
+  marketplace: "marketplace",
+  social: "social",
+} as const;
+
+export interface AddControlProspectFactBody {
+  kind: AddControlProspectFactBodyKind;
+  /**
+   * @minLength 2
+   * @maxLength 160
+   */
+  value: string;
+  /**
+   * @minLength 8
+   * @maxLength 2000
+   */
+  sourceUrl: string;
+}
+
+export type ControlDeliverabilityGuardStatus =
+  (typeof ControlDeliverabilityGuardStatus)[keyof typeof ControlDeliverabilityGuardStatus];
+
+export const ControlDeliverabilityGuardStatus = {
+  ok: "ok",
+  warn: "warn",
+  throttled: "throttled",
+  paused: "paused",
+} as const;
+
+export interface ControlDeliverabilityGuard {
+  status: ControlDeliverabilityGuardStatus;
+  since?: string | null;
+  reason?: string | null;
+  okDays: number;
+}
+
+export type ControlOutreachSendingStateDailyCap = {
+  policyMax: number;
+  sentToday: number;
+};
+
+export type ControlOutreachSendingStateHealth = {
+  windowDays: number;
+  sent: number;
+  bounced: number;
+  complained: number;
+  bounceRatePct: number;
+};
+
+export interface ControlOutreachSendingState {
+  guard: ControlDeliverabilityGuard;
+  dailyCap: ControlOutreachSendingStateDailyCap;
+  health: ControlOutreachSendingStateHealth;
+}
+
+export interface SetControlOutreachSendingBody {
+  paused: boolean;
+  /**
+   * @minLength 5
+   * @maxLength 400
+   */
+  note: string;
+}
+
+export interface UpdateOrganizationBody {
+  shareAggregates?: boolean;
+  contactEmail?: string | null;
+}
+
+export interface PricingConfig {
+  /** ISO 4217, e.g. USD */
+  currency: string;
+  /** Printed beside the prices, e.g. "Launch prices" */
+  label: string | null;
+  /** Whole currency units */
+  starterMonthly: number;
+  growthMonthly: number;
+  creditPack: number;
+  starterCredits: number;
+  growthCredits: number;
+  creditPackCredits: number;
+}
+
+export interface TrialConfig {
+  credits: number;
+  days: number;
+}
+
+export interface FoundingOffer {
+  slotsLeft: number;
+  slotsTotal: number;
+}
+
+export interface ProofAggregates {
+  venues: number;
+  galleries: number;
+  /** 0-100, one decimal */
+  openedRate: number;
+  /** 0-100, one decimal */
+  ctaClickRate: number;
+  bookedCount: number;
+  since: string;
+}
+
+export type PublicConfigProofMode =
+  (typeof PublicConfigProofMode)[keyof typeof PublicConfigProofMode];
+
+export const PublicConfigProofMode = {
+  partner: "partner",
+  aggregate: "aggregate",
+} as const;
+
+export type PublicConfigProof = {
+  mode: PublicConfigProofMode;
+  aggregates?: ProofAggregates | null;
+};
+
+export interface PublicConfig {
+  pricing: PricingConfig;
+  trial: TrialConfig;
+  founding: FoundingOffer | null;
+  proof: PublicConfigProof;
+  contactEmail: string | null;
+  billingConfigured: boolean;
+  /** Days couple source photos are kept after delivery */
+  retentionDays: number;
+}
+
+export type GalleryEventBodyType =
+  (typeof GalleryEventBodyType)[keyof typeof GalleryEventBodyType];
+
+export const GalleryEventBodyType = {
+  shared: "shared",
+  cta_click: "cta_click",
+  download: "download",
+} as const;
+
+/**
+ * Defaults to share_page
+ */
+export type GalleryEventBodySource =
+  (typeof GalleryEventBodySource)[keyof typeof GalleryEventBodySource];
+
+export const GalleryEventBodySource = {
+  share_page: "share_page",
+  email: "email",
+} as const;
+
+export interface GalleryEventBody {
+  type: GalleryEventBodyType;
+  /** Defaults to share_page */
+  source?: GalleryEventBodySource;
+}
+
+export interface GalleryEventResponse {
+  recorded: boolean;
+}
+
+export interface SetSessionBookedBody {
+  booked: boolean;
+}
+
+export interface ImportWebsiteMediaBody {
+  /** Overrides and saves venue.websiteUrl when given */
+  websiteUrl?: string;
+}
+
+export interface ImportWebsiteMediaResponse {
+  imported: VenueMediaItem[];
+  candidatesFound: number;
+  warnings: string[];
+}
+
+export type ControlSegmentGuidanceEntrySegmentType =
+  (typeof ControlSegmentGuidanceEntrySegmentType)[keyof typeof ControlSegmentGuidanceEntrySegmentType];
+
+export const ControlSegmentGuidanceEntrySegmentType = {
+  region: "region",
+  venue_type: "venue_type",
+} as const;
+
+export interface ControlSegmentGuidanceEntry {
+  segmentType: ControlSegmentGuidanceEntrySegmentType;
+  segment: string;
+  sent: number;
+  positiveReplyRate?: number | null;
+  signupRate?: number | null;
+  until?: string | null;
+}
+
+export interface ControlSegmentGuidance {
+  prioritize: ControlSegmentGuidanceEntry[];
+  pause: ControlSegmentGuidanceEntry[];
+  updatedAt: string | null;
+}
+
+export type ControlCopyVariantDefaultAsk =
+  (typeof ControlCopyVariantDefaultAsk)[keyof typeof ControlCopyVariantDefaultAsk];
+
+export const ControlCopyVariantDefaultAsk = {
+  preview: "preview",
+  call: "call",
+} as const;
+
+export interface ControlCopyVariant {
+  id: number;
+  key: string;
+  name: string;
+  angle: string;
+  defaultAsk: ControlCopyVariantDefaultAsk;
+  isControl: boolean;
+  active: boolean;
+  weight: number;
+  pausedReason: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlCopyVariantUpdateBody {
+  active?: boolean;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  weight?: number;
+  /**
+   * @minLength 20
+   * @maxLength 600
+   */
+  angle?: string;
+  /**
+   * @minLength 3
+   * @maxLength 80
+   */
+  name?: string;
+}
+
+export interface ControlCopyVariantResponse {
+  variant: ControlCopyVariant;
+}
+
+export type ControlAdaptationBefore = { [key: string]: unknown } | null;
+
+export type ControlAdaptationAfter = { [key: string]: unknown } | null;
+
+export interface ControlAdaptation {
+  id: number;
+  ruleKey: string;
+  subjectType: string;
+  subjectId: string | null;
+  action: string;
+  before: ControlAdaptationBefore;
+  after: ControlAdaptationAfter;
+  reason: string;
+  snapshotId: number | null;
+  createdAt: string;
+}
+
+export interface ControlGuardResetBody {
+  /**
+   * @minLength 5
+   * @maxLength 400
+   */
+  note: string;
+}
+
+export type ControlMetricKeyUnit =
+  (typeof ControlMetricKeyUnit)[keyof typeof ControlMetricKeyUnit];
+
+export const ControlMetricKeyUnit = {
+  rate: "rate",
+  hours: "hours",
+  cents: "cents",
+  count: "count",
+} as const;
+
+export type ControlMetricKeyDirection =
+  (typeof ControlMetricKeyDirection)[keyof typeof ControlMetricKeyDirection];
+
+export const ControlMetricKeyDirection = {
+  higher: "higher",
+  lower: "lower",
+} as const;
+
+export interface ControlMetricKey {
+  key: string;
+  label: string;
+  unit: ControlMetricKeyUnit;
+  direction: ControlMetricKeyDirection;
+  supportsSegment: boolean;
+  supportsVariant: boolean;
+}
+
+export type ControlDigestDocument = { [key: string]: unknown };
+
+export interface ControlDigest {
+  id: number;
+  weekStart: string;
+  document: ControlDigestDocument;
+  polishedBy: string | null;
+  actionId: number | null;
+  sentTo: string[] | null;
+  sentAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  /** Rendered email HTML for the sandboxed preview iframe */
+  html: string;
+}
+
+export interface ControlDigestResponse {
+  digest: ControlDigest;
+}
+
+export interface ControlDigestGenerateBody {
+  force?: boolean;
+}
+
+export interface ControlGrowthResponse {
+  snapshotId: number | null;
+  computedAt: string;
+  kpis: GrowthKpis;
+  guidance: ControlSegmentGuidance;
+  variants: GrowthVariantStat[];
+  adaptations: ControlAdaptation[];
+  metricKeys: ControlMetricKey[];
+  loopEnabled: boolean;
+  latestDigest: ControlDigest | null;
+}
+
+export type ControlExperimentCreateBodyAssignments = {
+  [key: string]: unknown;
+} | null;
+
+export interface ControlExperimentCreateBody {
+  /**
+   * @minLength 3
+   * @maxLength 120
+   */
+  name: string;
+  /**
+   * @minLength 10
+   * @maxLength 1000
+   */
+  hypothesis: string;
+  /**
+   * @minLength 3
+   * @maxLength 200
+   */
+  metric: string;
+  primaryMetricKey: string;
+  segment?: string | null;
+  variantKey?: string | null;
+  baseline?: number | null;
+  /**
+   * @maximum 5
+   * @exclusiveMinimum 0
+   */
+  minDetectableLift: number;
+  killThreshold?: number | null;
+  decisionDate: string;
+  assignments?: ControlExperimentCreateBodyAssignments;
+  startNow?: boolean;
+}
+
+export type ControlExperimentUpdateBodyAssignments = {
+  [key: string]: unknown;
+} | null;
+
+export type ControlExperimentUpdateBodyStatus =
+  (typeof ControlExperimentUpdateBodyStatus)[keyof typeof ControlExperimentUpdateBodyStatus];
+
+export const ControlExperimentUpdateBodyStatus = {
+  running: "running",
+} as const;
+
+export interface ControlExperimentUpdateBody {
+  /**
+   * @minLength 10
+   * @maxLength 1000
+   */
+  hypothesis?: string;
+  segment?: string | null;
+  variantKey?: string | null;
+  baseline?: number | null;
+  /**
+   * @maximum 5
+   * @exclusiveMinimum 0
+   */
+  minDetectableLift?: number;
+  killThreshold?: number | null;
+  decisionDate?: string;
+  assignments?: ControlExperimentUpdateBodyAssignments;
+  status?: ControlExperimentUpdateBodyStatus;
+}
+
+export type ControlExperimentDecisionBodyDecision =
+  (typeof ControlExperimentDecisionBodyDecision)[keyof typeof ControlExperimentDecisionBodyDecision];
+
+export const ControlExperimentDecisionBodyDecision = {
+  win: "win",
+  kill: "kill",
+  inconclusive: "inconclusive",
+  extended: "extended",
+} as const;
+
+export interface ControlExperimentDecisionBody {
+  decision: ControlExperimentDecisionBodyDecision;
+  /** @maxLength 1000 */
+  note?: string;
+  newDecisionDate?: string;
+}
+
+export interface ControlExperimentResponse {
+  experiment: ControlExperiment;
+}
+
+export type ControlExperimentEvaluationDecision =
+  (typeof ControlExperimentEvaluationDecision)[keyof typeof ControlExperimentEvaluationDecision];
+
+export const ControlExperimentEvaluationDecision = {
+  continue: "continue",
+  win: "win",
+  kill: "kill",
+  inconclusive: "inconclusive",
+  not_measurable: "not_measurable",
+} as const;
+
+export interface ControlExperimentEvaluation {
+  decision: ControlExperimentEvaluationDecision;
+  observedValue: number | null;
+  n: number;
+  baseline: number | null;
+  target: number | null;
+  requiredN: number | null;
+  underpowered: boolean;
+  reason: string;
+  evaluatedAt: string;
+}
+
+export interface ControlExperimentEvaluationResponse {
+  experiment: ControlExperiment;
+  evaluation: ControlExperimentEvaluation;
+}
+
+export type FunnelEventBodyEvent =
+  (typeof FunnelEventBodyEvent)[keyof typeof FunnelEventBodyEvent];
+
+export const FunnelEventBodyEvent = {
+  landing_view: "landing_view",
+  cta_click: "cta_click",
+  signup_started: "signup_started",
+  signup_completed: "signup_completed",
+  org_created: "org_created",
+  venue_created: "venue_created",
+  first_photo: "first_photo",
+  venue_ready: "venue_ready",
+  first_gallery: "first_gallery",
+  checkout_started: "checkout_started",
+  checkout_completed: "checkout_completed",
+  credits_exhausted: "credits_exhausted",
+  tour_card_downloaded: "tour_card_downloaded",
+} as const;
+
+export type FunnelEventBodyProperties = { [key: string]: unknown };
+
+export interface FunnelEventBody {
+  event: FunnelEventBodyEvent;
+  properties?: FunnelEventBodyProperties;
+  /** @maxLength 80 */
+  source?: string;
+}
+
+export interface FunnelEventResponse {
+  accepted: boolean;
+}
+
+export interface OutreachClaimResponse {
+  venueName: string;
+  website: string | null;
+  region: string | null;
+  photoUrls: string[];
+  prospectId: number;
 }
 
 export type GetStorageObjectParams = {
@@ -1246,7 +2410,14 @@ export type ListControlRunsParams = {
 
 export type ListControlActionsParams = {
   status?: ListControlActionsStatus;
+  /**
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
 };
 
 export type ListControlActionsStatus =
@@ -1256,6 +2427,7 @@ export const ListControlActionsStatus = {
   pending: "pending",
   approved: "approved",
   rejected: "rejected",
+  executing: "executing",
   executed: "executed",
   failed: "failed",
 } as const;
@@ -1276,8 +2448,19 @@ export const ListControlTasksStatus = {
 } as const;
 
 export type ListControlExperimentsParams = {
+  status?: ListControlExperimentsStatus;
   limit?: number;
 };
+
+export type ListControlExperimentsStatus =
+  (typeof ListControlExperimentsStatus)[keyof typeof ListControlExperimentsStatus];
+
+export const ListControlExperimentsStatus = {
+  proposed: "proposed",
+  running: "running",
+  completed: "completed",
+  aborted: "aborted",
+} as const;
 
 export type GetControlAuditParams = {
   limit?: number;
@@ -1290,7 +2473,21 @@ export type GetControlMetricsHistoryParams = {
 export type ListControlProspectsParams = {
   status?: ListControlProspectsStatus;
   campaignId?: number;
+  vettingStatus?: ListControlProspectsVettingStatus;
+  /**
+   * Case-insensitive match on name, email, website, or region.
+   * @maxLength 120
+   */
+  q?: string;
+  sort?: ListControlProspectsSort;
+  /**
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
 };
 
 export type ListControlProspectsStatus =
@@ -1306,6 +2503,26 @@ export const ListControlProspectsStatus = {
   disqualified: "disqualified",
 } as const;
 
+export type ListControlProspectsVettingStatus =
+  (typeof ListControlProspectsVettingStatus)[keyof typeof ListControlProspectsVettingStatus];
+
+export const ListControlProspectsVettingStatus = {
+  unvetted: "unvetted",
+  passed: "passed",
+  review: "review",
+  failed: "failed",
+  error: "error",
+} as const;
+
+export type ListControlProspectsSort =
+  (typeof ListControlProspectsSort)[keyof typeof ListControlProspectsSort];
+
+export const ListControlProspectsSort = {
+  newest: "newest",
+  score: "score",
+  updated: "updated",
+} as const;
+
 export type ListControlCampaignsParams = {
   limit?: number;
 };
@@ -1313,7 +2530,18 @@ export type ListControlCampaignsParams = {
 export type ListControlOutreachEmailsParams = {
   status?: ListControlOutreachEmailsStatus;
   prospectId?: number;
+  /**
+   * When true, only drafts whose send action is still pending.
+   */
+  awaiting?: boolean;
+  /**
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
 };
 
 export type ListControlOutreachEmailsStatus =

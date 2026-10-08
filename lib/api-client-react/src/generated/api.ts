@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddControlProspectFactBody,
   AddVenueMediaBody,
   BillingCheckoutBody,
   BillingCheckoutResponse,
@@ -27,17 +28,33 @@ import type {
   ControlAgentResponse,
   ControlAgentStatusBody,
   ControlAuditResponse,
+  ControlCampaignResponse,
+  ControlCampaignStatusBody,
   ControlCampaignsResponse,
+  ControlCopyVariantResponse,
+  ControlCopyVariantUpdateBody,
+  ControlDigestGenerateBody,
+  ControlDigestResponse,
+  ControlExperimentCreateBody,
+  ControlExperimentDecisionBody,
+  ControlExperimentEvaluationResponse,
+  ControlExperimentResponse,
+  ControlExperimentUpdateBody,
   ControlExperimentsResponse,
+  ControlGrowthResponse,
+  ControlGuardResetBody,
   ControlMetricsHistoryResponse,
   ControlOutreachDraftBody,
   ControlOutreachEmailDetailResponse,
   ControlOutreachEmailRegenerateBody,
   ControlOutreachEmailUpdateBody,
   ControlOutreachEmailsResponse,
+  ControlOutreachSendingState,
   ControlOverviewResponse,
   ControlPoliciesResponse,
-  ControlProspectResearchResponse,
+  ControlPolicyResponse,
+  ControlPolicyUpdateBody,
+  ControlProspectEvidenceResponse,
   ControlProspectResponse,
   ControlProspectStatusBody,
   ControlProspectsResponse,
@@ -51,10 +68,16 @@ import type {
   CreateVenueBody,
   DeleteSessionResponse,
   ErrorEnvelope,
+  FunnelEventBody,
+  FunnelEventResponse,
+  GalleryEventBody,
+  GalleryEventResponse,
   GetControlAuditParams,
   GetControlMetricsHistoryParams,
   GetStorageObjectParams,
   HealthStatus,
+  ImportWebsiteMediaBody,
+  ImportWebsiteMediaResponse,
   ListControlActionsParams,
   ListControlCampaignsParams,
   ListControlExperimentsParams,
@@ -63,11 +86,13 @@ import type {
   ListControlRunsParams,
   ListControlTasksParams,
   ListGalleryStylesResponse,
-  ListSessionsResponse,
   ListVenueMediaResponse,
   OrgCreditHistoryResponse,
   OrganizationResponse,
+  OutreachClaimResponse,
+  OverrideControlProspectVettingBody,
   OwnerSessionDetailResponse,
+  PublicConfig,
   ReadinessStatus,
   RecoverSessionsBody,
   RecoverSessionsResponse,
@@ -76,6 +101,10 @@ import type {
   SendSessionEmailResponse,
   SessionDetailResponse,
   SessionResponse,
+  SessionSummary,
+  SetControlOutreachSendingBody,
+  SetSessionBookedBody,
+  UpdateOrganizationBody,
   UpdateVenueBody,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -83,7 +112,7 @@ import type {
   VenueMediaItem,
   VenuePublicResponse,
   VenueResponse,
-  VenueStatsResponse,
+  VetControlProspectBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -239,81 +268,6 @@ export function useReadinessCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getReadinessCheckQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @deprecated
- * @summary Deprecated public venue directory
- */
-export const getListVenuesUrl = () => {
-  return `/api/venues`;
-};
-
-export const listVenues = async (options?: RequestInit): Promise<unknown> => {
-  return customFetch<unknown>(getListVenuesUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getListVenuesQueryKey = () => {
-  return [`/api/venues`] as const;
-};
-
-export const getListVenuesQueryOptions = <
-  TData = Awaited<ReturnType<typeof listVenues>>,
-  TError = ErrorType<ErrorEnvelope>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listVenues>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getListVenuesQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listVenues>>> = ({
-    signal,
-  }) => listVenues({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof listVenues>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ListVenuesQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listVenues>>
->;
-export type ListVenuesQueryError = ErrorType<ErrorEnvelope>;
-
-/**
- * @deprecated
- * @summary Deprecated public venue directory
- */
-
-export function useListVenues<
-  TData = Awaited<ReturnType<typeof listVenues>>,
-  TError = ErrorType<ErrorEnvelope>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listVenues>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListVenuesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -664,6 +618,92 @@ export function useGetOrganization<
 }
 
 /**
+ * @summary Update organization preferences (aggregate-proof opt-in, contact email)
+ */
+export const getUpdateOrganizationUrl = () => {
+  return `/api/org`;
+};
+
+export const updateOrganization = async (
+  updateOrganizationBody: UpdateOrganizationBody,
+  options?: RequestInit,
+): Promise<OrganizationResponse> => {
+  return customFetch<OrganizationResponse>(getUpdateOrganizationUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateOrganizationBody),
+  });
+};
+
+export const getUpdateOrganizationMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOrganization>>,
+    TError,
+    { data: BodyType<UpdateOrganizationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateOrganization>>,
+  TError,
+  { data: BodyType<UpdateOrganizationBody> },
+  TContext
+> => {
+  const mutationKey = ["updateOrganization"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateOrganization>>,
+    { data: BodyType<UpdateOrganizationBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateOrganization(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateOrganizationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateOrganization>>
+>;
+export type UpdateOrganizationMutationBody = BodyType<UpdateOrganizationBody>;
+export type UpdateOrganizationMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Update organization preferences (aggregate-proof opt-in, contact email)
+ */
+export const useUpdateOrganization = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOrganization>>,
+    TError,
+    { data: BodyType<UpdateOrganizationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateOrganization>>,
+  TError,
+  { data: BodyType<UpdateOrganizationBody> },
+  TContext
+> => {
+  return useMutation(getUpdateOrganizationMutationOptions(options));
+};
+
+/**
  * Subscriptions (starter/growth) and one-off credit packs are purchased
 by the organization; credits land in the shared org balance via the
 Stripe webhook.
@@ -992,93 +1032,6 @@ export function useGetVenueDashboard<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetVenueDashboardQueryOptions(slug, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Get venue statistics
- */
-export const getGetVenueStatsUrl = (slug: string) => {
-  return `/api/venues/${slug}/stats`;
-};
-
-export const getVenueStats = async (
-  slug: string,
-  options?: RequestInit,
-): Promise<VenueStatsResponse> => {
-  return customFetch<VenueStatsResponse>(getGetVenueStatsUrl(slug), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetVenueStatsQueryKey = (slug: string) => {
-  return [`/api/venues/${slug}/stats`] as const;
-};
-
-export const getGetVenueStatsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getVenueStats>>,
-  TError = ErrorType<ErrorEnvelope>,
->(
-  slug: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getVenueStats>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetVenueStatsQueryKey(slug);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getVenueStats>>> = ({
-    signal,
-  }) => getVenueStats(slug, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!slug,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getVenueStats>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetVenueStatsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getVenueStats>>
->;
-export type GetVenueStatsQueryError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Get venue statistics
- */
-
-export function useGetVenueStats<
-  TData = Awaited<ReturnType<typeof getVenueStats>>,
-  TError = ErrorType<ErrorEnvelope>,
->(
-  slug: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getVenueStats>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetVenueStatsQueryOptions(slug, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1432,93 +1385,6 @@ export const useCreateSession = <
 > => {
   return useMutation(getCreateSessionMutationOptions(options));
 };
-
-/**
- * @summary List all sessions for a venue (owner session)
- */
-export const getListVenueSessionsUrl = (slug: string) => {
-  return `/api/venues/${slug}/sessions`;
-};
-
-export const listVenueSessions = async (
-  slug: string,
-  options?: RequestInit,
-): Promise<ListSessionsResponse> => {
-  return customFetch<ListSessionsResponse>(getListVenueSessionsUrl(slug), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getListVenueSessionsQueryKey = (slug: string) => {
-  return [`/api/venues/${slug}/sessions`] as const;
-};
-
-export const getListVenueSessionsQueryOptions = <
-  TData = Awaited<ReturnType<typeof listVenueSessions>>,
-  TError = ErrorType<ErrorEnvelope>,
->(
-  slug: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listVenueSessions>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getListVenueSessionsQueryKey(slug);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof listVenueSessions>>
-  > = ({ signal }) => listVenueSessions(slug, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!slug,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listVenueSessions>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ListVenueSessionsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listVenueSessions>>
->;
-export type ListVenueSessionsQueryError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary List all sessions for a venue (owner session)
- */
-
-export function useListVenueSessions<
-  TData = Awaited<ReturnType<typeof listVenueSessions>>,
-  TError = ErrorType<ErrorEnvelope>,
->(
-  slug: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listVenueSessions>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListVenueSessionsQueryOptions(slug, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
 
 /**
  * Owner-only endpoint. Couples should use /sessions/by-token/{shareToken}.
@@ -2061,6 +1927,694 @@ export const useSendSessionEmailByToken = <
 > => {
   return useMutation(getSendSessionEmailByTokenMutationOptions(options));
 };
+
+/**
+ * No auth. Cached 60s. The same JSON is injected into the HTML shell as <meta name="dreemer-public-config">.
+ * @summary Published prices, trial terms, founding offer, proof mode and contact address for the public site
+ */
+export const getGetPublicConfigUrl = () => {
+  return `/api/public/config`;
+};
+
+export const getPublicConfig = async (
+  options?: RequestInit,
+): Promise<PublicConfig> => {
+  return customFetch<PublicConfig>(getGetPublicConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPublicConfigQueryKey = () => {
+  return [`/api/public/config`] as const;
+};
+
+export const getGetPublicConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPublicConfigQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicConfig>>> = ({
+    signal,
+  }) => getPublicConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicConfig>>
+>;
+export type GetPublicConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Published prices, trial terms, founding offer, proof mode and contact address for the public site
+ */
+
+export function useGetPublicConfig<
+  TData = Awaited<ReturnType<typeof getPublicConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Public, rate-limited per IP. "viewed" is recorded server-side by GET /sessions/by-token and is rejected here.
+ * @summary Record a share-page event (shared, cta_click) for the gallery funnel
+ */
+export const getRecordGalleryEventUrl = (shareToken: string) => {
+  return `/api/sessions/by-token/${shareToken}/events`;
+};
+
+export const recordGalleryEvent = async (
+  shareToken: string,
+  galleryEventBody: GalleryEventBody,
+  options?: RequestInit,
+): Promise<GalleryEventResponse> => {
+  return customFetch<GalleryEventResponse>(
+    getRecordGalleryEventUrl(shareToken),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(galleryEventBody),
+    },
+  );
+};
+
+export const getRecordGalleryEventMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordGalleryEvent>>,
+    TError,
+    { shareToken: string; data: BodyType<GalleryEventBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordGalleryEvent>>,
+  TError,
+  { shareToken: string; data: BodyType<GalleryEventBody> },
+  TContext
+> => {
+  const mutationKey = ["recordGalleryEvent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordGalleryEvent>>,
+    { shareToken: string; data: BodyType<GalleryEventBody> }
+  > = (props) => {
+    const { shareToken, data } = props ?? {};
+
+    return recordGalleryEvent(shareToken, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordGalleryEventMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordGalleryEvent>>
+>;
+export type RecordGalleryEventMutationBody = BodyType<GalleryEventBody>;
+export type RecordGalleryEventMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Record a share-page event (shared, cta_click) for the gallery funnel
+ */
+export const useRecordGalleryEvent = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordGalleryEvent>>,
+    TError,
+    { shareToken: string; data: BodyType<GalleryEventBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordGalleryEvent>>,
+  TError,
+  { shareToken: string; data: BodyType<GalleryEventBody> },
+  TContext
+> => {
+  return useMutation(getRecordGalleryEventMutationOptions(options));
+};
+
+/**
+ * @summary Venue marks a couple as booked (or undoes it)
+ */
+export const getSetSessionBookedUrl = (slug: string, id: number) => {
+  return `/api/venues/${slug}/sessions/${id}/booked`;
+};
+
+export const setSessionBooked = async (
+  slug: string,
+  id: number,
+  setSessionBookedBody: SetSessionBookedBody,
+  options?: RequestInit,
+): Promise<SessionSummary> => {
+  return customFetch<SessionSummary>(getSetSessionBookedUrl(slug, id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setSessionBookedBody),
+  });
+};
+
+export const getSetSessionBookedMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setSessionBooked>>,
+    TError,
+    { slug: string; id: number; data: BodyType<SetSessionBookedBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setSessionBooked>>,
+  TError,
+  { slug: string; id: number; data: BodyType<SetSessionBookedBody> },
+  TContext
+> => {
+  const mutationKey = ["setSessionBooked"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setSessionBooked>>,
+    { slug: string; id: number; data: BodyType<SetSessionBookedBody> }
+  > = (props) => {
+    const { slug, id, data } = props ?? {};
+
+    return setSessionBooked(slug, id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetSessionBookedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setSessionBooked>>
+>;
+export type SetSessionBookedMutationBody = BodyType<SetSessionBookedBody>;
+export type SetSessionBookedMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Venue marks a couple as booked (or undoes it)
+ */
+export const useSetSessionBooked = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setSessionBooked>>,
+    TError,
+    { slug: string; id: number; data: BodyType<SetSessionBookedBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setSessionBooked>>,
+  TError,
+  { slug: string; id: number; data: BodyType<SetSessionBookedBody> },
+  TContext
+> => {
+  return useMutation(getSetSessionBookedMutationOptions(options));
+};
+
+/**
+ * @summary Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
+ */
+export const getImportVenueWebsiteMediaUrl = (slug: string) => {
+  return `/api/venues/${slug}/media/import-website`;
+};
+
+export const importVenueWebsiteMedia = async (
+  slug: string,
+  importWebsiteMediaBody?: ImportWebsiteMediaBody,
+  options?: RequestInit,
+): Promise<ImportWebsiteMediaResponse> => {
+  return customFetch<ImportWebsiteMediaResponse>(
+    getImportVenueWebsiteMediaUrl(slug),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(importWebsiteMediaBody),
+    },
+  );
+};
+
+export const getImportVenueWebsiteMediaMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importVenueWebsiteMedia>>,
+    TError,
+    { slug: string; data: BodyType<ImportWebsiteMediaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importVenueWebsiteMedia>>,
+  TError,
+  { slug: string; data: BodyType<ImportWebsiteMediaBody> },
+  TContext
+> => {
+  const mutationKey = ["importVenueWebsiteMedia"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importVenueWebsiteMedia>>,
+    { slug: string; data: BodyType<ImportWebsiteMediaBody> }
+  > = (props) => {
+    const { slug, data } = props ?? {};
+
+    return importVenueWebsiteMedia(slug, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportVenueWebsiteMediaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importVenueWebsiteMedia>>
+>;
+export type ImportVenueWebsiteMediaMutationBody =
+  BodyType<ImportWebsiteMediaBody>;
+export type ImportVenueWebsiteMediaMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
+ */
+export const useImportVenueWebsiteMedia = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importVenueWebsiteMedia>>,
+    TError,
+    { slug: string; data: BodyType<ImportWebsiteMediaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importVenueWebsiteMedia>>,
+  TError,
+  { slug: string; data: BodyType<ImportWebsiteMediaBody> },
+  TContext
+> => {
+  return useMutation(getImportVenueWebsiteMediaMutationOptions(options));
+};
+
+/**
+ * @summary Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
+ */
+export const getCreateSampleGalleryUrl = (slug: string) => {
+  return `/api/venues/${slug}/sample-gallery`;
+};
+
+export const createSampleGallery = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<SessionResponse> => {
+  return customFetch<SessionResponse>(getCreateSampleGalleryUrl(slug), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCreateSampleGalleryMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSampleGallery>>,
+    TError,
+    { slug: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSampleGallery>>,
+  TError,
+  { slug: string },
+  TContext
+> => {
+  const mutationKey = ["createSampleGallery"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSampleGallery>>,
+    { slug: string }
+  > = (props) => {
+    const { slug } = props ?? {};
+
+    return createSampleGallery(slug, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSampleGalleryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSampleGallery>>
+>;
+
+export type CreateSampleGalleryMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
+ */
+export const useCreateSampleGallery = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSampleGallery>>,
+    TError,
+    { slug: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSampleGallery>>,
+  TError,
+  { slug: string },
+  TContext
+> => {
+  return useMutation(getCreateSampleGalleryMutationOptions(options));
+};
+
+/**
+ * @summary Onboarding checklist — record that the printable tour card was downloaded
+ */
+export const getMarkTourCardDownloadedUrl = (slug: string) => {
+  return `/api/venues/${slug}/tour-card-downloaded`;
+};
+
+export const markTourCardDownloaded = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<VenueResponse> => {
+  return customFetch<VenueResponse>(getMarkTourCardDownloadedUrl(slug), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkTourCardDownloadedMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markTourCardDownloaded>>,
+    TError,
+    { slug: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markTourCardDownloaded>>,
+  TError,
+  { slug: string },
+  TContext
+> => {
+  const mutationKey = ["markTourCardDownloaded"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markTourCardDownloaded>>,
+    { slug: string }
+  > = (props) => {
+    const { slug } = props ?? {};
+
+    return markTourCardDownloaded(slug, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkTourCardDownloadedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markTourCardDownloaded>>
+>;
+
+export type MarkTourCardDownloadedMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Onboarding checklist — record that the printable tour card was downloaded
+ */
+export const useMarkTourCardDownloaded = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markTourCardDownloaded>>,
+    TError,
+    { slug: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markTourCardDownloaded>>,
+  TError,
+  { slug: string },
+  TContext
+> => {
+  return useMutation(getMarkTourCardDownloadedMutationOptions(options));
+};
+
+/**
+ * Public, rate-limited per IP. Events are validated against a fixed list and written to funnel_events.
+ * @summary Record an owner-funnel event from the public site or dashboard
+ */
+export const getRecordFunnelEventUrl = () => {
+  return `/api/events`;
+};
+
+export const recordFunnelEvent = async (
+  funnelEventBody: FunnelEventBody,
+  options?: RequestInit,
+): Promise<FunnelEventResponse> => {
+  return customFetch<FunnelEventResponse>(getRecordFunnelEventUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(funnelEventBody),
+  });
+};
+
+export const getRecordFunnelEventMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordFunnelEvent>>,
+    TError,
+    { data: BodyType<FunnelEventBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordFunnelEvent>>,
+  TError,
+  { data: BodyType<FunnelEventBody> },
+  TContext
+> => {
+  const mutationKey = ["recordFunnelEvent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordFunnelEvent>>,
+    { data: BodyType<FunnelEventBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return recordFunnelEvent(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordFunnelEventMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordFunnelEvent>>
+>;
+export type RecordFunnelEventMutationBody = BodyType<FunnelEventBody>;
+export type RecordFunnelEventMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Record an owner-funnel event from the public site or dashboard
+ */
+export const useRecordFunnelEvent = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordFunnelEvent>>,
+    TError,
+    { data: BodyType<FunnelEventBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordFunnelEvent>>,
+  TError,
+  { data: BodyType<FunnelEventBody> },
+  TContext
+> => {
+  return useMutation(getRecordFunnelEventMutationOptions(options));
+};
+
+/**
+ * @summary Resolve an outreach claim link to the venue it was sent to (public, pre-fills signup)
+ */
+export const getGetOutreachClaimUrl = (token: string) => {
+  return `/api/outreach/claim/${token}`;
+};
+
+export const getOutreachClaim = async (
+  token: string,
+  options?: RequestInit,
+): Promise<OutreachClaimResponse> => {
+  return customFetch<OutreachClaimResponse>(getGetOutreachClaimUrl(token), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetOutreachClaimQueryKey = (token: string) => {
+  return [`/api/outreach/claim/${token}`] as const;
+};
+
+export const getGetOutreachClaimQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOutreachClaim>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOutreachClaim>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetOutreachClaimQueryKey(token);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getOutreachClaim>>
+  > = ({ signal }) => getOutreachClaim(token, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!token,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getOutreachClaim>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetOutreachClaimQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOutreachClaim>>
+>;
+export type GetOutreachClaimQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Resolve an outreach claim link to the venue it was sent to (public, pre-fills signup)
+ */
+
+export function useGetOutreachClaim<
+  TData = Awaited<ReturnType<typeof getOutreachClaim>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOutreachClaim>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOutreachClaimQueryOptions(token, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List available gallery styles
@@ -3329,6 +3883,96 @@ export function useListControlExperiments<
 }
 
 /**
+ * @summary Create an experiment card (operator)
+ */
+export const getCreateControlExperimentUrl = () => {
+  return `/api/control/experiments`;
+};
+
+export const createControlExperiment = async (
+  controlExperimentCreateBody: ControlExperimentCreateBody,
+  options?: RequestInit,
+): Promise<ControlExperimentResponse> => {
+  return customFetch<ControlExperimentResponse>(
+    getCreateControlExperimentUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlExperimentCreateBody),
+    },
+  );
+};
+
+export const getCreateControlExperimentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createControlExperiment>>,
+    TError,
+    { data: BodyType<ControlExperimentCreateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createControlExperiment>>,
+  TError,
+  { data: BodyType<ControlExperimentCreateBody> },
+  TContext
+> => {
+  const mutationKey = ["createControlExperiment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createControlExperiment>>,
+    { data: BodyType<ControlExperimentCreateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createControlExperiment(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateControlExperimentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createControlExperiment>>
+>;
+export type CreateControlExperimentMutationBody =
+  BodyType<ControlExperimentCreateBody>;
+export type CreateControlExperimentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Create an experiment card (operator)
+ */
+export const useCreateControlExperiment = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createControlExperiment>>,
+    TError,
+    { data: BodyType<ControlExperimentCreateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createControlExperiment>>,
+  TError,
+  { data: BodyType<ControlExperimentCreateBody> },
+  TContext
+> => {
+  return useMutation(getCreateControlExperimentMutationOptions(options));
+};
+
+/**
  * @summary Immutable audit trail of agent, operator, and system events
  */
 export const getGetControlAuditUrl = (params?: GetControlAuditParams) => {
@@ -3496,6 +4140,93 @@ export function useListControlPolicies<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Operator edits one governance policy value (validated per key, bounds enforced)
+ */
+export const getUpdateControlPolicyUrl = (key: string) => {
+  return `/api/control/policies/${key}`;
+};
+
+export const updateControlPolicy = async (
+  key: string,
+  controlPolicyUpdateBody: ControlPolicyUpdateBody,
+  options?: RequestInit,
+): Promise<ControlPolicyResponse> => {
+  return customFetch<ControlPolicyResponse>(getUpdateControlPolicyUrl(key), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(controlPolicyUpdateBody),
+  });
+};
+
+export const getUpdateControlPolicyMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPolicy>>,
+    TError,
+    { key: string; data: BodyType<ControlPolicyUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlPolicy>>,
+  TError,
+  { key: string; data: BodyType<ControlPolicyUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlPolicy"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlPolicy>>,
+    { key: string; data: BodyType<ControlPolicyUpdateBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return updateControlPolicy(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlPolicyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlPolicy>>
+>;
+export type UpdateControlPolicyMutationBody = BodyType<ControlPolicyUpdateBody>;
+export type UpdateControlPolicyMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Operator edits one governance policy value (validated per key, bounds enforced)
+ */
+export const useUpdateControlPolicy = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlPolicy>>,
+    TError,
+    { key: string; data: BodyType<ControlPolicyUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlPolicy>>,
+  TError,
+  { key: string; data: BodyType<ControlPolicyUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlPolicyMutationOptions(options));
+};
 
 /**
  * @summary KPI snapshot history for trends
@@ -3898,6 +4629,97 @@ export function useListControlCampaigns<
 }
 
 /**
+ * @summary Operator launches, pauses, resumes, or completes a campaign
+ */
+export const getSetControlCampaignStatusUrl = (id: number) => {
+  return `/api/control/campaigns/${id}/status`;
+};
+
+export const setControlCampaignStatus = async (
+  id: number,
+  controlCampaignStatusBody: ControlCampaignStatusBody,
+  options?: RequestInit,
+): Promise<ControlCampaignResponse> => {
+  return customFetch<ControlCampaignResponse>(
+    getSetControlCampaignStatusUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlCampaignStatusBody),
+    },
+  );
+};
+
+export const getSetControlCampaignStatusMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlCampaignStatus>>,
+    TError,
+    { id: number; data: BodyType<ControlCampaignStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setControlCampaignStatus>>,
+  TError,
+  { id: number; data: BodyType<ControlCampaignStatusBody> },
+  TContext
+> => {
+  const mutationKey = ["setControlCampaignStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setControlCampaignStatus>>,
+    { id: number; data: BodyType<ControlCampaignStatusBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setControlCampaignStatus(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetControlCampaignStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setControlCampaignStatus>>
+>;
+export type SetControlCampaignStatusMutationBody =
+  BodyType<ControlCampaignStatusBody>;
+export type SetControlCampaignStatusMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Operator launches, pauses, resumes, or completes a campaign
+ */
+export const useSetControlCampaignStatus = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlCampaignStatus>>,
+    TError,
+    { id: number; data: BodyType<ControlCampaignStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setControlCampaignStatus>>,
+  TError,
+  { id: number; data: BodyType<ControlCampaignStatusBody> },
+  TContext
+> => {
+  return useMutation(getSetControlCampaignStatusMutationOptions(options));
+};
+
+/**
  * @summary Outreach studio emails with prospect and approval state
  */
 export const getListControlOutreachEmailsUrl = (
@@ -4279,93 +5101,6 @@ export const useRegenerateControlOutreachEmail = <
 };
 
 /**
- * @summary Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
- */
-export const getRequestControlSamplePreviewUrl = (id: number) => {
-  return `/api/control/outreach/emails/${id}/sample-preview`;
-};
-
-export const requestControlSamplePreview = async (
-  id: number,
-  options?: RequestInit,
-): Promise<ControlOutreachEmailDetailResponse> => {
-  return customFetch<ControlOutreachEmailDetailResponse>(
-    getRequestControlSamplePreviewUrl(id),
-    {
-      ...options,
-      method: "POST",
-    },
-  );
-};
-
-export const getRequestControlSamplePreviewMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof requestControlSamplePreview>>,
-    TError,
-    { id: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof requestControlSamplePreview>>,
-  TError,
-  { id: number },
-  TContext
-> => {
-  const mutationKey = ["requestControlSamplePreview"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof requestControlSamplePreview>>,
-    { id: number }
-  > = (props) => {
-    const { id } = props ?? {};
-
-    return requestControlSamplePreview(id, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type RequestControlSamplePreviewMutationResult = NonNullable<
-  Awaited<ReturnType<typeof requestControlSamplePreview>>
->;
-
-export type RequestControlSamplePreviewMutationError = ErrorType<ErrorEnvelope>;
-
-/**
- * @summary Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
- */
-export const useRequestControlSamplePreview = <
-  TError = ErrorType<ErrorEnvelope>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof requestControlSamplePreview>>,
-    TError,
-    { id: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof requestControlSamplePreview>>,
-  TError,
-  { id: number },
-  TContext
-> => {
-  return useMutation(getRequestControlSamplePreviewMutationOptions(options));
-};
-
-/**
  * @summary Research the prospect's venue, write a studio draft, and queue it for approval
  */
 export const getDraftControlOutreachEmailUrl = (id: number) => {
@@ -4457,43 +5192,138 @@ export const useDraftControlOutreachEmail = <
 };
 
 /**
- * @summary Re-run the venue website research (facts and photos) for a prospect
+ * @summary Vetting verdict, every check with its evidence, verified facts with sources, and research for one prospect
  */
-export const getResearchControlProspectUrl = (id: number) => {
-  return `/api/control/prospects/${id}/research`;
+export const getGetControlProspectEvidenceUrl = (id: number) => {
+  return `/api/control/prospects/${id}/evidence`;
 };
 
-export const researchControlProspect = async (
+export const getControlProspectEvidence = async (
   id: number,
   options?: RequestInit,
-): Promise<ControlProspectResearchResponse> => {
-  return customFetch<ControlProspectResearchResponse>(
-    getResearchControlProspectUrl(id),
+): Promise<ControlProspectEvidenceResponse> => {
+  return customFetch<ControlProspectEvidenceResponse>(
+    getGetControlProspectEvidenceUrl(id),
     {
       ...options,
-      method: "POST",
+      method: "GET",
     },
   );
 };
 
-export const getResearchControlProspectMutationOptions = <
+export const getGetControlProspectEvidenceQueryKey = (id: number) => {
+  return [`/api/control/prospects/${id}/evidence`] as const;
+};
+
+export const getGetControlProspectEvidenceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlProspectEvidence>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlProspectEvidence>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetControlProspectEvidenceQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlProspectEvidence>>
+  > = ({ signal }) =>
+    getControlProspectEvidence(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlProspectEvidence>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlProspectEvidenceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlProspectEvidence>>
+>;
+export type GetControlProspectEvidenceQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Vetting verdict, every check with its evidence, verified facts with sources, and research for one prospect
+ */
+
+export function useGetControlProspectEvidence<
+  TData = Awaited<ReturnType<typeof getControlProspectEvidence>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getControlProspectEvidence>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlProspectEvidenceQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Run (or re-run) legitimacy vetting for a prospect now
+ */
+export const getVetControlProspectUrl = (id: number) => {
+  return `/api/control/prospects/${id}/vet`;
+};
+
+export const vetControlProspect = async (
+  id: number,
+  vetControlProspectBody?: VetControlProspectBody,
+  options?: RequestInit,
+): Promise<ControlProspectEvidenceResponse> => {
+  return customFetch<ControlProspectEvidenceResponse>(
+    getVetControlProspectUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(vetControlProspectBody),
+    },
+  );
+};
+
+export const getVetControlProspectMutationOptions = <
   TError = ErrorType<ErrorEnvelope>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof researchControlProspect>>,
+    Awaited<ReturnType<typeof vetControlProspect>>,
     TError,
-    { id: number },
+    { id: number; data: BodyType<VetControlProspectBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof researchControlProspect>>,
+  Awaited<ReturnType<typeof vetControlProspect>>,
   TError,
-  { id: number },
+  { id: number; data: BodyType<VetControlProspectBody> },
   TContext
 > => {
-  const mutationKey = ["researchControlProspect"];
+  const mutationKey = ["vetControlProspect"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -4503,42 +5333,1177 @@ export const getResearchControlProspectMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof researchControlProspect>>,
-    { id: number }
+    Awaited<ReturnType<typeof vetControlProspect>>,
+    { id: number; data: BodyType<VetControlProspectBody> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return researchControlProspect(id, requestOptions);
+    return vetControlProspect(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type ResearchControlProspectMutationResult = NonNullable<
-  Awaited<ReturnType<typeof researchControlProspect>>
+export type VetControlProspectMutationResult = NonNullable<
+  Awaited<ReturnType<typeof vetControlProspect>>
 >;
-
-export type ResearchControlProspectMutationError = ErrorType<ErrorEnvelope>;
+export type VetControlProspectMutationBody = BodyType<VetControlProspectBody>;
+export type VetControlProspectMutationError = ErrorType<ErrorEnvelope>;
 
 /**
- * @summary Re-run the venue website research (facts and photos) for a prospect
+ * @summary Run (or re-run) legitimacy vetting for a prospect now
  */
-export const useResearchControlProspect = <
+export const useVetControlProspect = <
   TError = ErrorType<ErrorEnvelope>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof researchControlProspect>>,
+    Awaited<ReturnType<typeof vetControlProspect>>,
+    TError,
+    { id: number; data: BodyType<VetControlProspectBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof vetControlProspect>>,
+  TError,
+  { id: number; data: BodyType<VetControlProspectBody> },
+  TContext
+> => {
+  return useMutation(getVetControlProspectMutationOptions(options));
+};
+
+/**
+ * @summary Operator decision on a prospect's legitimacy (pass or fail) with a note
+ */
+export const getOverrideControlProspectVettingUrl = (id: number) => {
+  return `/api/control/prospects/${id}/vetting/override`;
+};
+
+export const overrideControlProspectVetting = async (
+  id: number,
+  overrideControlProspectVettingBody: OverrideControlProspectVettingBody,
+  options?: RequestInit,
+): Promise<ControlProspectEvidenceResponse> => {
+  return customFetch<ControlProspectEvidenceResponse>(
+    getOverrideControlProspectVettingUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(overrideControlProspectVettingBody),
+    },
+  );
+};
+
+export const getOverrideControlProspectVettingMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof overrideControlProspectVetting>>,
+    TError,
+    { id: number; data: BodyType<OverrideControlProspectVettingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof overrideControlProspectVetting>>,
+  TError,
+  { id: number; data: BodyType<OverrideControlProspectVettingBody> },
+  TContext
+> => {
+  const mutationKey = ["overrideControlProspectVetting"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof overrideControlProspectVetting>>,
+    { id: number; data: BodyType<OverrideControlProspectVettingBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return overrideControlProspectVetting(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type OverrideControlProspectVettingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof overrideControlProspectVetting>>
+>;
+export type OverrideControlProspectVettingMutationBody =
+  BodyType<OverrideControlProspectVettingBody>;
+export type OverrideControlProspectVettingMutationError =
+  ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Operator decision on a prospect's legitimacy (pass or fail) with a note
+ */
+export const useOverrideControlProspectVetting = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof overrideControlProspectVetting>>,
+    TError,
+    { id: number; data: BodyType<OverrideControlProspectVettingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof overrideControlProspectVetting>>,
+  TError,
+  { id: number; data: BodyType<OverrideControlProspectVettingBody> },
+  TContext
+> => {
+  return useMutation(getOverrideControlProspectVettingMutationOptions(options));
+};
+
+/**
+ * @summary Add an operator-verified venue fact with its source URL
+ */
+export const getAddControlProspectFactUrl = (id: number) => {
+  return `/api/control/prospects/${id}/facts`;
+};
+
+export const addControlProspectFact = async (
+  id: number,
+  addControlProspectFactBody: AddControlProspectFactBody,
+  options?: RequestInit,
+): Promise<ControlProspectEvidenceResponse> => {
+  return customFetch<ControlProspectEvidenceResponse>(
+    getAddControlProspectFactUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(addControlProspectFactBody),
+    },
+  );
+};
+
+export const getAddControlProspectFactMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addControlProspectFact>>,
+    TError,
+    { id: number; data: BodyType<AddControlProspectFactBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addControlProspectFact>>,
+  TError,
+  { id: number; data: BodyType<AddControlProspectFactBody> },
+  TContext
+> => {
+  const mutationKey = ["addControlProspectFact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addControlProspectFact>>,
+    { id: number; data: BodyType<AddControlProspectFactBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addControlProspectFact(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddControlProspectFactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addControlProspectFact>>
+>;
+export type AddControlProspectFactMutationBody =
+  BodyType<AddControlProspectFactBody>;
+export type AddControlProspectFactMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Add an operator-verified venue fact with its source URL
+ */
+export const useAddControlProspectFact = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addControlProspectFact>>,
+    TError,
+    { id: number; data: BodyType<AddControlProspectFactBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addControlProspectFact>>,
+  TError,
+  { id: number; data: BodyType<AddControlProspectFactBody> },
+  TContext
+> => {
+  return useMutation(getAddControlProspectFactMutationOptions(options));
+};
+
+/**
+ * @summary Remove a fact so the copywriter can no longer cite it
+ */
+export const getRemoveControlProspectFactUrl = (id: number, factId: number) => {
+  return `/api/control/prospects/${id}/facts/${factId}`;
+};
+
+export const removeControlProspectFact = async (
+  id: number,
+  factId: number,
+  options?: RequestInit,
+): Promise<ControlProspectEvidenceResponse> => {
+  return customFetch<ControlProspectEvidenceResponse>(
+    getRemoveControlProspectFactUrl(id, factId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getRemoveControlProspectFactMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeControlProspectFact>>,
+    TError,
+    { id: number; factId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeControlProspectFact>>,
+  TError,
+  { id: number; factId: number },
+  TContext
+> => {
+  const mutationKey = ["removeControlProspectFact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeControlProspectFact>>,
+    { id: number; factId: number }
+  > = (props) => {
+    const { id, factId } = props ?? {};
+
+    return removeControlProspectFact(id, factId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveControlProspectFactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeControlProspectFact>>
+>;
+
+export type RemoveControlProspectFactMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Remove a fact so the copywriter can no longer cite it
+ */
+export const useRemoveControlProspectFact = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeControlProspectFact>>,
+    TError,
+    { id: number; factId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeControlProspectFact>>,
+  TError,
+  { id: number; factId: number },
+  TContext
+> => {
+  return useMutation(getRemoveControlProspectFactMutationOptions(options));
+};
+
+/**
+ * @summary Deliverability guard, daily cap, and 14-day sending health for prospect outreach
+ */
+export const getGetControlOutreachSendingUrl = () => {
+  return `/api/control/outreach/sending`;
+};
+
+export const getControlOutreachSending = async (
+  options?: RequestInit,
+): Promise<ControlOutreachSendingState> => {
+  return customFetch<ControlOutreachSendingState>(
+    getGetControlOutreachSendingUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetControlOutreachSendingQueryKey = () => {
+  return [`/api/control/outreach/sending`] as const;
+};
+
+export const getGetControlOutreachSendingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlOutreachSending>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOutreachSending>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetControlOutreachSendingQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlOutreachSending>>
+  > = ({ signal }) => getControlOutreachSending({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOutreachSending>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlOutreachSendingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlOutreachSending>>
+>;
+export type GetControlOutreachSendingQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Deliverability guard, daily cap, and 14-day sending health for prospect outreach
+ */
+
+export function useGetControlOutreachSending<
+  TData = Awaited<ReturnType<typeof getControlOutreachSending>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlOutreachSending>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlOutreachSendingQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Pause or reset the deliverability guard (reset is always manual)
+ */
+export const getSetControlOutreachSendingUrl = () => {
+  return `/api/control/outreach/sending`;
+};
+
+export const setControlOutreachSending = async (
+  setControlOutreachSendingBody: SetControlOutreachSendingBody,
+  options?: RequestInit,
+): Promise<ControlOutreachSendingState> => {
+  return customFetch<ControlOutreachSendingState>(
+    getSetControlOutreachSendingUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(setControlOutreachSendingBody),
+    },
+  );
+};
+
+export const getSetControlOutreachSendingMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlOutreachSending>>,
+    TError,
+    { data: BodyType<SetControlOutreachSendingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setControlOutreachSending>>,
+  TError,
+  { data: BodyType<SetControlOutreachSendingBody> },
+  TContext
+> => {
+  const mutationKey = ["setControlOutreachSending"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setControlOutreachSending>>,
+    { data: BodyType<SetControlOutreachSendingBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setControlOutreachSending(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetControlOutreachSendingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setControlOutreachSending>>
+>;
+export type SetControlOutreachSendingMutationBody =
+  BodyType<SetControlOutreachSendingBody>;
+export type SetControlOutreachSendingMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Pause or reset the deliverability guard (reset is always manual)
+ */
+export const useSetControlOutreachSending = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setControlOutreachSending>>,
+    TError,
+    { data: BodyType<SetControlOutreachSendingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setControlOutreachSending>>,
+  TError,
+  { data: BodyType<SetControlOutreachSendingBody> },
+  TContext
+> => {
+  return useMutation(getSetControlOutreachSendingMutationOptions(options));
+};
+
+/**
+ * @summary Outcome KPIs, adaptation state, copy variants, recent rule firings, latest digest
+ */
+export const getGetControlGrowthUrl = () => {
+  return `/api/control/growth`;
+};
+
+export const getControlGrowth = async (
+  options?: RequestInit,
+): Promise<ControlGrowthResponse> => {
+  return customFetch<ControlGrowthResponse>(getGetControlGrowthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetControlGrowthQueryKey = () => {
+  return [`/api/control/growth`] as const;
+};
+
+export const getGetControlGrowthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getControlGrowth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlGrowth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetControlGrowthQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getControlGrowth>>
+  > = ({ signal }) => getControlGrowth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getControlGrowth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetControlGrowthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getControlGrowth>>
+>;
+export type GetControlGrowthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Outcome KPIs, adaptation state, copy variants, recent rule firings, latest digest
+ */
+
+export function useGetControlGrowth<
+  TData = Awaited<ReturnType<typeof getControlGrowth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getControlGrowth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetControlGrowthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Take a fresh KPI snapshot now (also runs the experiment evaluator and adaptation rules)
+ */
+export const getRecomputeControlGrowthUrl = () => {
+  return `/api/control/growth/recompute`;
+};
+
+export const recomputeControlGrowth = async (
+  options?: RequestInit,
+): Promise<ControlGrowthResponse> => {
+  return customFetch<ControlGrowthResponse>(getRecomputeControlGrowthUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRecomputeControlGrowthMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recomputeControlGrowth>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recomputeControlGrowth>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["recomputeControlGrowth"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recomputeControlGrowth>>,
+    void
+  > = () => {
+    return recomputeControlGrowth(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecomputeControlGrowthMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recomputeControlGrowth>>
+>;
+
+export type RecomputeControlGrowthMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Take a fresh KPI snapshot now (also runs the experiment evaluator and adaptation rules)
+ */
+export const useRecomputeControlGrowth = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recomputeControlGrowth>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recomputeControlGrowth>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRecomputeControlGrowthMutationOptions(options));
+};
+
+/**
+ * @summary Pause, resume, reweight or reword a copy variant
+ */
+export const getUpdateControlCopyVariantUrl = (key: string) => {
+  return `/api/control/growth/variants/${key}`;
+};
+
+export const updateControlCopyVariant = async (
+  key: string,
+  controlCopyVariantUpdateBody: ControlCopyVariantUpdateBody,
+  options?: RequestInit,
+): Promise<ControlCopyVariantResponse> => {
+  return customFetch<ControlCopyVariantResponse>(
+    getUpdateControlCopyVariantUrl(key),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlCopyVariantUpdateBody),
+    },
+  );
+};
+
+export const getUpdateControlCopyVariantMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlCopyVariant>>,
+    TError,
+    { key: string; data: BodyType<ControlCopyVariantUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlCopyVariant>>,
+  TError,
+  { key: string; data: BodyType<ControlCopyVariantUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlCopyVariant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlCopyVariant>>,
+    { key: string; data: BodyType<ControlCopyVariantUpdateBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return updateControlCopyVariant(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlCopyVariantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlCopyVariant>>
+>;
+export type UpdateControlCopyVariantMutationBody =
+  BodyType<ControlCopyVariantUpdateBody>;
+export type UpdateControlCopyVariantMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Pause, resume, reweight or reword a copy variant
+ */
+export const useUpdateControlCopyVariant = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlCopyVariant>>,
+    TError,
+    { key: string; data: BodyType<ControlCopyVariantUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlCopyVariant>>,
+  TError,
+  { key: string; data: BodyType<ControlCopyVariantUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlCopyVariantMutationOptions(options));
+};
+
+/**
+ * @summary Operator resets the deliverability guard to ok and restores the base daily cap
+ */
+export const getResetControlDeliverabilityGuardUrl = () => {
+  return `/api/control/growth/guard/reset`;
+};
+
+export const resetControlDeliverabilityGuard = async (
+  controlGuardResetBody: ControlGuardResetBody,
+  options?: RequestInit,
+): Promise<ControlGrowthResponse> => {
+  return customFetch<ControlGrowthResponse>(
+    getResetControlDeliverabilityGuardUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlGuardResetBody),
+    },
+  );
+};
+
+export const getResetControlDeliverabilityGuardMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetControlDeliverabilityGuard>>,
+    TError,
+    { data: BodyType<ControlGuardResetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetControlDeliverabilityGuard>>,
+  TError,
+  { data: BodyType<ControlGuardResetBody> },
+  TContext
+> => {
+  const mutationKey = ["resetControlDeliverabilityGuard"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetControlDeliverabilityGuard>>,
+    { data: BodyType<ControlGuardResetBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return resetControlDeliverabilityGuard(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetControlDeliverabilityGuardMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetControlDeliverabilityGuard>>
+>;
+export type ResetControlDeliverabilityGuardMutationBody =
+  BodyType<ControlGuardResetBody>;
+export type ResetControlDeliverabilityGuardMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Operator resets the deliverability guard to ok and restores the base daily cap
+ */
+export const useResetControlDeliverabilityGuard = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetControlDeliverabilityGuard>>,
+    TError,
+    { data: BodyType<ControlGuardResetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetControlDeliverabilityGuard>>,
+  TError,
+  { data: BodyType<ControlGuardResetBody> },
+  TContext
+> => {
+  return useMutation(
+    getResetControlDeliverabilityGuardMutationOptions(options),
+  );
+};
+
+/**
+ * @summary Edit card fields while proposed or running; start a proposed experiment
+ */
+export const getUpdateControlExperimentUrl = (id: number) => {
+  return `/api/control/experiments/${id}`;
+};
+
+export const updateControlExperiment = async (
+  id: number,
+  controlExperimentUpdateBody: ControlExperimentUpdateBody,
+  options?: RequestInit,
+): Promise<ControlExperimentResponse> => {
+  return customFetch<ControlExperimentResponse>(
+    getUpdateControlExperimentUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlExperimentUpdateBody),
+    },
+  );
+};
+
+export const getUpdateControlExperimentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlExperiment>>,
+    TError,
+    { id: number; data: BodyType<ControlExperimentUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateControlExperiment>>,
+  TError,
+  { id: number; data: BodyType<ControlExperimentUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateControlExperiment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateControlExperiment>>,
+    { id: number; data: BodyType<ControlExperimentUpdateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateControlExperiment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateControlExperimentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateControlExperiment>>
+>;
+export type UpdateControlExperimentMutationBody =
+  BodyType<ControlExperimentUpdateBody>;
+export type UpdateControlExperimentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Edit card fields while proposed or running; start a proposed experiment
+ */
+export const useUpdateControlExperiment = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateControlExperiment>>,
+    TError,
+    { id: number; data: BodyType<ControlExperimentUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateControlExperiment>>,
+  TError,
+  { id: number; data: BodyType<ControlExperimentUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateControlExperimentMutationOptions(options));
+};
+
+/**
+ * @summary Run the deterministic evaluator now without deciding
+ */
+export const getEvaluateControlExperimentUrl = (id: number) => {
+  return `/api/control/experiments/${id}/evaluate`;
+};
+
+export const evaluateControlExperiment = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ControlExperimentEvaluationResponse> => {
+  return customFetch<ControlExperimentEvaluationResponse>(
+    getEvaluateControlExperimentUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getEvaluateControlExperimentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateControlExperiment>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof evaluateControlExperiment>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["evaluateControlExperiment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof evaluateControlExperiment>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return evaluateControlExperiment(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EvaluateControlExperimentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof evaluateControlExperiment>>
+>;
+
+export type EvaluateControlExperimentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Run the deterministic evaluator now without deciding
+ */
+export const useEvaluateControlExperiment = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateControlExperiment>>,
     TError,
     { id: number },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof researchControlProspect>>,
+  Awaited<ReturnType<typeof evaluateControlExperiment>>,
   TError,
   { id: number },
   TContext
 > => {
-  return useMutation(getResearchControlProspectMutationOptions(options));
+  return useMutation(getEvaluateControlExperimentMutationOptions(options));
+};
+
+/**
+ * @summary Operator decision (win, kill, inconclusive, or extend the decision date)
+ */
+export const getDecideControlExperimentUrl = (id: number) => {
+  return `/api/control/experiments/${id}/decision`;
+};
+
+export const decideControlExperiment = async (
+  id: number,
+  controlExperimentDecisionBody: ControlExperimentDecisionBody,
+  options?: RequestInit,
+): Promise<ControlExperimentResponse> => {
+  return customFetch<ControlExperimentResponse>(
+    getDecideControlExperimentUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(controlExperimentDecisionBody),
+    },
+  );
+};
+
+export const getDecideControlExperimentMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideControlExperiment>>,
+    TError,
+    { id: number; data: BodyType<ControlExperimentDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideControlExperiment>>,
+  TError,
+  { id: number; data: BodyType<ControlExperimentDecisionBody> },
+  TContext
+> => {
+  const mutationKey = ["decideControlExperiment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideControlExperiment>>,
+    { id: number; data: BodyType<ControlExperimentDecisionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return decideControlExperiment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideControlExperimentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideControlExperiment>>
+>;
+export type DecideControlExperimentMutationBody =
+  BodyType<ControlExperimentDecisionBody>;
+export type DecideControlExperimentMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Operator decision (win, kill, inconclusive, or extend the decision date)
+ */
+export const useDecideControlExperiment = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideControlExperiment>>,
+    TError,
+    { id: number; data: BodyType<ControlExperimentDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideControlExperiment>>,
+  TError,
+  { id: number; data: BodyType<ControlExperimentDecisionBody> },
+  TContext
+> => {
+  return useMutation(getDecideControlExperimentMutationOptions(options));
+};
+
+/**
+ * @summary Build (or rebuild) this week's digest now and queue the send action
+ */
+export const getGenerateControlDigestUrl = () => {
+  return `/api/control/digest/generate`;
+};
+
+export const generateControlDigest = async (
+  controlDigestGenerateBody?: ControlDigestGenerateBody,
+  options?: RequestInit,
+): Promise<ControlDigestResponse> => {
+  return customFetch<ControlDigestResponse>(getGenerateControlDigestUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(controlDigestGenerateBody),
+  });
+};
+
+export const getGenerateControlDigestMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateControlDigest>>,
+    TError,
+    { data: BodyType<ControlDigestGenerateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateControlDigest>>,
+  TError,
+  { data: BodyType<ControlDigestGenerateBody> },
+  TContext
+> => {
+  const mutationKey = ["generateControlDigest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateControlDigest>>,
+    { data: BodyType<ControlDigestGenerateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateControlDigest(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateControlDigestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateControlDigest>>
+>;
+export type GenerateControlDigestMutationBody =
+  BodyType<ControlDigestGenerateBody>;
+export type GenerateControlDigestMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Build (or rebuild) this week's digest now and queue the send action
+ */
+export const useGenerateControlDigest = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateControlDigest>>,
+    TError,
+    { data: BodyType<ControlDigestGenerateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateControlDigest>>,
+  TError,
+  { data: BodyType<ControlDigestGenerateBody> },
+  TContext
+> => {
+  return useMutation(getGenerateControlDigestMutationOptions(options));
 };

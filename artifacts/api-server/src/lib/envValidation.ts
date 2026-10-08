@@ -228,9 +228,10 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
     "PORT",
     "DATABASE_URL",
     "UPLOAD_TOKEN_SECRET",
-    "SESSION_SECRET",
     // Clerk is optional at boot: owner/organization routes return 503 and the
     // web app shows a setup notice until CLERK_SECRET_KEY is configured.
+    // (WS-B: make CLERK_* and CONTROL_PLANE_OPERATOR_EMAILS required here once
+    // the security smoke's clerkless fixture is updated with it.)
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
     "STRIPE_PRICE_STARTER_MONTHLY",
@@ -371,6 +372,62 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
   const imageSize = env.GEMINI_IMAGE_SIZE ?? "2K";
   if (!["1K", "2K", "4K"].includes(imageSize)) {
     errors.push("GEMINI_IMAGE_SIZE must be one of 1K, 2K, or 4K in production");
+  }
+
+  // Published prices and trial clock: display values, optional, but a set value must parse.
+  for (const key of ["PRICING_STARTER_MONTHLY", "PRICING_GROWTH_MONTHLY", "PRICING_CREDIT_PACK"]) {
+    const raw = env[key]?.trim();
+    if (raw && !(Number.isFinite(Number(raw)) && Number(raw) > 0)) {
+      errors.push(`${key} must be a positive number (whole currency units)`);
+    }
+  }
+  for (const [key, min] of [
+    ["TRIAL_DAYS", 1],
+    ["COUPLE_PHOTO_RETENTION_DAYS", 1],
+    ["PUBLIC_FOUNDING_SLOTS_LEFT", 0],
+    ["PUBLIC_FOUNDING_SLOTS_TOTAL", 0],
+    ["PUBLIC_PROOF_MIN_VENUES", 1],
+    ["PUBLIC_PROOF_MIN_GALLERIES", 1],
+    ["VETTING_PLACES_DAILY_CAP", 0],
+    ["VETTING_TTL_DAYS", 1],
+    ["GROWTH_ACTIVATION_MIN_PHOTOS", 1],
+    ["GROWTH_NUDGE_GALLERY_COUNT", 1],
+    ["GROWTH_NUDGE_DAYS_BEFORE_END", 0],
+    ["GROWTH_GUARD_MIN_SENDS", 1],
+    ["GROWTH_SEGMENT_MIN_SENT", 1],
+    ["GROWTH_VARIANT_MIN_SENT", 1],
+    ["GROWTH_EXPERIMENT_MIN_N", 1],
+  ] as const) {
+    const raw = env[key]?.trim();
+    if (raw && !(Number.isInteger(Number(raw)) && Number(raw) >= min)) {
+      errors.push(`${key} must be an integer >= ${min}`);
+    }
+  }
+  const weekday = env.GROWTH_DIGEST_WEEKDAY?.trim();
+  if (weekday && !/^[0-6]$/.test(weekday)) {
+    errors.push("GROWTH_DIGEST_WEEKDAY must be 0-6 (0 = Sunday)");
+  }
+  const hour = env.GROWTH_DIGEST_HOUR_UTC?.trim();
+  if (hour && !(Number.isInteger(Number(hour)) && Number(hour) >= 0 && Number(hour) <= 23)) {
+    errors.push("GROWTH_DIGEST_HOUR_UTC must be 0-23");
+  }
+  for (const key of ["VETTING_RDAP_BASE_URL", "VETTING_WAYBACK_CDX_URL", "GROWTH_PRICING_URL"]) {
+    const raw = env[key]?.trim();
+    if (!raw) continue;
+    try {
+      if (new URL(raw).protocol !== "https:") errors.push(`${key} must be an https URL`);
+    } catch {
+      errors.push(`${key} must be a valid URL`);
+    }
+  }
+  if (
+    env.PUBLIC_CONTACT_EMAIL?.trim() &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(env.PUBLIC_CONTACT_EMAIL.trim())
+  ) {
+    errors.push("PUBLIC_CONTACT_EMAIL must be an email address");
+  }
+  if (env.GROWTH_LOOP_ENABLED?.trim() && !/^(on|off)$/i.test(env.GROWTH_LOOP_ENABLED.trim())) {
+    errors.push("GROWTH_LOOP_ENABLED must be on or off");
   }
 
   return errors;

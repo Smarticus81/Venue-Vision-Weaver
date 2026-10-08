@@ -7,7 +7,6 @@ import {
   getGetControlOutreachEmailQueryKey,
   useUpdateControlOutreachEmail,
   useRegenerateControlOutreachEmail,
-  useRequestControlSamplePreview,
   useDecideControlAction,
   getListControlActionsQueryKey,
   getGetControlOverviewQueryKey,
@@ -18,7 +17,7 @@ import {
   type ErrorEnvelope,
   type ErrorType,
 } from "@workspace/api-client-react";
-import { Loader2, Monitor, Smartphone, Sun, Moon, RefreshCw, ExternalLink, Sparkles, FileText } from "lucide-react";
+import { Loader2, Monitor, Smartphone, Sun, Moon, RefreshCw, ExternalLink, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ActionButton, Card, EmptyState, Pill, TabLoading, apiErrorMessage, fmt } from "./shared";
@@ -147,9 +146,6 @@ function EmailReview({ emailId }: { emailId: number }) {
   const regenerate = useRegenerateControlOutreachEmail({
     mutation: { onSuccess: () => { toast({ title: "Draft regenerated" }); invalidate(); }, onError: onError("Could not regenerate") },
   });
-  const samplePreview = useRequestControlSamplePreview({
-    mutation: { onSuccess: () => invalidate(), onError: onError("Sample preview unavailable") },
-  });
   const decide = useDecideControlAction({
     mutation: {
       onSuccess: (data) => {
@@ -176,10 +172,9 @@ function EmailReview({ emailId }: { emailId: number }) {
     <EmailReviewBody
       key={`${detail.email.id}:${detail.email.updatedAt}`}
       detail={detail}
-      busy={update.isPending || regenerate.isPending || decide.isPending || samplePreview.isPending}
+      busy={update.isPending || regenerate.isPending || decide.isPending}
       onSave={(data) => update.mutate({ id: emailId, data })}
       onRegenerate={(mode) => regenerate.mutate({ id: emailId, data: { mode } })}
-      onSamplePreview={() => samplePreview.mutate({ id: emailId })}
       onDecide={(decision, note) =>
         detail.action ? decide.mutate({ id: detail.action.id, data: { decision, note: note || undefined } }) : undefined
       }
@@ -192,7 +187,6 @@ function EmailReviewBody({
   busy,
   onSave,
   onRegenerate,
-  onSamplePreview,
   onDecide,
 }: {
   detail: ControlOutreachEmailDetail;
@@ -207,7 +201,6 @@ function EmailReviewBody({
     imageAssetIds?: number[];
   }) => void;
   onRegenerate: (mode: "copy" | "research" | "both") => void;
-  onSamplePreview: () => void;
   onDecide: (decision: "approve" | "reject", note: string) => void;
 }) {
   const { email, prospect, action, research, assets, preview, warnings, editable } = detail;
@@ -453,19 +446,9 @@ function EmailReviewBody({
             <div className="flex items-center justify-between">
               <h3 className="mono-label text-muted-foreground">Photos ({imageIds.length}/3 in email)</h3>
               {editable ? (
-                <div className="flex items-center gap-1.5">
-                  <ActionButton tone="neutral" disabled={busy} onClick={() => onRegenerate("research")} title="Fetch the venue site again">
-                    <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} /> Re-fetch
-                  </ActionButton>
-                  <ActionButton
-                    tone="neutral"
-                    disabled={busy || !detail.samplePreviewsEnabled}
-                    title={detail.samplePreviewsEnabled ? "Generate a labeled Dreemer sample for this venue" : "Sample previews are not enabled in this build"}
-                    onClick={onSamplePreview}
-                  >
-                    <Sparkles className="h-3 w-3" /> Sample
-                  </ActionButton>
-                </div>
+                <ActionButton tone="neutral" disabled={busy} onClick={() => onRegenerate("research")} title="Fetch the venue site again">
+                  <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} /> Re-fetch
+                </ActionButton>
               ) : null}
             </div>
             {assets.length === 0 ? (

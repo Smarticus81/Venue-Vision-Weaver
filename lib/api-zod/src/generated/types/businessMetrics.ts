@@ -10,6 +10,7 @@ import type { BusinessMetricsCredits } from "./businessMetricsCredits";
 import type { BusinessMetricsOrganizations } from "./businessMetricsOrganizations";
 import type { BusinessMetricsSessions } from "./businessMetricsSessions";
 import type { BusinessMetricsVenues } from "./businessMetricsVenues";
+import type { GrowthKpis } from "./growthKpis";
 
 /**
  * Live business KPIs computed from production tables.
@@ -21,4 +22,5 @@ export interface BusinessMetrics {
   sessions: BusinessMetricsSessions;
   credits: BusinessMetricsCredits;
   assets: BusinessMetricsAssets;
+  growth?: GrowthKpis;
 }

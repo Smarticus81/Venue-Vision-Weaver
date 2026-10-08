@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import {
   db,
   controlAgentsTable,
@@ -13,40 +13,30 @@ import {
   AGENT_TASK_STATUSES,
   AGENT_ACTION_STATUSES,
   AGENT_STATUSES,
-  PROSPECT_STATUSES,
 } from "@workspace/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import {
   SetControlAgentStatusBody,
   DecideControlActionBody,
   SetControlTaskStatusBody,
-  SetControlProspectStatusBody,
-  UpdateControlOutreachEmailBody,
-  RegenerateControlOutreachEmailBody,
-  DraftControlOutreachEmailBody,
 } from "@workspace/api-zod";
 import { requireOperator } from "../control-plane/operatorAuth.js";
 import { requireOwnerMutationOrigin } from "../lib/orgAuth.js";
-import { getAgentDefinition, AGENT_DEFINITIONS } from "../control-plane/agents.js";
+import { getAgentDefinition } from "../control-plane/agents.js";
 import { computeBusinessMetrics } from "../control-plane/metrics.js";
 import { startAgentRun } from "../control-plane/runner.js";
 import { decideAction } from "../control-plane/actions.js";
 import { listPolicies } from "../control-plane/policies.js";
 import { controlPlaneAiConfigured, controlPlaneModel } from "../control-plane/grok.js";
 import { recordAuditEvent } from "../control-plane/audit.js";
-import {
-  createDraft,
-  ensureResearch,
-  getEmailDetail,
-  listEmails,
-  loadProspectAssets,
-  loadProspectById,
-  regenerateEmail,
-  updateEmail,
-} from "../control-plane/outreach/studio.js";
-import { publicObjectUrl, samplePreviewsEnabled } from "../control-plane/outreach/config.js";
-import { OUTREACH_EMAIL_STATUSES } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+
+/**
+ * Control-plane cockpit routes: overview, agents, runs, actions, tasks,
+ * audit, policies, campaigns and metrics history. Prospect/outreach-studio
+ * routes live in routes/controlProspects.ts and growth/experiments routes in
+ * routes/controlGrowth.ts (step-0 route split).
+ */
 
 const router: IRouter = Router();
 
@@ -54,6 +44,13 @@ function parseLimit(raw: unknown, fallback: number, max: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return Math.min(Math.floor(n), max);
+}
+
+function notImplemented(res: Response, operation: string): void {
+  res.status(501).json({
+    error: `${operation} is not available yet; the operator-console workstream has not landed.`,
+    code: "not_implemented",
+  });
 }
 
 /* ————— Overview ————— */
@@ -381,21 +378,7 @@ router.post("/control/tasks/:id/status", async (req, res): Promise<void> => {
   res.json({ task });
 });
 
-/* ————— Experiments, audit, policies, metrics history ————— */
-
-// GET /control/experiments — the experiment portfolio.
-router.get("/control/experiments", async (req, res): Promise<void> => {
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-
-  const limit = parseLimit(req.query.limit, 50, 200);
-  const rows = await db
-    .select()
-    .from(controlExperimentsTable)
-    .orderBy(desc(controlExperimentsTable.createdAt))
-    .limit(limit);
-  res.json({ experiments: rows });
-});
+/* ————— Audit, policies, metrics history ————— */
 
 // GET /control/audit — the immutable audit trail.
 router.get("/control/audit", async (req, res): Promise<void> => {
@@ -418,90 +401,15 @@ router.get("/control/policies", async (req, res): Promise<void> => {
   res.json({ policies: await listPolicies() });
 });
 
-/* ————— Prospect pipeline + campaigns ————— */
-
-// GET /control/prospects — the prospect pipeline, filterable by status/campaign.
-router.get("/control/prospects", async (req, res): Promise<void> => {
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-
-  const limit = parseLimit(req.query.limit, 50, 200);
-  const status = typeof req.query.status === "string" ? req.query.status : null;
-  if (status && !PROSPECT_STATUSES.includes(status as (typeof PROSPECT_STATUSES)[number])) {
-    res.status(400).json({ error: `status must be one of ${PROSPECT_STATUSES.join(", ")}` });
-    return;
-  }
-  const campaignId = Number(req.query.campaignId);
-
-  const conditions = [];
-  if (status) conditions.push(eq(controlProspectsTable.status, status));
-  if (Number.isInteger(campaignId) && campaignId > 0) {
-    conditions.push(eq(controlProspectsTable.campaignId, campaignId));
-  }
-
-  const rows = await db
-    .select()
-    .from(controlProspectsTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(controlProspectsTable.updatedAt))
-    .limit(limit);
-  res.json({ prospects: rows });
-});
-
-// Operators record outcomes agents cannot observe (inbound email is human-read):
-// replies, conversions, unsubscribes — plus re-staging. "contacted" is reserved
-// for the governed send action so contact bookkeeping stays truthful.
-const OPERATOR_PROSPECT_STATUSES = [
-  "new",
-  "qualified",
-  "replied",
-  "converted",
-  "unsubscribed",
-  "disqualified",
-] as const;
-
-// POST /control/prospects/{id}/status — record a prospect outcome.
-router.post("/control/prospects/:id/status", async (req, res): Promise<void> => {
+// PUT /control/policies/{key} — operator edits one policy (validatePolicyUpdate enforces bounds).
+router.put("/control/policies/:key", async (req, res): Promise<void> => {
   if (!requireOwnerMutationOrigin(req, res)) return;
   const operator = await requireOperator(req, res);
   if (!operator) return;
-
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ error: "Invalid prospect id" });
-    return;
-  }
-  const parsed = SetControlProspectStatusBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const status = parsed.data.status;
-  if (!OPERATOR_PROSPECT_STATUSES.includes(status)) {
-    res.status(400).json({ error: `status must be one of ${OPERATOR_PROSPECT_STATUSES.join(", ")}` });
-    return;
-  }
-
-  const [prospect] = await db
-    .update(controlProspectsTable)
-    .set({ status, statusChangedBy: operator.email, updatedAt: new Date() })
-    .where(eq(controlProspectsTable.id, id))
-    .returning();
-  if (!prospect) {
-    res.status(404).json({ error: "Prospect not found" });
-    return;
-  }
-
-  await recordAuditEvent({
-    actorType: "operator",
-    actor: operator.email,
-    eventType: "prospect_status_changed",
-    subjectType: "prospect",
-    subjectId: id,
-    detail: { status },
-  });
-  res.json({ prospect });
+  notImplemented(res, "Editing policies from /control");
 });
+
+/* ————— Campaigns ————— */
 
 // GET /control/campaigns — outreach campaigns with per-status prospect counts.
 router.get("/control/campaigns", async (req, res): Promise<void> => {
@@ -535,202 +443,20 @@ router.get("/control/campaigns", async (req, res): Promise<void> => {
   });
 });
 
-/* ————— Outreach email studio ————— */
-
-function parseId(raw: string, res: import("express").Response, label: string): number | null {
-  const id = Number(raw);
+// POST /control/campaigns/{id}/status — operator launches, pauses, resumes, or completes a campaign.
+router.post("/control/campaigns/:id/status", async (req, res): Promise<void> => {
+  if (!requireOwnerMutationOrigin(req, res)) return;
+  const operator = await requireOperator(req, res);
+  if (!operator) return;
+  const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ error: `Invalid ${label} id` });
-    return null;
-  }
-  return id;
-}
-
-function studioError(res: import("express").Response, err: unknown, fallback: string): void {
-  const message = err instanceof Error ? err.message : fallback;
-  const status = /not found/i.test(message) ? 404 : 409;
-  res.status(status).json({ error: message });
-}
-
-// GET /control/outreach/emails — studio emails with prospect + approval state.
-router.get("/control/outreach/emails", async (req, res): Promise<void> => {
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const limit = parseLimit(req.query.limit, 50, 200);
-  const status = typeof req.query.status === "string" ? req.query.status : null;
-  if (status && !OUTREACH_EMAIL_STATUSES.includes(status as (typeof OUTREACH_EMAIL_STATUSES)[number])) {
-    res.status(400).json({ error: `status must be one of ${OUTREACH_EMAIL_STATUSES.join(", ")}` });
+    res.status(400).json({ error: "Invalid campaign id" });
     return;
   }
-  const prospectId = Number(req.query.prospectId);
-  const emails = await listEmails({
-    status,
-    prospectId: Number.isInteger(prospectId) && prospectId > 0 ? prospectId : null,
-    limit,
-  });
-  res.json({ emails });
+  notImplemented(res, "Campaign status changes from /control");
 });
 
-// GET /control/outreach/emails/{id} — full review payload with rendered previews.
-router.get("/control/outreach/emails/:id", async (req, res): Promise<void> => {
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const id = parseId(req.params.id, res, "email");
-  if (!id) return;
-  const detail = await getEmailDetail(id);
-  if (!detail) {
-    res.status(404).json({ error: "Outreach email not found" });
-    return;
-  }
-  res.json({ detail });
-});
-
-// POST /control/outreach/emails/{id} — operator edits (subject, copy, images, CTA).
-router.post("/control/outreach/emails/:id", async (req, res): Promise<void> => {
-  if (!requireOwnerMutationOrigin(req, res)) return;
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const id = parseId(req.params.id, res, "email");
-  if (!id) return;
-  const parsed = UpdateControlOutreachEmailBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  try {
-    const detail = await updateEmail(id, parsed.data, operator.email);
-    res.json({ detail });
-  } catch (err) {
-    studioError(res, err, "Update failed");
-  }
-});
-
-// POST /control/outreach/emails/{id}/regenerate — rewrite copy and/or re-run research.
-router.post("/control/outreach/emails/:id/regenerate", async (req, res): Promise<void> => {
-  if (!requireOwnerMutationOrigin(req, res)) return;
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const id = parseId(req.params.id, res, "email");
-  if (!id) return;
-  const parsed = RegenerateControlOutreachEmailBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  if ((parsed.data.mode === "copy" || parsed.data.mode === "both") && !controlPlaneAiConfigured()) {
-    res.status(503).json({ error: "XAI_API_KEY is not configured; copy cannot be regenerated (research still can)." });
-    return;
-  }
-  try {
-    const detail = await regenerateEmail(id, parsed.data.mode, operator.email, { ask: parsed.data.ask });
-    res.json({ detail });
-  } catch (err) {
-    studioError(res, err, "Regeneration failed");
-  }
-});
-
-// POST /control/outreach/emails/{id}/sample-preview — operator-only hook for a labeled
-// Dreemer sample image. Generation is not wired in this build; the request is audited
-// and refused so the UI can show the honest state.
-router.post("/control/outreach/emails/:id/sample-preview", async (req, res): Promise<void> => {
-  if (!requireOwnerMutationOrigin(req, res)) return;
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const id = parseId(req.params.id, res, "email");
-  if (!id) return;
-  const detail = await getEmailDetail(id);
-  if (!detail) {
-    res.status(404).json({ error: "Outreach email not found" });
-    return;
-  }
-  await recordAuditEvent({
-    actorType: "operator",
-    actor: operator.email,
-    eventType: "sample_preview_requested",
-    subjectType: "outreach_email",
-    subjectId: id,
-    detail: { enabled: samplePreviewsEnabled() },
-  });
-  res.status(501).json({
-    error: samplePreviewsEnabled()
-      ? "Sample previews are enabled but the generation path is not available in this build."
-      : "Sample previews are not enabled (OUTREACH_SAMPLE_PREVIEWS=on). The hook is in place; generation lands in a follow-up.",
-  });
-});
-
-// POST /control/prospects/{id}/draft — operator-initiated studio draft (still gated by approval).
-router.post("/control/prospects/:id/draft", async (req, res): Promise<void> => {
-  if (!requireOwnerMutationOrigin(req, res)) return;
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const id = parseId(req.params.id, res, "prospect");
-  if (!id) return;
-  const parsed = DraftControlOutreachEmailBody.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  try {
-    const result = await createDraft({
-      prospectId: id,
-      ask: parsed.data.ask,
-      campaignId: parsed.data.campaignId ?? null,
-      step: parsed.data.step ?? null,
-      agentKey: "operator",
-      runId: null,
-      actor: `operator:${operator.email}`,
-      forceResearch: parsed.data.refreshResearch === true,
-    });
-    const detail = await getEmailDetail(result.email.id);
-    res.status(201).json({ detail });
-  } catch (err) {
-    studioError(res, err, "Draft failed");
-  }
-});
-
-// POST /control/prospects/{id}/research — re-run the venue website research.
-router.post("/control/prospects/:id/research", async (req, res): Promise<void> => {
-  if (!requireOwnerMutationOrigin(req, res)) return;
-  const operator = await requireOperator(req, res);
-  if (!operator) return;
-  const id = parseId(req.params.id, res, "prospect");
-  if (!id) return;
-  const prospect = await loadProspectById(id);
-  if (!prospect) {
-    res.status(404).json({ error: "Prospect not found" });
-    return;
-  }
-  try {
-    const result = await ensureResearch(prospect, { force: true, actor: `operator:${operator.email}` });
-    const assets = await loadProspectAssets(id);
-    res.json({
-      research: {
-        status: result.research.status,
-        facts: result.research.facts,
-        sourceUrls: result.research.sourceUrls,
-        warnings: result.research.warnings,
-        fetchedAt: result.research.fetchedAt,
-      },
-      assets: assets.map((asset) => ({
-        id: asset.id,
-        kind: asset.kind,
-        url: publicObjectUrl(asset.objectKey),
-        sourceUrl: asset.sourceUrl,
-        pageUrl: asset.pageUrl,
-        width: asset.width,
-        height: asset.height,
-        bytes: asset.bytes,
-        altText: asset.altText,
-        score: asset.score,
-        selected: asset.selected,
-        inEmail: false,
-        createdAt: asset.createdAt,
-      })),
-    });
-  } catch (err) {
-    studioError(res, err, "Research failed");
-  }
-});
+/* ————— Metrics history ————— */
 
 // GET /control/metrics/history — KPI snapshots for trend charts.
 router.get("/control/metrics/history", async (req, res): Promise<void> => {

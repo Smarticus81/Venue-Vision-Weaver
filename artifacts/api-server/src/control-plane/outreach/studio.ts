@@ -23,12 +23,12 @@ import {
   outreachUnsubscribeMailbox,
   postalAddressIsPlaceholder,
   publicObjectUrl,
-  samplePreviewsEnabled,
 } from "./config.js";
 import { writeCopy, type CopyResult } from "./copywriter.js";
 import { renderEmailRow } from "./sender.js";
 import { newUnsubscribeToken } from "./unsubscribe.js";
 import { defaultResearchDeps, researchVenue, type ResearchDeps, type VenueFacts } from "./venueResearch.js";
+import { afterResearch, beforeDraft } from "../growth/studioHooks.js";
 
 /**
  * Studio orchestration: research a prospect's venue, write the personal
@@ -107,6 +107,8 @@ export async function ensureResearch(
     })
     .returning();
   if (!research) throw new Error("Failed to persist venue research.");
+  // Growth hook: re-classify the venue type from what the site actually says.
+  await afterResearch(prospect.id, result.facts);
 
   // Previous research picks step aside; operators can still swap them back in.
   await db
@@ -198,6 +200,8 @@ export interface CreateDraftInput {
   actor: string;
   forceResearch?: boolean;
   researchDeps?: ResearchDeps;
+  /** Force a control_copy_variants key; null/omitted lets the growth hook choose. */
+  variantKey?: string | null;
 }
 
 export async function createDraft(input: CreateDraftInput): Promise<{
@@ -232,6 +236,8 @@ export async function createDraft(input: CreateDraftInput): Promise<{
   const facts = factsFromResearch(research, prospect);
   const campaignId = input.campaignId ?? prospect.campaignId ?? null;
   const step = input.step ?? null;
+  // Growth hook: copy-variant choice (and the max_campaign_steps refusal once growth lands).
+  const growth = await beforeDraft({ prospect, campaignId, step, requestedVariantKey: input.variantKey ?? null });
   const copy = await writeCopy({
     facts,
     prospectName: prospect.name,
@@ -239,6 +245,7 @@ export async function createDraft(input: CreateDraftInput): Promise<{
     ask: input.ask ?? (prospect.contactCount > 0 ? "call" : "preview"),
     contactCount: prospect.contactCount,
     stepGuidance: await stepGuidanceFor(campaignId, step),
+    variantAngle: growth.variantAngle,
   });
 
   const selectedImageIds = assets.filter((asset) => asset.selected && asset.kind === "venue_image").map((asset) => asset.id);
@@ -248,6 +255,7 @@ export async function createDraft(input: CreateDraftInput): Promise<{
       prospectId: prospect.id,
       campaignId,
       step,
+      variantKey: growth.variantKey,
       status: "draft",
       subjectOptions: copy.subjects,
       subject: copy.subjects[0],
@@ -273,6 +281,7 @@ export async function createDraft(input: CreateDraftInput): Promise<{
     reasoning: [
       `Studio draft #${email.id} for ${prospect.email} (${prospect.status}, ${prospect.contactCount} prior emails).`,
       `Copy source: ${copy.notes.source}; ${copy.notes.wordCount} words; ${selectedImageIds.length} venue photo(s) from ${research.sourceUrls[0] ?? "no site"}.`,
+      `Variant: ${growth.variantKey ?? "none"}`,
       ...research.warnings.map((warning) => `Research: ${warning}`),
     ].join("\n"),
     params: { emailId: email.id },
@@ -361,7 +370,6 @@ export interface EmailDetail {
   preview: { html: string; htmlDark: string; text: string; headers: Record<string, string> };
   warnings: StudioWarnings;
   editable: boolean;
-  samplePreviewsEnabled: boolean;
 }
 
 export async function getEmailDetail(emailId: number): Promise<EmailDetail | null> {
@@ -426,7 +434,6 @@ export async function getEmailDetail(emailId: number): Promise<EmailDetail | nul
     preview: { html: light.html, htmlDark: dark.html, text: light.text, headers: light.headers },
     warnings: { research: research?.warnings ?? [], config: configWarnings() },
     editable: email.status === "draft" && (actionRow === null || actionRow.status === "pending"),
-    samplePreviewsEnabled: samplePreviewsEnabled(),
   };
 }
 

@@ -8,8 +8,8 @@
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
-    "push": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 drizzle-kit push --config ./drizzle.config.cjs",
-    "push-force": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 drizzle-kit push --force --config ./drizzle.config.cjs"
+    "push": "drizzle-kit push --config ./drizzle.config.cjs",
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.cjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
@@ -18,7 +18,6 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/pg": "^8.18.0",
-    "cross-env": "^7.0.3",
     "drizzle-kit": "^0.31.9"
   }
 }

@@ -31,6 +31,8 @@ export const ReadinessCheckResponse = zod.object({
     qualityGate: zod.enum(["ok", "degraded"]),
     imageModel: zod.enum(["ok", "degraded"]),
     ffmpeg: zod.enum(["ok", "degraded"]),
+    auth: zod.enum(["ok", "degraded"]).optional(),
+    rls: zod.enum(["ok", "degraded"]).optional(),
   }),
 });
 
@@ -122,6 +124,38 @@ export const GetVenueResponse = zod
       .describe(
         "True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves.",
       ),
+    bookingReady: zod
+      .boolean()
+      .describe(
+        "True when the venue has a booking URL, website, or contact email the share-page date CTA can use.",
+      ),
+    turnstileSiteKey: zod
+      .string()
+      .nullable()
+      .describe(
+        "Cloudflare Turnstile site key when bot protection is enabled on session creation; null otherwise.",
+      ),
+    missingCoverages: zod
+      .array(
+        zod
+          .enum([
+            "exterior",
+            "ceremony",
+            "reception",
+            "detail",
+            "natural_light",
+          ])
+          .describe(
+            "Coverage role of the venue reference photo for scene-specific generation.",
+          ),
+      )
+      .describe(
+        "Coverage roles the venue still lacks reference photos for (empty when ready).",
+      ),
+    incentiveText: zod
+      .string()
+      .nullish()
+      .describe("One line the venue shows under the reel on the share page."),
     uploadToken: zod
       .string()
       .optional()
@@ -144,6 +178,8 @@ export const UpdateVenueParams = zod.object({
   slug: zod.coerce.string(),
 });
 
+export const updateVenueBodyIncentiveTextMax = 160;
+
 export const UpdateVenueBody = zod
   .object({
     name: zod.string().min(1).optional(),
@@ -160,6 +196,13 @@ export const UpdateVenueBody = zod
     contactPhone: zod.string().nullish(),
     websiteUrl: zod.string().nullish(),
     bookingUrl: zod.string().nullish(),
+    incentiveText: zod
+      .string()
+      .max(updateVenueBodyIncentiveTextMax)
+      .nullish()
+      .describe(
+        "One line shown under the reel on the share page. Null clears it.",
+      ),
   })
   .describe(
     "All fields optional. Only the provided fields are updated.\nSlug is intentionally not editable to keep public URLs stable.\n",
@@ -188,12 +231,18 @@ export const UpdateVenueResponse = zod.object({
     .describe("Public phone number shown to couples."),
   websiteUrl: zod.string().nullish().describe("Public venue website URL."),
   bookingUrl: zod.string().nullish().describe("Public tour booking URL."),
+  incentiveText: zod
+    .string()
+    .nullish()
+    .describe("One line shown under the reel on the share page."),
+  tourCardDownloadedAt: zod.coerce.date().nullish(),
+  websiteImportedAt: zod.coerce.date().nullish(),
   organizationId: zod
     .number()
     .nullish()
     .describe("Billing organization that owns this venue."),
   plan: zod
-    .enum(["trial", "starter", "growth", "none"])
+    .enum(["trial", "starter", "growth", "payg", "none"])
     .describe("Organization plan (billing lives on the organization)."),
   creditsBalance: zod
     .number()
@@ -213,10 +262,76 @@ export const GetOrganizationResponse = zod.object({
   organization: zod.object({
     id: zod.number(),
     name: zod.string(),
-    plan: zod.enum(["trial", "starter", "growth", "none"]),
+    plan: zod.enum(["trial", "starter", "growth", "payg", "none"]),
     creditsBalance: zod.number(),
     billingPeriodEnd: zod.coerce.date().nullish(),
     clerkOrgId: zod.string(),
+    contactEmail: zod.string().nullish(),
+    firstPaidAt: zod.coerce.date().nullish(),
+    churnedAt: zod.coerce.date().nullish(),
+    shareAggregates: zod
+      .boolean()
+      .describe(
+        "Venue opted in to anonymised aggregate proof on the public site.",
+      ),
+    trial: zod.object({
+      onTrial: zod.boolean(),
+      endsAt: zod.coerce.date().nullable(),
+      daysLeft: zod.number().nullable(),
+      expired: zod.boolean(),
+      creditsRemaining: zod.number(),
+    }),
+    role: zod
+      .string()
+      .nullish()
+      .describe("Caller's Clerk role in this organization (e.g. org:admin)."),
+    billingConfigured: zod
+      .boolean()
+      .optional()
+      .describe("Whether Stripe billing is configured on this server."),
+  }),
+  venues: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      slug: zod.string(),
+      tagline: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Update organization preferences (aggregate-proof opt-in, contact email)
+ */
+export const UpdateOrganizationBody = zod.object({
+  shareAggregates: zod.boolean().optional(),
+  contactEmail: zod.string().email().nullish(),
+});
+
+export const UpdateOrganizationResponse = zod.object({
+  organization: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    plan: zod.enum(["trial", "starter", "growth", "payg", "none"]),
+    creditsBalance: zod.number(),
+    billingPeriodEnd: zod.coerce.date().nullish(),
+    clerkOrgId: zod.string(),
+    contactEmail: zod.string().nullish(),
+    firstPaidAt: zod.coerce.date().nullish(),
+    churnedAt: zod.coerce.date().nullish(),
+    shareAggregates: zod
+      .boolean()
+      .describe(
+        "Venue opted in to anonymised aggregate proof on the public site.",
+      ),
+    trial: zod.object({
+      onTrial: zod.boolean(),
+      endsAt: zod.coerce.date().nullable(),
+      daysLeft: zod.number().nullable(),
+      expired: zod.boolean(),
+      creditsRemaining: zod.number(),
+    }),
     role: zod
       .string()
       .nullish()
@@ -306,12 +421,18 @@ export const GetVenueDashboardResponse = zod.object({
       .describe("Public phone number shown to couples."),
     websiteUrl: zod.string().nullish().describe("Public venue website URL."),
     bookingUrl: zod.string().nullish().describe("Public tour booking URL."),
+    incentiveText: zod
+      .string()
+      .nullish()
+      .describe("One line shown under the reel on the share page."),
+    tourCardDownloadedAt: zod.coerce.date().nullish(),
+    websiteImportedAt: zod.coerce.date().nullish(),
     organizationId: zod
       .number()
       .nullish()
       .describe("Billing organization that owns this venue."),
     plan: zod
-      .enum(["trial", "starter", "growth", "none"])
+      .enum(["trial", "starter", "growth", "payg", "none"])
       .describe("Organization plan (billing lives on the organization)."),
     creditsBalance: zod
       .number()
@@ -332,30 +453,20 @@ export const GetVenueDashboardResponse = zod.object({
       coupleName: zod.string().nullish(),
       coupleEmail: zod.string().nullish(),
       shareToken: zod.string().nullish(),
-      estimatedCostUsd: zod
-        .number()
-        .optional()
-        .describe("Estimated USD cost to generate this gallery."),
+      kind: zod.enum(["couple", "sample"]),
+      createdVia: zod.enum(["couple_link", "tour_day", "sample"]),
+      weddingMonth: zod.string().nullish(),
+      emailedAt: zod.coerce
+        .date()
+        .nullish()
+        .describe('First \"sent\" gallery event.'),
+      firstViewedAt: zod.coerce.date().nullish(),
+      viewCount: zod.number(),
+      sharedCount: zod.number(),
+      ctaClicks: zod.number(),
+      bookedAt: zod.coerce.date().nullish(),
     }),
   ),
-});
-
-/**
- * @summary Get venue statistics
- */
-export const GetVenueStatsParams = zod.object({
-  slug: zod.coerce.string(),
-});
-
-export const GetVenueStatsResponse = zod.object({
-  totalSessions: zod.number(),
-  readySessions: zod.number(),
-  processingSessions: zod.number(),
-  failedSessions: zod.number(),
-  avgCompletionSeconds: zod.number().nullable(),
-  totalEstimatedCostUsd: zod
-    .number()
-    .describe("Sum of estimated USD costs across all sessions for this venue."),
 });
 
 /**
@@ -414,12 +525,17 @@ export const CreateSessionParams = zod.object({
   slug: zod.coerce.string(),
 });
 
+export const createSessionBodyCouplePhotoKeysMin = 2;
 export const createSessionBodyCouplePhotoKeysMax = 3;
+
+export const createSessionBodyWeddingMonthRegExp = new RegExp(
+  "^\\d{4}-(0[1-9]|1[0-2])$",
+);
 
 export const CreateSessionBody = zod.object({
   couplePhotoKeys: zod
     .array(zod.string())
-    .min(1)
+    .min(createSessionBodyCouplePhotoKeysMin)
     .max(createSessionBodyCouplePhotoKeysMax),
   styleId: zod
     .string()
@@ -432,33 +548,31 @@ export const CreateSessionBody = zod.object({
     .string()
     .email()
     .describe("Required. Used for recovery emails and notifications."),
-});
-
-/**
- * @summary List all sessions for a venue (owner session)
- */
-export const ListVenueSessionsParams = zod.object({
-  slug: zod.coerce.string(),
-});
-
-export const ListVenueSessionsResponse = zod.object({
-  sessions: zod.array(
-    zod.object({
-      id: zod.number(),
-      venueId: zod.number(),
-      status: zod.enum(["pending", "processing", "ready", "failed"]),
-      createdAt: zod.coerce.date(),
-      completedAt: zod.coerce.date().nullish(),
-      thumbnailObjectKey: zod.string().nullish(),
-      coupleName: zod.string().nullish(),
-      coupleEmail: zod.string().nullish(),
-      shareToken: zod.string().nullish(),
-      estimatedCostUsd: zod
-        .number()
-        .optional()
-        .describe("Estimated USD cost to generate this gallery."),
-    }),
-  ),
+  turnstileToken: zod
+    .string()
+    .optional()
+    .describe(
+      "Cloudflare Turnstile response token. Verified only when TURNSTILE_SECRET_KEY is set on the server.",
+    ),
+  weddingMonth: zod
+    .string()
+    .regex(createSessionBodyWeddingMonthRegExp)
+    .optional()
+    .describe(
+      'The month the couple is thinking of, \"YYYY-MM\". Passed to the venue\'s date CTA.',
+    ),
+  consent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Both partners agree to the AI preview and photo handling. The server rejects couple sessions without it.",
+    ),
+  createdVia: zod
+    .enum(["couple_link", "tour_day"])
+    .optional()
+    .describe(
+      "couple_link (default) or tour_day when a coordinator starts it for the couple.",
+    ),
 });
 
 /**
@@ -484,10 +598,9 @@ export const GetSessionResponse = zod
         "True if an email is on file. The email itself is never returned to non-owners.",
       ),
     shareToken: zod.string().nullish(),
-    estimatedCostUsd: zod
-      .number()
-      .optional()
-      .describe("Estimated USD cost to generate this gallery."),
+    kind: zod.enum(["couple", "sample"]),
+    createdVia: zod.enum(["couple_link", "tour_day", "sample"]),
+    weddingMonth: zod.string().nullish(),
     createdAt: zod.coerce.date(),
     completedAt: zod.coerce.date().nullish(),
     venue: zod
@@ -535,6 +648,40 @@ export const GetSessionResponse = zod
           .boolean()
           .describe(
             "True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves.",
+          ),
+        bookingReady: zod
+          .boolean()
+          .describe(
+            "True when the venue has a booking URL, website, or contact email the share-page date CTA can use.",
+          ),
+        turnstileSiteKey: zod
+          .string()
+          .nullable()
+          .describe(
+            "Cloudflare Turnstile site key when bot protection is enabled on session creation; null otherwise.",
+          ),
+        missingCoverages: zod
+          .array(
+            zod
+              .enum([
+                "exterior",
+                "ceremony",
+                "reception",
+                "detail",
+                "natural_light",
+              ])
+              .describe(
+                "Coverage role of the venue reference photo for scene-specific generation.",
+              ),
+          )
+          .describe(
+            "Coverage roles the venue still lacks reference photos for (empty when ready).",
+          ),
+        incentiveText: zod
+          .string()
+          .nullish()
+          .describe(
+            "One line the venue shows under the reel on the share page.",
           ),
         uploadToken: zod
           .string()
@@ -597,6 +744,21 @@ export const GetSessionResponse = zod
           .describe(
             "Couple email on file. Only returned from owner-session protected endpoints.",
           ),
+        viewCount: zod.number(),
+        ctaClicks: zod.number(),
+        firstViewedAt: zod.coerce.date().nullish(),
+        bookedAt: zod.coerce.date().nullish(),
+        consentAt: zod.coerce.date().nullish(),
+        failureDetail: zod
+          .string()
+          .nullish()
+          .describe("Operator-facing failure detail (never shown to couples)."),
+        qualitySummary: zod
+          .object({
+            belowTarget: zod.boolean(),
+            attempts: zod.number(),
+          })
+          .nullish(),
       })
       .describe(
         "Owner-only session detail. Includes couple contact data for that venue owner.",
@@ -640,10 +802,9 @@ export const GetSessionByTokenResponse = zod
         "True if an email is on file. The email itself is never returned to non-owners.",
       ),
     shareToken: zod.string().nullish(),
-    estimatedCostUsd: zod
-      .number()
-      .optional()
-      .describe("Estimated USD cost to generate this gallery."),
+    kind: zod.enum(["couple", "sample"]),
+    createdVia: zod.enum(["couple_link", "tour_day", "sample"]),
+    weddingMonth: zod.string().nullish(),
     createdAt: zod.coerce.date(),
     completedAt: zod.coerce.date().nullish(),
     venue: zod
@@ -691,6 +852,40 @@ export const GetSessionByTokenResponse = zod
           .boolean()
           .describe(
             "True when the venue has enough reference photography for couples to start a gallery (the server's session-create guard applies the same rule). Couple-facing surfaces must use this flag instead of counting media themselves.",
+          ),
+        bookingReady: zod
+          .boolean()
+          .describe(
+            "True when the venue has a booking URL, website, or contact email the share-page date CTA can use.",
+          ),
+        turnstileSiteKey: zod
+          .string()
+          .nullable()
+          .describe(
+            "Cloudflare Turnstile site key when bot protection is enabled on session creation; null otherwise.",
+          ),
+        missingCoverages: zod
+          .array(
+            zod
+              .enum([
+                "exterior",
+                "ceremony",
+                "reception",
+                "detail",
+                "natural_light",
+              ])
+              .describe(
+                "Coverage role of the venue reference photo for scene-specific generation.",
+              ),
+          )
+          .describe(
+            "Coverage roles the venue still lacks reference photos for (empty when ready).",
+          ),
+        incentiveText: zod
+          .string()
+          .nullish()
+          .describe(
+            "One line the venue shows under the reel on the share page.",
           ),
         uploadToken: zod
           .string()
@@ -815,6 +1010,241 @@ export const SendSessionEmailByTokenResponse = zod.object({
 });
 
 /**
+ * No auth. Cached 60s. The same JSON is injected into the HTML shell as <meta name="dreemer-public-config">.
+ * @summary Published prices, trial terms, founding offer, proof mode and contact address for the public site
+ */
+export const GetPublicConfigResponse = zod.object({
+  pricing: zod.object({
+    currency: zod.string().describe("ISO 4217, e.g. USD"),
+    label: zod
+      .string()
+      .nullable()
+      .describe('Printed beside the prices, e.g. \"Launch prices\"'),
+    starterMonthly: zod.number().describe("Whole currency units"),
+    growthMonthly: zod.number(),
+    creditPack: zod.number(),
+    starterCredits: zod.number(),
+    growthCredits: zod.number(),
+    creditPackCredits: zod.number(),
+  }),
+  trial: zod.object({
+    credits: zod.number(),
+    days: zod.number(),
+  }),
+  founding: zod
+    .object({
+      slotsLeft: zod.number(),
+      slotsTotal: zod.number(),
+    })
+    .nullable(),
+  proof: zod.object({
+    mode: zod.enum(["partner", "aggregate"]),
+    aggregates: zod
+      .object({
+        venues: zod.number(),
+        galleries: zod.number(),
+        openedRate: zod.number().describe("0-100, one decimal"),
+        ctaClickRate: zod.number().describe("0-100, one decimal"),
+        bookedCount: zod.number(),
+        since: zod.coerce.date(),
+      })
+      .nullish(),
+  }),
+  contactEmail: zod.string().nullable(),
+  billingConfigured: zod.boolean(),
+  retentionDays: zod
+    .number()
+    .describe("Days couple source photos are kept after delivery"),
+});
+
+/**
+ * Public, rate-limited per IP. "viewed" is recorded server-side by GET /sessions/by-token and is rejected here.
+ * @summary Record a share-page event (shared, cta_click) for the gallery funnel
+ */
+export const RecordGalleryEventParams = zod.object({
+  shareToken: zod.coerce.string(),
+});
+
+export const RecordGalleryEventBody = zod.object({
+  type: zod.enum(["shared", "cta_click", "download"]),
+  source: zod
+    .enum(["share_page", "email"])
+    .optional()
+    .describe("Defaults to share_page"),
+});
+
+export const RecordGalleryEventResponse = zod.object({
+  recorded: zod.boolean(),
+});
+
+/**
+ * @summary Venue marks a couple as booked (or undoes it)
+ */
+export const SetSessionBookedParams = zod.object({
+  slug: zod.coerce.string(),
+  id: zod.coerce.number(),
+});
+
+export const SetSessionBookedBody = zod.object({
+  booked: zod.boolean(),
+});
+
+export const SetSessionBookedResponse = zod.object({
+  id: zod.number(),
+  venueId: zod.number(),
+  status: zod.enum(["pending", "processing", "ready", "failed"]),
+  createdAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullish(),
+  thumbnailObjectKey: zod.string().nullish(),
+  coupleName: zod.string().nullish(),
+  coupleEmail: zod.string().nullish(),
+  shareToken: zod.string().nullish(),
+  kind: zod.enum(["couple", "sample"]),
+  createdVia: zod.enum(["couple_link", "tour_day", "sample"]),
+  weddingMonth: zod.string().nullish(),
+  emailedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe('First \"sent\" gallery event.'),
+  firstViewedAt: zod.coerce.date().nullish(),
+  viewCount: zod.number(),
+  sharedCount: zod.number(),
+  ctaClicks: zod.number(),
+  bookedAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
+ */
+export const ImportVenueWebsiteMediaParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const ImportVenueWebsiteMediaBody = zod.object({
+  websiteUrl: zod
+    .string()
+    .optional()
+    .describe("Overrides and saves venue.websiteUrl when given"),
+});
+
+export const ImportVenueWebsiteMediaResponse = zod.object({
+  imported: zod.array(
+    zod.object({
+      id: zod.number(),
+      venueId: zod.number(),
+      objectKey: zod.string(),
+      coverage: zod
+        .enum(["exterior", "ceremony", "reception", "detail", "natural_light"])
+        .describe(
+          "Coverage role of the venue reference photo for scene-specific generation.",
+        ),
+      displayOrder: zod.number(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  candidatesFound: zod.number(),
+  warnings: zod.array(zod.string()),
+});
+
+/**
+ * @summary Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
+ */
+export const CreateSampleGalleryParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+/**
+ * @summary Onboarding checklist — record that the printable tour card was downloaded
+ */
+export const MarkTourCardDownloadedParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const MarkTourCardDownloadedResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  slug: zod.string(),
+  tagline: zod.string().nullish(),
+  description: zod.string().nullish(),
+  ownerEmail: zod
+    .string()
+    .email()
+    .nullish()
+    .describe(
+      "Owner contact email (only returned on owner-session protected responses).",
+    ),
+  contactEmail: zod
+    .string()
+    .nullish()
+    .describe("Public inquiry email shown to couples."),
+  contactPhone: zod
+    .string()
+    .nullish()
+    .describe("Public phone number shown to couples."),
+  websiteUrl: zod.string().nullish().describe("Public venue website URL."),
+  bookingUrl: zod.string().nullish().describe("Public tour booking URL."),
+  incentiveText: zod
+    .string()
+    .nullish()
+    .describe("One line shown under the reel on the share page."),
+  tourCardDownloadedAt: zod.coerce.date().nullish(),
+  websiteImportedAt: zod.coerce.date().nullish(),
+  organizationId: zod
+    .number()
+    .nullish()
+    .describe("Billing organization that owns this venue."),
+  plan: zod
+    .enum(["trial", "starter", "growth", "payg", "none"])
+    .describe("Organization plan (billing lives on the organization)."),
+  creditsBalance: zod
+    .number()
+    .describe("Organization credit balance (shared across the org's venues)."),
+  billingPeriodEnd: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * Public, rate-limited per IP. Events are validated against a fixed list and written to funnel_events.
+ * @summary Record an owner-funnel event from the public site or dashboard
+ */
+export const recordFunnelEventBodySourceMax = 80;
+
+export const RecordFunnelEventBody = zod.object({
+  event: zod.enum([
+    "landing_view",
+    "cta_click",
+    "signup_started",
+    "signup_completed",
+    "org_created",
+    "venue_created",
+    "first_photo",
+    "venue_ready",
+    "first_gallery",
+    "checkout_started",
+    "checkout_completed",
+    "credits_exhausted",
+    "tour_card_downloaded",
+  ]),
+  properties: zod.record(zod.string(), zod.unknown()).optional(),
+  source: zod.string().max(recordFunnelEventBodySourceMax).optional(),
+});
+
+/**
+ * @summary Resolve an outreach claim link to the venue it was sent to (public, pre-fills signup)
+ */
+export const GetOutreachClaimParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const GetOutreachClaimResponse = zod.object({
+  venueName: zod.string(),
+  website: zod.string().nullable(),
+  region: zod.string().nullable(),
+  photoUrls: zod.array(zod.string()),
+  prospectId: zod.number(),
+});
+
+/**
  * @summary List available gallery styles
  */
 export const ListGalleryStylesResponse = zod.object({
@@ -922,6 +1352,7 @@ export const GetControlOverviewResponse = zod.object({
         totalCreditsBalance: zod.number(),
         lowCreditCount: zod.number(),
         paidCount: zod.number(),
+        paidSubscriptionCount: zod.number().optional(),
       }),
       venues: zod.object({
         total: zod.number(),
@@ -954,6 +1385,251 @@ export const GetControlOverviewResponse = zod.object({
       assets: zod.object({
         generated7d: zod.number(),
       }),
+      growth: zod
+        .object({
+          version: zod.number(),
+          computedAt: zod.coerce.date(),
+          window: zod.object({
+            start30d: zod.coerce.date(),
+            start14d: zod.coerce.date(),
+            start7d: zod.coerce.date(),
+            cohortStart: zod.coerce.date(),
+          }),
+          signups: zod.object({
+            orgs7d: zod.number(),
+            orgs30d: zod.number(),
+            venues7d: zod.number(),
+            venues30d: zod.number(),
+            attributedToOutbound30d: zod.number(),
+            byWeek: zod.array(
+              zod.object({
+                weekStart: zod.coerce.date(),
+                orgs: zod.number(),
+                venues: zod.number(),
+                attributed: zod.number(),
+              }),
+            ),
+          }),
+          activation: zod.object({
+            minPhotos: zod.number(),
+            funnel: zod.object({
+              orgs: zod.number(),
+              withVenue: zod.number(),
+              photosReady: zod.number(),
+              firstGallery: zod.number(),
+              galleryViewed: zod.number(),
+              secondGallery14d: zod.number(),
+            }),
+            rates: zod.object({
+              withVenue: zod.number().nullable(),
+              photosReady: zod.number().nullable(),
+              firstGallery: zod.number().nullable(),
+              galleryViewed: zod.number().nullable(),
+              secondGallery14d: zod.number().nullable(),
+            }),
+            timeToFirstGalleryHours: zod.object({
+              median: zod.number().nullable(),
+              p75: zod.number().nullable(),
+              n: zod.number(),
+            }),
+            firstGalleryWithin7d: zod.number().nullable(),
+            firstGalleryWithin14d: zod.number().nullable(),
+            byCohortWeek: zod.array(
+              zod.object({
+                weekStart: zod.coerce.date(),
+                orgs: zod.number(),
+                photosReady: zod.number(),
+                firstGallery: zod.number(),
+                galleryViewed: zod.number(),
+                secondGallery14d: zod.number(),
+                paid: zod.number(),
+                matured: zod.boolean(),
+              }),
+            ),
+          }),
+          trialToPaid: zod.object({
+            overall: zod.object({
+              orgs: zod.number(),
+              paid: zod.number(),
+              rate: zod.number().nullable(),
+            }),
+            byActivation: zod.object({
+              activated: zod.object({
+                orgs: zod.number(),
+                paid: zod.number(),
+                rate: zod.number().nullable(),
+              }),
+              notActivated: zod.object({
+                orgs: zod.number(),
+                paid: zod.number(),
+                rate: zod.number().nullable(),
+              }),
+            }),
+            byCohortWeek: zod.array(
+              zod.object({
+                weekStart: zod.coerce.date(),
+                orgs: zod.number(),
+                paid: zod.number(),
+                rate: zod.number().nullable(),
+                matured: zod.boolean(),
+              }),
+            ),
+            medianDaysToPaid: zod.number().nullable(),
+          }),
+          revenue: zod.object({
+            planMix: zod.record(zod.string(), zod.number()),
+            paidOrgs: zod.number(),
+            subscriptionOrgs: zod.number(),
+            mrrCents: zod.number(),
+            arpaCents: zod.number().nullable(),
+            packPurchases30d: zod.number(),
+            packRevenueCents30d: zod.number(),
+            prices: zod.object({
+              source: zod.enum(["env", "stripe"]),
+              starterCents: zod.number(),
+              growthCents: zod.number(),
+              creditPackCents: zod.number(),
+            }),
+          }),
+          credits: zod.object({
+            purchased30d: zod.number(),
+            subscriptionGranted30d: zod.number(),
+            consumed30d: zod.number(),
+            refunded30d: zod.number(),
+            promo30d: zod.number(),
+            trialGranted30d: zod.number(),
+            consumedPerPaidOrg30d: zod.number().nullable(),
+            float: zod.number(),
+          }),
+          churn: zod.object({
+            subscriptionsDeleted30d: zod.number(),
+            trialsExpired30d: zod.number(),
+            trialsExpiredWithoutPurchase30d: zod.number(),
+            paidOrgsAtWindowStart: zod.number(),
+            logoChurnRate30d: zod.number().nullable(),
+            trialsExpiringNext7d: zod.number(),
+            trialsExpiringNext7dWithoutGallery: zod.number(),
+          }),
+          outbound: zod.object({
+            funnel: zod.object({
+              drafted: zod.number(),
+              approved: zod.number(),
+              sent: zod.number(),
+              delivered: zod.number(),
+              bounced: zod.number(),
+              complained: zod.number(),
+              replied: zod.number(),
+              positiveReplied: zod.number(),
+              signups: zod.number(),
+              activated: zod.number(),
+              paid: zod.number(),
+              legacySends: zod.number(),
+            }),
+            rates: zod.object({
+              deliveryRate: zod.number().nullable(),
+              bounceRate: zod.number().nullable(),
+              complaintRate: zod.number().nullable(),
+              replyRate: zod.number().nullable(),
+              positiveReplyRate: zod.number().nullable(),
+              signupRate: zod.number().nullable(),
+              paidRate: zod.number().nullable(),
+            }),
+            bySegment: zod.array(
+              zod.object({
+                segmentType: zod.enum(["region", "venue_type"]),
+                segment: zod.string(),
+                prospects: zod.number(),
+                sent: zod.number(),
+                delivered: zod.number(),
+                replied: zod.number(),
+                positiveReplied: zod.number(),
+                signups: zod.number(),
+                activated: zod.number(),
+                paid: zod.number(),
+                replyRate: zod.number().nullable(),
+                positiveReplyRate: zod.number().nullable(),
+                signupRate: zod.number().nullable(),
+                guidance: zod.enum(["prioritize", "pause"]).nullable(),
+              }),
+            ),
+            byVariant: zod.array(
+              zod.object({
+                variantKey: zod.string(),
+                name: zod.string(),
+                isControl: zod.boolean(),
+                active: zod.boolean(),
+                weight: zod.number(),
+                sent: zod.number(),
+                delivered: zod.number(),
+                replied: zod.number(),
+                positiveReplied: zod.number(),
+                signups: zod.number(),
+                replyRate: zod.number().nullable(),
+                positiveReplyRate: zod.number().nullable(),
+                signupRate: zod.number().nullable(),
+                smoothedPositiveReplyRate: zod.number(),
+              }),
+            ),
+            byCampaign: zod.array(
+              zod.object({
+                campaignId: zod.number(),
+                name: zod.string(),
+                status: zod.string(),
+                sent: zod.number(),
+                delivered: zod.number(),
+                replied: zod.number(),
+                positiveReplied: zod.number(),
+                signups: zod.number(),
+                replyRate: zod.number().nullable(),
+              }),
+            ),
+            byStep: zod.array(
+              zod.object({
+                step: zod.number(),
+                sent: zod.number(),
+                delivered: zod.number(),
+                replied: zod.number(),
+                complained: zod.number(),
+                complaintRate: zod.number().nullable(),
+              }),
+            ),
+          }),
+          deliverability: zod.object({
+            window14d: zod.object({
+              sent: zod.number(),
+              delivered: zod.number(),
+              bounced: zod.number(),
+              complained: zod.number(),
+              bounceRate: zod.number().nullable(),
+              complaintRate: zod.number().nullable(),
+            }),
+            status: zod.enum([
+              "ok",
+              "warn",
+              "throttled",
+              "paused",
+              "insufficient_data",
+            ]),
+            guard: zod.object({
+              status: zod.string(),
+              since: zod.string().nullable(),
+              reason: zod.string().nullable(),
+              baseCap: zod.number(),
+              effectiveCap: zod.number(),
+            }),
+          }),
+          experiments: zod.object({
+            proposed: zod.number(),
+            running: zod.number(),
+            decisionsDue7d: zod.number(),
+            decided30d: zod.number(),
+          }),
+          dataQuality: zod.array(zod.string()),
+        })
+        .optional()
+        .describe(
+          "Outcome KPIs computed from production tables (control-plane\/growth\/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.",
+        ),
     })
     .describe("Live business KPIs computed from production tables."),
   agents: zod.array(
@@ -969,7 +1645,6 @@ export const GetControlOverviewResponse = zod.object({
         "product",
         "finance",
         "experiments",
-        "sales",
         "activation",
         "governance",
       ]),
@@ -1019,7 +1694,6 @@ export const SetControlAgentStatusResponse = zod.object({
       "product",
       "finance",
       "experiments",
-      "sales",
       "activation",
       "governance",
     ]),
@@ -1093,11 +1767,23 @@ export const GetControlRunResponse = zod.object({
 /**
  * @summary Governed actions (approval queue and history)
  */
+export const listControlActionsQueryLimitMax = 200;
+
+export const listControlActionsQueryOffsetMin = 0;
+
 export const ListControlActionsQueryParams = zod.object({
   status: zod
-    .enum(["pending", "approved", "rejected", "executed", "failed"])
+    .enum([
+      "pending",
+      "approved",
+      "rejected",
+      "executing",
+      "executed",
+      "failed",
+    ])
     .optional(),
-  limit: zod.coerce.number().optional(),
+  limit: zod.coerce.number().max(listControlActionsQueryLimitMax).optional(),
+  offset: zod.coerce.number().min(listControlActionsQueryOffsetMin).optional(),
 });
 
 export const ListControlActionsResponse = zod.object({
@@ -1116,6 +1802,7 @@ export const ListControlActionsResponse = zod.object({
         "pending",
         "approved",
         "rejected",
+        "executing",
         "executed",
         "failed",
       ]),
@@ -1155,7 +1842,14 @@ export const DecideControlActionResponse = zod.object({
     params: zod.record(zod.string(), zod.unknown()),
     riskLevel: zod.enum(["low", "medium", "high"]),
     requiresApproval: zod.boolean(),
-    status: zod.enum(["pending", "approved", "rejected", "executed", "failed"]),
+    status: zod.enum([
+      "pending",
+      "approved",
+      "rejected",
+      "executing",
+      "executed",
+      "failed",
+    ]),
     decidedBy: zod.string().nullish(),
     decisionNote: zod.string().nullish(),
     decidedAt: zod.coerce.date().nullish(),
@@ -1223,6 +1917,7 @@ export const SetControlTaskStatusResponse = zod.object({
  * @summary Experiment portfolio
  */
 export const ListControlExperimentsQueryParams = zod.object({
+  status: zod.enum(["proposed", "running", "completed", "aborted"]).optional(),
   limit: zod.coerce.number().optional(),
 });
 
@@ -1239,10 +1934,66 @@ export const ListControlExperimentsResponse = zod.object({
       createdByAgent: zod.string().nullish(),
       startedAt: zod.coerce.date().nullish(),
       endedAt: zod.coerce.date().nullish(),
+      primaryMetricKey: zod.string().nullish(),
+      baseline: zod.number().nullish(),
+      minDetectableLift: zod.number().nullish(),
+      killThreshold: zod.number().nullish(),
+      decisionDate: zod.coerce.date().nullish(),
+      segment: zod.string().nullish(),
+      variantKey: zod.string().nullish(),
+      assignments: zod.record(zod.string(), zod.unknown()).nullish(),
+      decision: zod.enum(["win", "kill", "inconclusive", "extended"]).nullish(),
+      decidedBy: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      observedValue: zod.number().nullish(),
+      observedN: zod.number().nullish(),
+      evaluation: zod.record(zod.string(), zod.unknown()).nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
   ),
+});
+
+/**
+ * @summary Create an experiment card (operator)
+ */
+export const createControlExperimentBodyNameMin = 3;
+export const createControlExperimentBodyNameMax = 120;
+
+export const createControlExperimentBodyHypothesisMin = 10;
+export const createControlExperimentBodyHypothesisMax = 1000;
+
+export const createControlExperimentBodyMetricMin = 3;
+export const createControlExperimentBodyMetricMax = 200;
+
+export const createControlExperimentBodyMinDetectableLiftExclusiveMin = 0;
+export const createControlExperimentBodyMinDetectableLiftMax = 5;
+
+export const CreateControlExperimentBody = zod.object({
+  name: zod
+    .string()
+    .min(createControlExperimentBodyNameMin)
+    .max(createControlExperimentBodyNameMax),
+  hypothesis: zod
+    .string()
+    .min(createControlExperimentBodyHypothesisMin)
+    .max(createControlExperimentBodyHypothesisMax),
+  metric: zod
+    .string()
+    .min(createControlExperimentBodyMetricMin)
+    .max(createControlExperimentBodyMetricMax),
+  primaryMetricKey: zod.string(),
+  segment: zod.string().nullish(),
+  variantKey: zod.string().nullish(),
+  baseline: zod.number().nullish(),
+  minDetectableLift: zod
+    .number()
+    .gt(createControlExperimentBodyMinDetectableLiftExclusiveMin)
+    .max(createControlExperimentBodyMinDetectableLiftMax),
+  killThreshold: zod.number().nullish(),
+  decisionDate: zod.coerce.date(),
+  assignments: zod.record(zod.string(), zod.unknown()).nullish(),
+  startNow: zod.boolean().optional(),
 });
 
 /**
@@ -1284,6 +2035,32 @@ export const ListControlPoliciesResponse = zod.object({
 });
 
 /**
+ * @summary Operator edits one governance policy value (validated per key, bounds enforced)
+ */
+export const UpdateControlPolicyParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const UpdateControlPolicyBody = zod.object({
+  value: zod
+    .record(zod.string(), zod.unknown())
+    .describe(
+      "The policy's full value object; validated per key (field name and bounds).",
+    ),
+});
+
+export const UpdateControlPolicyResponse = zod.object({
+  policy: zod.object({
+    id: zod.number(),
+    key: zod.string(),
+    value: zod.record(zod.string(), zod.unknown()),
+    description: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
  * @summary KPI snapshot history for trends
  */
 export const GetControlMetricsHistoryQueryParams = zod.object({
@@ -1303,6 +2080,7 @@ export const GetControlMetricsHistoryResponse = zod.object({
             totalCreditsBalance: zod.number(),
             lowCreditCount: zod.number(),
             paidCount: zod.number(),
+            paidSubscriptionCount: zod.number().optional(),
           }),
           venues: zod.object({
             total: zod.number(),
@@ -1335,6 +2113,251 @@ export const GetControlMetricsHistoryResponse = zod.object({
           assets: zod.object({
             generated7d: zod.number(),
           }),
+          growth: zod
+            .object({
+              version: zod.number(),
+              computedAt: zod.coerce.date(),
+              window: zod.object({
+                start30d: zod.coerce.date(),
+                start14d: zod.coerce.date(),
+                start7d: zod.coerce.date(),
+                cohortStart: zod.coerce.date(),
+              }),
+              signups: zod.object({
+                orgs7d: zod.number(),
+                orgs30d: zod.number(),
+                venues7d: zod.number(),
+                venues30d: zod.number(),
+                attributedToOutbound30d: zod.number(),
+                byWeek: zod.array(
+                  zod.object({
+                    weekStart: zod.coerce.date(),
+                    orgs: zod.number(),
+                    venues: zod.number(),
+                    attributed: zod.number(),
+                  }),
+                ),
+              }),
+              activation: zod.object({
+                minPhotos: zod.number(),
+                funnel: zod.object({
+                  orgs: zod.number(),
+                  withVenue: zod.number(),
+                  photosReady: zod.number(),
+                  firstGallery: zod.number(),
+                  galleryViewed: zod.number(),
+                  secondGallery14d: zod.number(),
+                }),
+                rates: zod.object({
+                  withVenue: zod.number().nullable(),
+                  photosReady: zod.number().nullable(),
+                  firstGallery: zod.number().nullable(),
+                  galleryViewed: zod.number().nullable(),
+                  secondGallery14d: zod.number().nullable(),
+                }),
+                timeToFirstGalleryHours: zod.object({
+                  median: zod.number().nullable(),
+                  p75: zod.number().nullable(),
+                  n: zod.number(),
+                }),
+                firstGalleryWithin7d: zod.number().nullable(),
+                firstGalleryWithin14d: zod.number().nullable(),
+                byCohortWeek: zod.array(
+                  zod.object({
+                    weekStart: zod.coerce.date(),
+                    orgs: zod.number(),
+                    photosReady: zod.number(),
+                    firstGallery: zod.number(),
+                    galleryViewed: zod.number(),
+                    secondGallery14d: zod.number(),
+                    paid: zod.number(),
+                    matured: zod.boolean(),
+                  }),
+                ),
+              }),
+              trialToPaid: zod.object({
+                overall: zod.object({
+                  orgs: zod.number(),
+                  paid: zod.number(),
+                  rate: zod.number().nullable(),
+                }),
+                byActivation: zod.object({
+                  activated: zod.object({
+                    orgs: zod.number(),
+                    paid: zod.number(),
+                    rate: zod.number().nullable(),
+                  }),
+                  notActivated: zod.object({
+                    orgs: zod.number(),
+                    paid: zod.number(),
+                    rate: zod.number().nullable(),
+                  }),
+                }),
+                byCohortWeek: zod.array(
+                  zod.object({
+                    weekStart: zod.coerce.date(),
+                    orgs: zod.number(),
+                    paid: zod.number(),
+                    rate: zod.number().nullable(),
+                    matured: zod.boolean(),
+                  }),
+                ),
+                medianDaysToPaid: zod.number().nullable(),
+              }),
+              revenue: zod.object({
+                planMix: zod.record(zod.string(), zod.number()),
+                paidOrgs: zod.number(),
+                subscriptionOrgs: zod.number(),
+                mrrCents: zod.number(),
+                arpaCents: zod.number().nullable(),
+                packPurchases30d: zod.number(),
+                packRevenueCents30d: zod.number(),
+                prices: zod.object({
+                  source: zod.enum(["env", "stripe"]),
+                  starterCents: zod.number(),
+                  growthCents: zod.number(),
+                  creditPackCents: zod.number(),
+                }),
+              }),
+              credits: zod.object({
+                purchased30d: zod.number(),
+                subscriptionGranted30d: zod.number(),
+                consumed30d: zod.number(),
+                refunded30d: zod.number(),
+                promo30d: zod.number(),
+                trialGranted30d: zod.number(),
+                consumedPerPaidOrg30d: zod.number().nullable(),
+                float: zod.number(),
+              }),
+              churn: zod.object({
+                subscriptionsDeleted30d: zod.number(),
+                trialsExpired30d: zod.number(),
+                trialsExpiredWithoutPurchase30d: zod.number(),
+                paidOrgsAtWindowStart: zod.number(),
+                logoChurnRate30d: zod.number().nullable(),
+                trialsExpiringNext7d: zod.number(),
+                trialsExpiringNext7dWithoutGallery: zod.number(),
+              }),
+              outbound: zod.object({
+                funnel: zod.object({
+                  drafted: zod.number(),
+                  approved: zod.number(),
+                  sent: zod.number(),
+                  delivered: zod.number(),
+                  bounced: zod.number(),
+                  complained: zod.number(),
+                  replied: zod.number(),
+                  positiveReplied: zod.number(),
+                  signups: zod.number(),
+                  activated: zod.number(),
+                  paid: zod.number(),
+                  legacySends: zod.number(),
+                }),
+                rates: zod.object({
+                  deliveryRate: zod.number().nullable(),
+                  bounceRate: zod.number().nullable(),
+                  complaintRate: zod.number().nullable(),
+                  replyRate: zod.number().nullable(),
+                  positiveReplyRate: zod.number().nullable(),
+                  signupRate: zod.number().nullable(),
+                  paidRate: zod.number().nullable(),
+                }),
+                bySegment: zod.array(
+                  zod.object({
+                    segmentType: zod.enum(["region", "venue_type"]),
+                    segment: zod.string(),
+                    prospects: zod.number(),
+                    sent: zod.number(),
+                    delivered: zod.number(),
+                    replied: zod.number(),
+                    positiveReplied: zod.number(),
+                    signups: zod.number(),
+                    activated: zod.number(),
+                    paid: zod.number(),
+                    replyRate: zod.number().nullable(),
+                    positiveReplyRate: zod.number().nullable(),
+                    signupRate: zod.number().nullable(),
+                    guidance: zod.enum(["prioritize", "pause"]).nullable(),
+                  }),
+                ),
+                byVariant: zod.array(
+                  zod.object({
+                    variantKey: zod.string(),
+                    name: zod.string(),
+                    isControl: zod.boolean(),
+                    active: zod.boolean(),
+                    weight: zod.number(),
+                    sent: zod.number(),
+                    delivered: zod.number(),
+                    replied: zod.number(),
+                    positiveReplied: zod.number(),
+                    signups: zod.number(),
+                    replyRate: zod.number().nullable(),
+                    positiveReplyRate: zod.number().nullable(),
+                    signupRate: zod.number().nullable(),
+                    smoothedPositiveReplyRate: zod.number(),
+                  }),
+                ),
+                byCampaign: zod.array(
+                  zod.object({
+                    campaignId: zod.number(),
+                    name: zod.string(),
+                    status: zod.string(),
+                    sent: zod.number(),
+                    delivered: zod.number(),
+                    replied: zod.number(),
+                    positiveReplied: zod.number(),
+                    signups: zod.number(),
+                    replyRate: zod.number().nullable(),
+                  }),
+                ),
+                byStep: zod.array(
+                  zod.object({
+                    step: zod.number(),
+                    sent: zod.number(),
+                    delivered: zod.number(),
+                    replied: zod.number(),
+                    complained: zod.number(),
+                    complaintRate: zod.number().nullable(),
+                  }),
+                ),
+              }),
+              deliverability: zod.object({
+                window14d: zod.object({
+                  sent: zod.number(),
+                  delivered: zod.number(),
+                  bounced: zod.number(),
+                  complained: zod.number(),
+                  bounceRate: zod.number().nullable(),
+                  complaintRate: zod.number().nullable(),
+                }),
+                status: zod.enum([
+                  "ok",
+                  "warn",
+                  "throttled",
+                  "paused",
+                  "insufficient_data",
+                ]),
+                guard: zod.object({
+                  status: zod.string(),
+                  since: zod.string().nullable(),
+                  reason: zod.string().nullable(),
+                  baseCap: zod.number(),
+                  effectiveCap: zod.number(),
+                }),
+              }),
+              experiments: zod.object({
+                proposed: zod.number(),
+                running: zod.number(),
+                decisionsDue7d: zod.number(),
+                decided30d: zod.number(),
+              }),
+              dataQuality: zod.array(zod.string()),
+            })
+            .optional()
+            .describe(
+              "Outcome KPIs computed from production tables (control-plane\/growth\/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.",
+            ),
         })
         .describe("Live business KPIs computed from production tables."),
       createdAt: zod.coerce.date(),
@@ -1345,6 +2368,12 @@ export const GetControlMetricsHistoryResponse = zod.object({
 /**
  * @summary Prospect pipeline (potential venue customers)
  */
+export const listControlProspectsQueryQMax = 120;
+
+export const listControlProspectsQueryLimitMax = 200;
+
+export const listControlProspectsQueryOffsetMin = 0;
+
 export const ListControlProspectsQueryParams = zod.object({
   status: zod
     .enum([
@@ -1358,7 +2387,20 @@ export const ListControlProspectsQueryParams = zod.object({
     ])
     .optional(),
   campaignId: zod.coerce.number().optional(),
-  limit: zod.coerce.number().optional(),
+  vettingStatus: zod
+    .enum(["unvetted", "passed", "review", "failed", "error"])
+    .optional(),
+  q: zod.coerce
+    .string()
+    .max(listControlProspectsQueryQMax)
+    .optional()
+    .describe("Case-insensitive match on name, email, website, or region."),
+  sort: zod.enum(["newest", "score", "updated"]).optional(),
+  limit: zod.coerce.number().max(listControlProspectsQueryLimitMax).optional(),
+  offset: zod.coerce
+    .number()
+    .min(listControlProspectsQueryOffsetMin)
+    .optional(),
 });
 
 export const ListControlProspectsResponse = zod.object({
@@ -1389,6 +2431,24 @@ export const ListControlProspectsResponse = zod.object({
       lastContactedAt: zod.coerce.date().nullish(),
       statusChangedBy: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
+      vettingStatus: zod.enum([
+        "unvetted",
+        "passed",
+        "review",
+        "failed",
+        "error",
+      ]),
+      legitimacyScore: zod.number().nullish(),
+      vettedAt: zod.coerce.date().nullish(),
+      venueType: zod.string().nullish(),
+      repliedAt: zod.coerce.date().nullish(),
+      replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+      convertedAt: zod.coerce.date().nullish(),
+      convertedOrganizationId: zod.number().nullish(),
+      convertedCampaignId: zod.number().nullish(),
+      attributionMethod: zod
+        .enum(["email", "website_domain", "email_domain", "manual"])
+        .nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -1401,6 +2461,8 @@ export const ListControlProspectsResponse = zod.object({
 export const SetControlProspectStatusParams = zod.object({
   id: zod.coerce.number(),
 });
+
+export const setControlProspectStatusBodyNoteMax = 400;
 
 export const SetControlProspectStatusBody = zod.object({
   status: zod
@@ -1415,6 +2477,15 @@ export const SetControlProspectStatusBody = zod.object({
     .describe(
       'Operator-recorded outcome. \"contacted\" is reserved for the governed send action and cannot be set here.',
     ),
+  replySentiment: zod
+    .enum(["positive", "neutral", "negative"])
+    .nullish()
+    .describe("Only with status replied."),
+  organizationId: zod
+    .number()
+    .nullish()
+    .describe("Only with status converted; the organization that signed up."),
+  note: zod.string().max(setControlProspectStatusBodyNoteMax).optional(),
 });
 
 export const SetControlProspectStatusResponse = zod.object({
@@ -1444,6 +2515,24 @@ export const SetControlProspectStatusResponse = zod.object({
     lastContactedAt: zod.coerce.date().nullish(),
     statusChangedBy: zod.string().nullish(),
     createdByAgent: zod.string().nullish(),
+    vettingStatus: zod.enum([
+      "unvetted",
+      "passed",
+      "review",
+      "failed",
+      "error",
+    ]),
+    legitimacyScore: zod.number().nullish(),
+    vettedAt: zod.coerce.date().nullish(),
+    venueType: zod.string().nullish(),
+    repliedAt: zod.coerce.date().nullish(),
+    replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    convertedOrganizationId: zod.number().nullish(),
+    convertedCampaignId: zod.number().nullish(),
+    attributionMethod: zod
+      .enum(["email", "website_domain", "email_domain", "manual"])
+      .nullish(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),
@@ -1476,8 +2565,43 @@ export const ListControlCampaignsResponse = zod.object({
 });
 
 /**
+ * @summary Operator launches, pauses, resumes, or completes a campaign
+ */
+export const SetControlCampaignStatusParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const setControlCampaignStatusBodyNoteMax = 400;
+
+export const SetControlCampaignStatusBody = zod.object({
+  status: zod.enum(["active", "paused", "completed"]),
+  note: zod.string().max(setControlCampaignStatusBodyNoteMax).optional(),
+});
+
+export const SetControlCampaignStatusResponse = zod.object({
+  campaign: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    objective: zod.string(),
+    audience: zod.string().nullish(),
+    steps: zod.array(zod.record(zod.string(), zod.unknown())),
+    status: zod.enum(["draft", "active", "paused", "completed"]),
+    prospectCounts: zod.record(zod.string(), zod.number()),
+    createdByAgent: zod.string().nullish(),
+    launchedAt: zod.coerce.date().nullish(),
+    completedAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
  * @summary Outreach studio emails with prospect and approval state
  */
+export const listControlOutreachEmailsQueryLimitMax = 200;
+
+export const listControlOutreachEmailsQueryOffsetMin = 0;
+
 export const ListControlOutreachEmailsQueryParams = zod.object({
   status: zod
     .enum([
@@ -1491,7 +2615,18 @@ export const ListControlOutreachEmailsQueryParams = zod.object({
     ])
     .optional(),
   prospectId: zod.coerce.number().optional(),
-  limit: zod.coerce.number().optional(),
+  awaiting: zod.coerce
+    .boolean()
+    .optional()
+    .describe("When true, only drafts whose send action is still pending."),
+  limit: zod.coerce
+    .number()
+    .max(listControlOutreachEmailsQueryLimitMax)
+    .optional(),
+  offset: zod.coerce
+    .number()
+    .min(listControlOutreachEmailsQueryOffsetMin)
+    .optional(),
 });
 
 export const ListControlOutreachEmailsResponse = zod.object({
@@ -1520,6 +2655,23 @@ export const ListControlOutreachEmailsResponse = zod.object({
         ctaLabel: zod.string(),
         ctaUrl: zod.string(),
         imageAssetIds: zod.array(zod.number()),
+        variantKey: zod.string().nullish(),
+        citedFacts: zod
+          .array(
+            zod.object({
+              kind: zod.string(),
+              value: zod.string(),
+              sourceUrl: zod.string(),
+            }),
+          )
+          .nullish(),
+        vettingSnapshot: zod
+          .object({
+            status: zod.string(),
+            score: zod.number(),
+            vettedAt: zod.coerce.date(),
+          })
+          .nullish(),
         draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
         providerMessageId: zod.string().nullish(),
         sentTo: zod.string().nullish(),
@@ -1527,6 +2679,8 @@ export const ListControlOutreachEmailsResponse = zod.object({
         deliveredAt: zod.coerce.date().nullish(),
         bouncedAt: zod.coerce.date().nullish(),
         bounceReason: zod.string().nullish(),
+        openedAt: zod.coerce.date().nullish(),
+        clickedAt: zod.coerce.date().nullish(),
         lastError: zod.string().nullish(),
         createdByAgent: zod.string().nullish(),
         editedBy: zod.string().nullish(),
@@ -1539,6 +2693,7 @@ export const ListControlOutreachEmailsResponse = zod.object({
         email: zod.string(),
         contactName: zod.string().nullish(),
         status: zod.string(),
+        vettingStatus: zod.string(),
         website: zod.string().nullish(),
         region: zod.string().nullish(),
       }),
@@ -1580,6 +2735,23 @@ export const GetControlOutreachEmailResponse = zod.object({
       ctaLabel: zod.string(),
       ctaUrl: zod.string(),
       imageAssetIds: zod.array(zod.number()),
+      variantKey: zod.string().nullish(),
+      citedFacts: zod
+        .array(
+          zod.object({
+            kind: zod.string(),
+            value: zod.string(),
+            sourceUrl: zod.string(),
+          }),
+        )
+        .nullish(),
+      vettingSnapshot: zod
+        .object({
+          status: zod.string(),
+          score: zod.number(),
+          vettedAt: zod.coerce.date(),
+        })
+        .nullish(),
       draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
       providerMessageId: zod.string().nullish(),
       sentTo: zod.string().nullish(),
@@ -1587,6 +2759,8 @@ export const GetControlOutreachEmailResponse = zod.object({
       deliveredAt: zod.coerce.date().nullish(),
       bouncedAt: zod.coerce.date().nullish(),
       bounceReason: zod.string().nullish(),
+      openedAt: zod.coerce.date().nullish(),
+      clickedAt: zod.coerce.date().nullish(),
       lastError: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
       editedBy: zod.string().nullish(),
@@ -1619,6 +2793,24 @@ export const GetControlOutreachEmailResponse = zod.object({
       lastContactedAt: zod.coerce.date().nullish(),
       statusChangedBy: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
+      vettingStatus: zod.enum([
+        "unvetted",
+        "passed",
+        "review",
+        "failed",
+        "error",
+      ]),
+      legitimacyScore: zod.number().nullish(),
+      vettedAt: zod.coerce.date().nullish(),
+      venueType: zod.string().nullish(),
+      repliedAt: zod.coerce.date().nullish(),
+      replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+      convertedAt: zod.coerce.date().nullish(),
+      convertedOrganizationId: zod.number().nullish(),
+      convertedCampaignId: zod.number().nullish(),
+      attributionMethod: zod
+        .enum(["email", "website_domain", "email_domain", "manual"])
+        .nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -1647,6 +2839,81 @@ export const GetControlOutreachEmailResponse = zod.object({
         fetchedAt: zod.coerce.date(),
       })
       .nullish(),
+    vetting: zod
+      .object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        status: zod.enum(["passed", "review", "failed", "error"]),
+        score: zod.number(),
+        tier: zod.enum(["A", "AB"]),
+        hardFails: zod.array(zod.string()),
+        checks: zod.array(
+          zod.object({
+            key: zod.string(),
+            outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+            points: zod.number(),
+            hardFail: zod.boolean(),
+            detail: zod.string(),
+            evidence: zod.array(
+              zod.object({
+                url: zod.string(),
+                excerpt: zod.string().nullish(),
+                observedAt: zod.coerce.date(),
+              }),
+            ),
+            data: zod.record(zod.string(), zod.unknown()).nullish(),
+          }),
+        ),
+        summary: zod.string(),
+        contactDomain: zod.string(),
+        mxProvider: zod.string().nullish(),
+        domainRegisteredAt: zod.coerce.date().nullish(),
+        firstCaptureAt: zod.coerce.date().nullish(),
+        placesPlaceId: zod.string().nullish(),
+        vettedAt: zod.coerce.date(),
+        expiresAt: zod.coerce.date(),
+        vettedBy: zod.string(),
+      })
+      .nullish(),
+    facts: zod.array(
+      zod.object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        kind: zod.enum([
+          "venue_name",
+          "space",
+          "location",
+          "capacity",
+          "style",
+          "owner_name",
+          "email",
+          "phone",
+          "address",
+          "marketplace",
+          "social",
+          "google_rating",
+          "wedding_signal",
+        ]),
+        value: zod.string(),
+        sourceUrl: zod.string(),
+        sourceKind: zod.enum([
+          "website",
+          "json_ld",
+          "rdap",
+          "wayback",
+          "dns",
+          "places",
+          "agent_research",
+          "operator",
+        ]),
+        excerpt: zod.string().nullish(),
+        status: zod.enum(["verified", "unverified", "stale"]),
+        verifiedAt: zod.coerce.date().nullish(),
+        createdBy: zod.string(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    approvable: zod.boolean(),
     assets: zod.array(
       zod.object({
         id: zod.number(),
@@ -1673,9 +2940,9 @@ export const GetControlOutreachEmailResponse = zod.object({
     warnings: zod.object({
       research: zod.array(zod.string()),
       config: zod.array(zod.string()),
+      vetting: zod.array(zod.string()),
     }),
     editable: zod.boolean(),
-    samplePreviewsEnabled: zod.boolean(),
   }),
 });
 
@@ -1687,7 +2954,7 @@ export const UpdateControlOutreachEmailParams = zod.object({
 });
 
 export const updateControlOutreachEmailBodySubjectMin = 3;
-export const updateControlOutreachEmailBodySubjectMax = 80;
+export const updateControlOutreachEmailBodySubjectMax = 50;
 
 export const updateControlOutreachEmailBodyBodyMin = 20;
 export const updateControlOutreachEmailBodyBodyMax = 2000;
@@ -1768,6 +3035,23 @@ export const UpdateControlOutreachEmailResponse = zod.object({
       ctaLabel: zod.string(),
       ctaUrl: zod.string(),
       imageAssetIds: zod.array(zod.number()),
+      variantKey: zod.string().nullish(),
+      citedFacts: zod
+        .array(
+          zod.object({
+            kind: zod.string(),
+            value: zod.string(),
+            sourceUrl: zod.string(),
+          }),
+        )
+        .nullish(),
+      vettingSnapshot: zod
+        .object({
+          status: zod.string(),
+          score: zod.number(),
+          vettedAt: zod.coerce.date(),
+        })
+        .nullish(),
       draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
       providerMessageId: zod.string().nullish(),
       sentTo: zod.string().nullish(),
@@ -1775,6 +3059,8 @@ export const UpdateControlOutreachEmailResponse = zod.object({
       deliveredAt: zod.coerce.date().nullish(),
       bouncedAt: zod.coerce.date().nullish(),
       bounceReason: zod.string().nullish(),
+      openedAt: zod.coerce.date().nullish(),
+      clickedAt: zod.coerce.date().nullish(),
       lastError: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
       editedBy: zod.string().nullish(),
@@ -1807,6 +3093,24 @@ export const UpdateControlOutreachEmailResponse = zod.object({
       lastContactedAt: zod.coerce.date().nullish(),
       statusChangedBy: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
+      vettingStatus: zod.enum([
+        "unvetted",
+        "passed",
+        "review",
+        "failed",
+        "error",
+      ]),
+      legitimacyScore: zod.number().nullish(),
+      vettedAt: zod.coerce.date().nullish(),
+      venueType: zod.string().nullish(),
+      repliedAt: zod.coerce.date().nullish(),
+      replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+      convertedAt: zod.coerce.date().nullish(),
+      convertedOrganizationId: zod.number().nullish(),
+      convertedCampaignId: zod.number().nullish(),
+      attributionMethod: zod
+        .enum(["email", "website_domain", "email_domain", "manual"])
+        .nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -1835,6 +3139,81 @@ export const UpdateControlOutreachEmailResponse = zod.object({
         fetchedAt: zod.coerce.date(),
       })
       .nullish(),
+    vetting: zod
+      .object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        status: zod.enum(["passed", "review", "failed", "error"]),
+        score: zod.number(),
+        tier: zod.enum(["A", "AB"]),
+        hardFails: zod.array(zod.string()),
+        checks: zod.array(
+          zod.object({
+            key: zod.string(),
+            outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+            points: zod.number(),
+            hardFail: zod.boolean(),
+            detail: zod.string(),
+            evidence: zod.array(
+              zod.object({
+                url: zod.string(),
+                excerpt: zod.string().nullish(),
+                observedAt: zod.coerce.date(),
+              }),
+            ),
+            data: zod.record(zod.string(), zod.unknown()).nullish(),
+          }),
+        ),
+        summary: zod.string(),
+        contactDomain: zod.string(),
+        mxProvider: zod.string().nullish(),
+        domainRegisteredAt: zod.coerce.date().nullish(),
+        firstCaptureAt: zod.coerce.date().nullish(),
+        placesPlaceId: zod.string().nullish(),
+        vettedAt: zod.coerce.date(),
+        expiresAt: zod.coerce.date(),
+        vettedBy: zod.string(),
+      })
+      .nullish(),
+    facts: zod.array(
+      zod.object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        kind: zod.enum([
+          "venue_name",
+          "space",
+          "location",
+          "capacity",
+          "style",
+          "owner_name",
+          "email",
+          "phone",
+          "address",
+          "marketplace",
+          "social",
+          "google_rating",
+          "wedding_signal",
+        ]),
+        value: zod.string(),
+        sourceUrl: zod.string(),
+        sourceKind: zod.enum([
+          "website",
+          "json_ld",
+          "rdap",
+          "wayback",
+          "dns",
+          "places",
+          "agent_research",
+          "operator",
+        ]),
+        excerpt: zod.string().nullish(),
+        status: zod.enum(["verified", "unverified", "stale"]),
+        verifiedAt: zod.coerce.date().nullish(),
+        createdBy: zod.string(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    approvable: zod.boolean(),
     assets: zod.array(
       zod.object({
         id: zod.number(),
@@ -1861,9 +3240,9 @@ export const UpdateControlOutreachEmailResponse = zod.object({
     warnings: zod.object({
       research: zod.array(zod.string()),
       config: zod.array(zod.string()),
+      vetting: zod.array(zod.string()),
     }),
     editable: zod.boolean(),
-    samplePreviewsEnabled: zod.boolean(),
   }),
 });
 
@@ -1904,6 +3283,23 @@ export const RegenerateControlOutreachEmailResponse = zod.object({
       ctaLabel: zod.string(),
       ctaUrl: zod.string(),
       imageAssetIds: zod.array(zod.number()),
+      variantKey: zod.string().nullish(),
+      citedFacts: zod
+        .array(
+          zod.object({
+            kind: zod.string(),
+            value: zod.string(),
+            sourceUrl: zod.string(),
+          }),
+        )
+        .nullish(),
+      vettingSnapshot: zod
+        .object({
+          status: zod.string(),
+          score: zod.number(),
+          vettedAt: zod.coerce.date(),
+        })
+        .nullish(),
       draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
       providerMessageId: zod.string().nullish(),
       sentTo: zod.string().nullish(),
@@ -1911,6 +3307,8 @@ export const RegenerateControlOutreachEmailResponse = zod.object({
       deliveredAt: zod.coerce.date().nullish(),
       bouncedAt: zod.coerce.date().nullish(),
       bounceReason: zod.string().nullish(),
+      openedAt: zod.coerce.date().nullish(),
+      clickedAt: zod.coerce.date().nullish(),
       lastError: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
       editedBy: zod.string().nullish(),
@@ -1943,137 +3341,24 @@ export const RegenerateControlOutreachEmailResponse = zod.object({
       lastContactedAt: zod.coerce.date().nullish(),
       statusChangedBy: zod.string().nullish(),
       createdByAgent: zod.string().nullish(),
-      createdAt: zod.coerce.date(),
-      updatedAt: zod.coerce.date(),
-    }),
-    action: zod
-      .object({
-        id: zod.number(),
-        status: zod.string(),
-        decidedBy: zod.string().nullish(),
-        decisionNote: zod.string().nullish(),
-        error: zod.string().nullish(),
-      })
-      .nullish(),
-    research: zod
-      .object({
-        status: zod.enum(["ok", "no_images", "fetch_failed"]),
-        facts: zod.object({
-          name: zod.string().nullish(),
-          location: zod.string().nullish(),
-          spaces: zod.array(zod.string()),
-          style: zod.string().nullish(),
-          capacity: zod.number().nullish(),
-          summary: zod.string().nullish(),
-        }),
-        sourceUrls: zod.array(zod.string()),
-        warnings: zod.array(zod.string()),
-        fetchedAt: zod.coerce.date(),
-      })
-      .nullish(),
-    assets: zod.array(
-      zod.object({
-        id: zod.number(),
-        kind: zod.enum(["venue_image", "sample_preview"]),
-        url: zod.string(),
-        sourceUrl: zod.string().nullish(),
-        pageUrl: zod.string().nullish(),
-        width: zod.number(),
-        height: zod.number(),
-        bytes: zod.number(),
-        altText: zod.string(),
-        score: zod.number(),
-        selected: zod.boolean(),
-        inEmail: zod.boolean(),
-        createdAt: zod.coerce.date(),
-      }),
-    ),
-    preview: zod.object({
-      html: zod.string(),
-      htmlDark: zod.string(),
-      text: zod.string(),
-      headers: zod.record(zod.string(), zod.string()),
-    }),
-    warnings: zod.object({
-      research: zod.array(zod.string()),
-      config: zod.array(zod.string()),
-    }),
-    editable: zod.boolean(),
-    samplePreviewsEnabled: zod.boolean(),
-  }),
-});
-
-/**
- * @summary Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
- */
-export const RequestControlSamplePreviewParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const RequestControlSamplePreviewResponse = zod.object({
-  detail: zod.object({
-    email: zod.object({
-      id: zod.number(),
-      prospectId: zod.number(),
-      actionId: zod.number().nullish(),
-      campaignId: zod.number().nullish(),
-      step: zod.number().nullish(),
-      status: zod.enum([
-        "draft",
-        "sent",
-        "delivered",
-        "bounced",
-        "complained",
+      vettingStatus: zod.enum([
+        "unvetted",
+        "passed",
+        "review",
         "failed",
-        "rejected",
+        "error",
       ]),
-      subjectOptions: zod.array(zod.string()),
-      subject: zod.string(),
-      body: zod.string(),
-      greeting: zod.string(),
-      signOff: zod.string(),
-      ctaLabel: zod.string(),
-      ctaUrl: zod.string(),
-      imageAssetIds: zod.array(zod.number()),
-      draftNotes: zod.record(zod.string(), zod.unknown()).nullish(),
-      providerMessageId: zod.string().nullish(),
-      sentTo: zod.string().nullish(),
-      sentAt: zod.coerce.date().nullish(),
-      deliveredAt: zod.coerce.date().nullish(),
-      bouncedAt: zod.coerce.date().nullish(),
-      bounceReason: zod.string().nullish(),
-      lastError: zod.string().nullish(),
-      createdByAgent: zod.string().nullish(),
-      editedBy: zod.string().nullish(),
-      createdAt: zod.coerce.date(),
-      updatedAt: zod.coerce.date(),
-    }),
-    prospect: zod.object({
-      id: zod.number(),
-      name: zod.string(),
-      contactName: zod.string().nullish(),
-      email: zod.string(),
-      phone: zod.string().nullish(),
-      website: zod.string().nullish(),
-      region: zod.string().nullish(),
-      source: zod.enum(["agent_research", "operator_import", "inbound"]),
-      score: zod.number(),
-      qualification: zod.string().nullish(),
-      status: zod.enum([
-        "new",
-        "qualified",
-        "contacted",
-        "replied",
-        "converted",
-        "unsubscribed",
-        "disqualified",
-      ]),
-      campaignId: zod.number().nullish(),
-      campaignStep: zod.number(),
-      contactCount: zod.number(),
-      lastContactedAt: zod.coerce.date().nullish(),
-      statusChangedBy: zod.string().nullish(),
-      createdByAgent: zod.string().nullish(),
+      legitimacyScore: zod.number().nullish(),
+      vettedAt: zod.coerce.date().nullish(),
+      venueType: zod.string().nullish(),
+      repliedAt: zod.coerce.date().nullish(),
+      replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+      convertedAt: zod.coerce.date().nullish(),
+      convertedOrganizationId: zod.number().nullish(),
+      convertedCampaignId: zod.number().nullish(),
+      attributionMethod: zod
+        .enum(["email", "website_domain", "email_domain", "manual"])
+        .nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -2102,6 +3387,81 @@ export const RequestControlSamplePreviewResponse = zod.object({
         fetchedAt: zod.coerce.date(),
       })
       .nullish(),
+    vetting: zod
+      .object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        status: zod.enum(["passed", "review", "failed", "error"]),
+        score: zod.number(),
+        tier: zod.enum(["A", "AB"]),
+        hardFails: zod.array(zod.string()),
+        checks: zod.array(
+          zod.object({
+            key: zod.string(),
+            outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+            points: zod.number(),
+            hardFail: zod.boolean(),
+            detail: zod.string(),
+            evidence: zod.array(
+              zod.object({
+                url: zod.string(),
+                excerpt: zod.string().nullish(),
+                observedAt: zod.coerce.date(),
+              }),
+            ),
+            data: zod.record(zod.string(), zod.unknown()).nullish(),
+          }),
+        ),
+        summary: zod.string(),
+        contactDomain: zod.string(),
+        mxProvider: zod.string().nullish(),
+        domainRegisteredAt: zod.coerce.date().nullish(),
+        firstCaptureAt: zod.coerce.date().nullish(),
+        placesPlaceId: zod.string().nullish(),
+        vettedAt: zod.coerce.date(),
+        expiresAt: zod.coerce.date(),
+        vettedBy: zod.string(),
+      })
+      .nullish(),
+    facts: zod.array(
+      zod.object({
+        id: zod.number(),
+        prospectId: zod.number(),
+        kind: zod.enum([
+          "venue_name",
+          "space",
+          "location",
+          "capacity",
+          "style",
+          "owner_name",
+          "email",
+          "phone",
+          "address",
+          "marketplace",
+          "social",
+          "google_rating",
+          "wedding_signal",
+        ]),
+        value: zod.string(),
+        sourceUrl: zod.string(),
+        sourceKind: zod.enum([
+          "website",
+          "json_ld",
+          "rdap",
+          "wayback",
+          "dns",
+          "places",
+          "agent_research",
+          "operator",
+        ]),
+        excerpt: zod.string().nullish(),
+        status: zod.enum(["verified", "unverified", "stale"]),
+        verifiedAt: zod.coerce.date().nullish(),
+        createdBy: zod.string(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    approvable: zod.boolean(),
     assets: zod.array(
       zod.object({
         id: zod.number(),
@@ -2128,9 +3488,9 @@ export const RequestControlSamplePreviewResponse = zod.object({
     warnings: zod.object({
       research: zod.array(zod.string()),
       config: zod.array(zod.string()),
+      vetting: zod.array(zod.string()),
     }),
     editable: zod.boolean(),
-    samplePreviewsEnabled: zod.boolean(),
   }),
 });
 
@@ -2152,30 +3512,159 @@ export const DraftControlOutreachEmailBody = zod.object({
     .max(draftControlOutreachEmailBodyStepMax)
     .optional(),
   refreshResearch: zod.boolean().optional(),
+  variantKey: zod
+    .string()
+    .nullish()
+    .describe(
+      "Force a control_copy_variants key; omitted = the studio chooses by weight.",
+    ),
 });
 
 /**
- * @summary Re-run the venue website research (facts and photos) for a prospect
+ * @summary Vetting verdict, every check with its evidence, verified facts with sources, and research for one prospect
  */
-export const ResearchControlProspectParams = zod.object({
+export const GetControlProspectEvidenceParams = zod.object({
   id: zod.coerce.number(),
 });
 
-export const ResearchControlProspectResponse = zod.object({
-  research: zod.object({
-    status: zod.enum(["ok", "no_images", "fetch_failed"]),
-    facts: zod.object({
-      name: zod.string().nullish(),
-      location: zod.string().nullish(),
-      spaces: zod.array(zod.string()),
-      style: zod.string().nullish(),
-      capacity: zod.number().nullish(),
-      summary: zod.string().nullish(),
-    }),
-    sourceUrls: zod.array(zod.string()),
-    warnings: zod.array(zod.string()),
-    fetchedAt: zod.coerce.date(),
+export const GetControlProspectEvidenceResponse = zod.object({
+  prospect: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    contactName: zod.string().nullish(),
+    email: zod.string(),
+    phone: zod.string().nullish(),
+    website: zod.string().nullish(),
+    region: zod.string().nullish(),
+    source: zod.enum(["agent_research", "operator_import", "inbound"]),
+    score: zod.number(),
+    qualification: zod.string().nullish(),
+    status: zod.enum([
+      "new",
+      "qualified",
+      "contacted",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ]),
+    campaignId: zod.number().nullish(),
+    campaignStep: zod.number(),
+    contactCount: zod.number(),
+    lastContactedAt: zod.coerce.date().nullish(),
+    statusChangedBy: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    vettingStatus: zod.enum([
+      "unvetted",
+      "passed",
+      "review",
+      "failed",
+      "error",
+    ]),
+    legitimacyScore: zod.number().nullish(),
+    vettedAt: zod.coerce.date().nullish(),
+    venueType: zod.string().nullish(),
+    repliedAt: zod.coerce.date().nullish(),
+    replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    convertedOrganizationId: zod.number().nullish(),
+    convertedCampaignId: zod.number().nullish(),
+    attributionMethod: zod
+      .enum(["email", "website_domain", "email_domain", "manual"])
+      .nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
   }),
+  vetting: zod
+    .object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      status: zod.enum(["passed", "review", "failed", "error"]),
+      score: zod.number(),
+      tier: zod.enum(["A", "AB"]),
+      hardFails: zod.array(zod.string()),
+      checks: zod.array(
+        zod.object({
+          key: zod.string(),
+          outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+          points: zod.number(),
+          hardFail: zod.boolean(),
+          detail: zod.string(),
+          evidence: zod.array(
+            zod.object({
+              url: zod.string(),
+              excerpt: zod.string().nullish(),
+              observedAt: zod.coerce.date(),
+            }),
+          ),
+          data: zod.record(zod.string(), zod.unknown()).nullish(),
+        }),
+      ),
+      summary: zod.string(),
+      contactDomain: zod.string(),
+      mxProvider: zod.string().nullish(),
+      domainRegisteredAt: zod.coerce.date().nullish(),
+      firstCaptureAt: zod.coerce.date().nullish(),
+      placesPlaceId: zod.string().nullish(),
+      vettedAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date(),
+      vettedBy: zod.string(),
+    })
+    .nullish(),
+  facts: zod.array(
+    zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      kind: zod.enum([
+        "venue_name",
+        "space",
+        "location",
+        "capacity",
+        "style",
+        "owner_name",
+        "email",
+        "phone",
+        "address",
+        "marketplace",
+        "social",
+        "google_rating",
+        "wedding_signal",
+      ]),
+      value: zod.string(),
+      sourceUrl: zod.string(),
+      sourceKind: zod.enum([
+        "website",
+        "json_ld",
+        "rdap",
+        "wayback",
+        "dns",
+        "places",
+        "agent_research",
+        "operator",
+      ]),
+      excerpt: zod.string().nullish(),
+      status: zod.enum(["verified", "unverified", "stale"]),
+      verifiedAt: zod.coerce.date().nullish(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  research: zod
+    .object({
+      status: zod.enum(["ok", "no_images", "fetch_failed"]),
+      facts: zod.object({
+        name: zod.string().nullish(),
+        location: zod.string().nullish(),
+        spaces: zod.array(zod.string()),
+        style: zod.string().nullish(),
+        capacity: zod.number().nullish(),
+        summary: zod.string().nullish(),
+      }),
+      sourceUrls: zod.array(zod.string()),
+      warnings: zod.array(zod.string()),
+      fetchedAt: zod.coerce.date(),
+    })
+    .nullish(),
   assets: zod.array(
     zod.object({
       id: zod.number(),
@@ -2193,4 +3682,1840 @@ export const ResearchControlProspectResponse = zod.object({
       createdAt: zod.coerce.date(),
     }),
   ),
+});
+
+/**
+ * @summary Run (or re-run) legitimacy vetting for a prospect now
+ */
+export const VetControlProspectParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const VetControlProspectBody = zod.object({
+  refresh: zod.boolean().optional(),
+});
+
+export const VetControlProspectResponse = zod.object({
+  prospect: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    contactName: zod.string().nullish(),
+    email: zod.string(),
+    phone: zod.string().nullish(),
+    website: zod.string().nullish(),
+    region: zod.string().nullish(),
+    source: zod.enum(["agent_research", "operator_import", "inbound"]),
+    score: zod.number(),
+    qualification: zod.string().nullish(),
+    status: zod.enum([
+      "new",
+      "qualified",
+      "contacted",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ]),
+    campaignId: zod.number().nullish(),
+    campaignStep: zod.number(),
+    contactCount: zod.number(),
+    lastContactedAt: zod.coerce.date().nullish(),
+    statusChangedBy: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    vettingStatus: zod.enum([
+      "unvetted",
+      "passed",
+      "review",
+      "failed",
+      "error",
+    ]),
+    legitimacyScore: zod.number().nullish(),
+    vettedAt: zod.coerce.date().nullish(),
+    venueType: zod.string().nullish(),
+    repliedAt: zod.coerce.date().nullish(),
+    replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    convertedOrganizationId: zod.number().nullish(),
+    convertedCampaignId: zod.number().nullish(),
+    attributionMethod: zod
+      .enum(["email", "website_domain", "email_domain", "manual"])
+      .nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  vetting: zod
+    .object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      status: zod.enum(["passed", "review", "failed", "error"]),
+      score: zod.number(),
+      tier: zod.enum(["A", "AB"]),
+      hardFails: zod.array(zod.string()),
+      checks: zod.array(
+        zod.object({
+          key: zod.string(),
+          outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+          points: zod.number(),
+          hardFail: zod.boolean(),
+          detail: zod.string(),
+          evidence: zod.array(
+            zod.object({
+              url: zod.string(),
+              excerpt: zod.string().nullish(),
+              observedAt: zod.coerce.date(),
+            }),
+          ),
+          data: zod.record(zod.string(), zod.unknown()).nullish(),
+        }),
+      ),
+      summary: zod.string(),
+      contactDomain: zod.string(),
+      mxProvider: zod.string().nullish(),
+      domainRegisteredAt: zod.coerce.date().nullish(),
+      firstCaptureAt: zod.coerce.date().nullish(),
+      placesPlaceId: zod.string().nullish(),
+      vettedAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date(),
+      vettedBy: zod.string(),
+    })
+    .nullish(),
+  facts: zod.array(
+    zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      kind: zod.enum([
+        "venue_name",
+        "space",
+        "location",
+        "capacity",
+        "style",
+        "owner_name",
+        "email",
+        "phone",
+        "address",
+        "marketplace",
+        "social",
+        "google_rating",
+        "wedding_signal",
+      ]),
+      value: zod.string(),
+      sourceUrl: zod.string(),
+      sourceKind: zod.enum([
+        "website",
+        "json_ld",
+        "rdap",
+        "wayback",
+        "dns",
+        "places",
+        "agent_research",
+        "operator",
+      ]),
+      excerpt: zod.string().nullish(),
+      status: zod.enum(["verified", "unverified", "stale"]),
+      verifiedAt: zod.coerce.date().nullish(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  research: zod
+    .object({
+      status: zod.enum(["ok", "no_images", "fetch_failed"]),
+      facts: zod.object({
+        name: zod.string().nullish(),
+        location: zod.string().nullish(),
+        spaces: zod.array(zod.string()),
+        style: zod.string().nullish(),
+        capacity: zod.number().nullish(),
+        summary: zod.string().nullish(),
+      }),
+      sourceUrls: zod.array(zod.string()),
+      warnings: zod.array(zod.string()),
+      fetchedAt: zod.coerce.date(),
+    })
+    .nullish(),
+  assets: zod.array(
+    zod.object({
+      id: zod.number(),
+      kind: zod.enum(["venue_image", "sample_preview"]),
+      url: zod.string(),
+      sourceUrl: zod.string().nullish(),
+      pageUrl: zod.string().nullish(),
+      width: zod.number(),
+      height: zod.number(),
+      bytes: zod.number(),
+      altText: zod.string(),
+      score: zod.number(),
+      selected: zod.boolean(),
+      inEmail: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Operator decision on a prospect's legitimacy (pass or fail) with a note
+ */
+export const OverrideControlProspectVettingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const overrideControlProspectVettingBodyNoteMin = 5;
+export const overrideControlProspectVettingBodyNoteMax = 400;
+
+export const OverrideControlProspectVettingBody = zod.object({
+  decision: zod.enum(["pass", "fail"]),
+  note: zod
+    .string()
+    .min(overrideControlProspectVettingBodyNoteMin)
+    .max(overrideControlProspectVettingBodyNoteMax),
+});
+
+export const OverrideControlProspectVettingResponse = zod.object({
+  prospect: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    contactName: zod.string().nullish(),
+    email: zod.string(),
+    phone: zod.string().nullish(),
+    website: zod.string().nullish(),
+    region: zod.string().nullish(),
+    source: zod.enum(["agent_research", "operator_import", "inbound"]),
+    score: zod.number(),
+    qualification: zod.string().nullish(),
+    status: zod.enum([
+      "new",
+      "qualified",
+      "contacted",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ]),
+    campaignId: zod.number().nullish(),
+    campaignStep: zod.number(),
+    contactCount: zod.number(),
+    lastContactedAt: zod.coerce.date().nullish(),
+    statusChangedBy: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    vettingStatus: zod.enum([
+      "unvetted",
+      "passed",
+      "review",
+      "failed",
+      "error",
+    ]),
+    legitimacyScore: zod.number().nullish(),
+    vettedAt: zod.coerce.date().nullish(),
+    venueType: zod.string().nullish(),
+    repliedAt: zod.coerce.date().nullish(),
+    replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    convertedOrganizationId: zod.number().nullish(),
+    convertedCampaignId: zod.number().nullish(),
+    attributionMethod: zod
+      .enum(["email", "website_domain", "email_domain", "manual"])
+      .nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  vetting: zod
+    .object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      status: zod.enum(["passed", "review", "failed", "error"]),
+      score: zod.number(),
+      tier: zod.enum(["A", "AB"]),
+      hardFails: zod.array(zod.string()),
+      checks: zod.array(
+        zod.object({
+          key: zod.string(),
+          outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+          points: zod.number(),
+          hardFail: zod.boolean(),
+          detail: zod.string(),
+          evidence: zod.array(
+            zod.object({
+              url: zod.string(),
+              excerpt: zod.string().nullish(),
+              observedAt: zod.coerce.date(),
+            }),
+          ),
+          data: zod.record(zod.string(), zod.unknown()).nullish(),
+        }),
+      ),
+      summary: zod.string(),
+      contactDomain: zod.string(),
+      mxProvider: zod.string().nullish(),
+      domainRegisteredAt: zod.coerce.date().nullish(),
+      firstCaptureAt: zod.coerce.date().nullish(),
+      placesPlaceId: zod.string().nullish(),
+      vettedAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date(),
+      vettedBy: zod.string(),
+    })
+    .nullish(),
+  facts: zod.array(
+    zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      kind: zod.enum([
+        "venue_name",
+        "space",
+        "location",
+        "capacity",
+        "style",
+        "owner_name",
+        "email",
+        "phone",
+        "address",
+        "marketplace",
+        "social",
+        "google_rating",
+        "wedding_signal",
+      ]),
+      value: zod.string(),
+      sourceUrl: zod.string(),
+      sourceKind: zod.enum([
+        "website",
+        "json_ld",
+        "rdap",
+        "wayback",
+        "dns",
+        "places",
+        "agent_research",
+        "operator",
+      ]),
+      excerpt: zod.string().nullish(),
+      status: zod.enum(["verified", "unverified", "stale"]),
+      verifiedAt: zod.coerce.date().nullish(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  research: zod
+    .object({
+      status: zod.enum(["ok", "no_images", "fetch_failed"]),
+      facts: zod.object({
+        name: zod.string().nullish(),
+        location: zod.string().nullish(),
+        spaces: zod.array(zod.string()),
+        style: zod.string().nullish(),
+        capacity: zod.number().nullish(),
+        summary: zod.string().nullish(),
+      }),
+      sourceUrls: zod.array(zod.string()),
+      warnings: zod.array(zod.string()),
+      fetchedAt: zod.coerce.date(),
+    })
+    .nullish(),
+  assets: zod.array(
+    zod.object({
+      id: zod.number(),
+      kind: zod.enum(["venue_image", "sample_preview"]),
+      url: zod.string(),
+      sourceUrl: zod.string().nullish(),
+      pageUrl: zod.string().nullish(),
+      width: zod.number(),
+      height: zod.number(),
+      bytes: zod.number(),
+      altText: zod.string(),
+      score: zod.number(),
+      selected: zod.boolean(),
+      inEmail: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Add an operator-verified venue fact with its source URL
+ */
+export const AddControlProspectFactParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const addControlProspectFactBodyValueMin = 2;
+export const addControlProspectFactBodyValueMax = 160;
+
+export const addControlProspectFactBodySourceUrlMin = 8;
+export const addControlProspectFactBodySourceUrlMax = 2000;
+
+export const AddControlProspectFactBody = zod.object({
+  kind: zod.enum([
+    "space",
+    "location",
+    "capacity",
+    "style",
+    "owner_name",
+    "phone",
+    "address",
+    "marketplace",
+    "social",
+  ]),
+  value: zod
+    .string()
+    .min(addControlProspectFactBodyValueMin)
+    .max(addControlProspectFactBodyValueMax),
+  sourceUrl: zod
+    .string()
+    .min(addControlProspectFactBodySourceUrlMin)
+    .max(addControlProspectFactBodySourceUrlMax),
+});
+
+/**
+ * @summary Remove a fact so the copywriter can no longer cite it
+ */
+export const RemoveControlProspectFactParams = zod.object({
+  id: zod.coerce.number(),
+  factId: zod.coerce.number(),
+});
+
+export const RemoveControlProspectFactResponse = zod.object({
+  prospect: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    contactName: zod.string().nullish(),
+    email: zod.string(),
+    phone: zod.string().nullish(),
+    website: zod.string().nullish(),
+    region: zod.string().nullish(),
+    source: zod.enum(["agent_research", "operator_import", "inbound"]),
+    score: zod.number(),
+    qualification: zod.string().nullish(),
+    status: zod.enum([
+      "new",
+      "qualified",
+      "contacted",
+      "replied",
+      "converted",
+      "unsubscribed",
+      "disqualified",
+    ]),
+    campaignId: zod.number().nullish(),
+    campaignStep: zod.number(),
+    contactCount: zod.number(),
+    lastContactedAt: zod.coerce.date().nullish(),
+    statusChangedBy: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    vettingStatus: zod.enum([
+      "unvetted",
+      "passed",
+      "review",
+      "failed",
+      "error",
+    ]),
+    legitimacyScore: zod.number().nullish(),
+    vettedAt: zod.coerce.date().nullish(),
+    venueType: zod.string().nullish(),
+    repliedAt: zod.coerce.date().nullish(),
+    replySentiment: zod.enum(["positive", "neutral", "negative"]).nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    convertedOrganizationId: zod.number().nullish(),
+    convertedCampaignId: zod.number().nullish(),
+    attributionMethod: zod
+      .enum(["email", "website_domain", "email_domain", "manual"])
+      .nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  vetting: zod
+    .object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      status: zod.enum(["passed", "review", "failed", "error"]),
+      score: zod.number(),
+      tier: zod.enum(["A", "AB"]),
+      hardFails: zod.array(zod.string()),
+      checks: zod.array(
+        zod.object({
+          key: zod.string(),
+          outcome: zod.enum(["pass", "warn", "fail", "skip", "error"]),
+          points: zod.number(),
+          hardFail: zod.boolean(),
+          detail: zod.string(),
+          evidence: zod.array(
+            zod.object({
+              url: zod.string(),
+              excerpt: zod.string().nullish(),
+              observedAt: zod.coerce.date(),
+            }),
+          ),
+          data: zod.record(zod.string(), zod.unknown()).nullish(),
+        }),
+      ),
+      summary: zod.string(),
+      contactDomain: zod.string(),
+      mxProvider: zod.string().nullish(),
+      domainRegisteredAt: zod.coerce.date().nullish(),
+      firstCaptureAt: zod.coerce.date().nullish(),
+      placesPlaceId: zod.string().nullish(),
+      vettedAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date(),
+      vettedBy: zod.string(),
+    })
+    .nullish(),
+  facts: zod.array(
+    zod.object({
+      id: zod.number(),
+      prospectId: zod.number(),
+      kind: zod.enum([
+        "venue_name",
+        "space",
+        "location",
+        "capacity",
+        "style",
+        "owner_name",
+        "email",
+        "phone",
+        "address",
+        "marketplace",
+        "social",
+        "google_rating",
+        "wedding_signal",
+      ]),
+      value: zod.string(),
+      sourceUrl: zod.string(),
+      sourceKind: zod.enum([
+        "website",
+        "json_ld",
+        "rdap",
+        "wayback",
+        "dns",
+        "places",
+        "agent_research",
+        "operator",
+      ]),
+      excerpt: zod.string().nullish(),
+      status: zod.enum(["verified", "unverified", "stale"]),
+      verifiedAt: zod.coerce.date().nullish(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  research: zod
+    .object({
+      status: zod.enum(["ok", "no_images", "fetch_failed"]),
+      facts: zod.object({
+        name: zod.string().nullish(),
+        location: zod.string().nullish(),
+        spaces: zod.array(zod.string()),
+        style: zod.string().nullish(),
+        capacity: zod.number().nullish(),
+        summary: zod.string().nullish(),
+      }),
+      sourceUrls: zod.array(zod.string()),
+      warnings: zod.array(zod.string()),
+      fetchedAt: zod.coerce.date(),
+    })
+    .nullish(),
+  assets: zod.array(
+    zod.object({
+      id: zod.number(),
+      kind: zod.enum(["venue_image", "sample_preview"]),
+      url: zod.string(),
+      sourceUrl: zod.string().nullish(),
+      pageUrl: zod.string().nullish(),
+      width: zod.number(),
+      height: zod.number(),
+      bytes: zod.number(),
+      altText: zod.string(),
+      score: zod.number(),
+      selected: zod.boolean(),
+      inEmail: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Deliverability guard, daily cap, and 14-day sending health for prospect outreach
+ */
+export const GetControlOutreachSendingResponse = zod.object({
+  guard: zod.object({
+    status: zod.enum(["ok", "warn", "throttled", "paused"]),
+    since: zod.coerce.date().nullish(),
+    reason: zod.string().nullish(),
+    okDays: zod.number(),
+  }),
+  dailyCap: zod.object({
+    policyMax: zod.number(),
+    sentToday: zod.number(),
+  }),
+  health: zod.object({
+    windowDays: zod.number(),
+    sent: zod.number(),
+    bounced: zod.number(),
+    complained: zod.number(),
+    bounceRatePct: zod.number(),
+  }),
+});
+
+/**
+ * @summary Pause or reset the deliverability guard (reset is always manual)
+ */
+export const setControlOutreachSendingBodyNoteMin = 5;
+export const setControlOutreachSendingBodyNoteMax = 400;
+
+export const SetControlOutreachSendingBody = zod.object({
+  paused: zod.boolean(),
+  note: zod
+    .string()
+    .min(setControlOutreachSendingBodyNoteMin)
+    .max(setControlOutreachSendingBodyNoteMax),
+});
+
+export const SetControlOutreachSendingResponse = zod.object({
+  guard: zod.object({
+    status: zod.enum(["ok", "warn", "throttled", "paused"]),
+    since: zod.coerce.date().nullish(),
+    reason: zod.string().nullish(),
+    okDays: zod.number(),
+  }),
+  dailyCap: zod.object({
+    policyMax: zod.number(),
+    sentToday: zod.number(),
+  }),
+  health: zod.object({
+    windowDays: zod.number(),
+    sent: zod.number(),
+    bounced: zod.number(),
+    complained: zod.number(),
+    bounceRatePct: zod.number(),
+  }),
+});
+
+/**
+ * @summary Outcome KPIs, adaptation state, copy variants, recent rule firings, latest digest
+ */
+export const GetControlGrowthResponse = zod.object({
+  snapshotId: zod.number().nullable(),
+  computedAt: zod.coerce.date(),
+  kpis: zod
+    .object({
+      version: zod.number(),
+      computedAt: zod.coerce.date(),
+      window: zod.object({
+        start30d: zod.coerce.date(),
+        start14d: zod.coerce.date(),
+        start7d: zod.coerce.date(),
+        cohortStart: zod.coerce.date(),
+      }),
+      signups: zod.object({
+        orgs7d: zod.number(),
+        orgs30d: zod.number(),
+        venues7d: zod.number(),
+        venues30d: zod.number(),
+        attributedToOutbound30d: zod.number(),
+        byWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            venues: zod.number(),
+            attributed: zod.number(),
+          }),
+        ),
+      }),
+      activation: zod.object({
+        minPhotos: zod.number(),
+        funnel: zod.object({
+          orgs: zod.number(),
+          withVenue: zod.number(),
+          photosReady: zod.number(),
+          firstGallery: zod.number(),
+          galleryViewed: zod.number(),
+          secondGallery14d: zod.number(),
+        }),
+        rates: zod.object({
+          withVenue: zod.number().nullable(),
+          photosReady: zod.number().nullable(),
+          firstGallery: zod.number().nullable(),
+          galleryViewed: zod.number().nullable(),
+          secondGallery14d: zod.number().nullable(),
+        }),
+        timeToFirstGalleryHours: zod.object({
+          median: zod.number().nullable(),
+          p75: zod.number().nullable(),
+          n: zod.number(),
+        }),
+        firstGalleryWithin7d: zod.number().nullable(),
+        firstGalleryWithin14d: zod.number().nullable(),
+        byCohortWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            photosReady: zod.number(),
+            firstGallery: zod.number(),
+            galleryViewed: zod.number(),
+            secondGallery14d: zod.number(),
+            paid: zod.number(),
+            matured: zod.boolean(),
+          }),
+        ),
+      }),
+      trialToPaid: zod.object({
+        overall: zod.object({
+          orgs: zod.number(),
+          paid: zod.number(),
+          rate: zod.number().nullable(),
+        }),
+        byActivation: zod.object({
+          activated: zod.object({
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+          }),
+          notActivated: zod.object({
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+          }),
+        }),
+        byCohortWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+            matured: zod.boolean(),
+          }),
+        ),
+        medianDaysToPaid: zod.number().nullable(),
+      }),
+      revenue: zod.object({
+        planMix: zod.record(zod.string(), zod.number()),
+        paidOrgs: zod.number(),
+        subscriptionOrgs: zod.number(),
+        mrrCents: zod.number(),
+        arpaCents: zod.number().nullable(),
+        packPurchases30d: zod.number(),
+        packRevenueCents30d: zod.number(),
+        prices: zod.object({
+          source: zod.enum(["env", "stripe"]),
+          starterCents: zod.number(),
+          growthCents: zod.number(),
+          creditPackCents: zod.number(),
+        }),
+      }),
+      credits: zod.object({
+        purchased30d: zod.number(),
+        subscriptionGranted30d: zod.number(),
+        consumed30d: zod.number(),
+        refunded30d: zod.number(),
+        promo30d: zod.number(),
+        trialGranted30d: zod.number(),
+        consumedPerPaidOrg30d: zod.number().nullable(),
+        float: zod.number(),
+      }),
+      churn: zod.object({
+        subscriptionsDeleted30d: zod.number(),
+        trialsExpired30d: zod.number(),
+        trialsExpiredWithoutPurchase30d: zod.number(),
+        paidOrgsAtWindowStart: zod.number(),
+        logoChurnRate30d: zod.number().nullable(),
+        trialsExpiringNext7d: zod.number(),
+        trialsExpiringNext7dWithoutGallery: zod.number(),
+      }),
+      outbound: zod.object({
+        funnel: zod.object({
+          drafted: zod.number(),
+          approved: zod.number(),
+          sent: zod.number(),
+          delivered: zod.number(),
+          bounced: zod.number(),
+          complained: zod.number(),
+          replied: zod.number(),
+          positiveReplied: zod.number(),
+          signups: zod.number(),
+          activated: zod.number(),
+          paid: zod.number(),
+          legacySends: zod.number(),
+        }),
+        rates: zod.object({
+          deliveryRate: zod.number().nullable(),
+          bounceRate: zod.number().nullable(),
+          complaintRate: zod.number().nullable(),
+          replyRate: zod.number().nullable(),
+          positiveReplyRate: zod.number().nullable(),
+          signupRate: zod.number().nullable(),
+          paidRate: zod.number().nullable(),
+        }),
+        bySegment: zod.array(
+          zod.object({
+            segmentType: zod.enum(["region", "venue_type"]),
+            segment: zod.string(),
+            prospects: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            activated: zod.number(),
+            paid: zod.number(),
+            replyRate: zod.number().nullable(),
+            positiveReplyRate: zod.number().nullable(),
+            signupRate: zod.number().nullable(),
+            guidance: zod.enum(["prioritize", "pause"]).nullable(),
+          }),
+        ),
+        byVariant: zod.array(
+          zod.object({
+            variantKey: zod.string(),
+            name: zod.string(),
+            isControl: zod.boolean(),
+            active: zod.boolean(),
+            weight: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            replyRate: zod.number().nullable(),
+            positiveReplyRate: zod.number().nullable(),
+            signupRate: zod.number().nullable(),
+            smoothedPositiveReplyRate: zod.number(),
+          }),
+        ),
+        byCampaign: zod.array(
+          zod.object({
+            campaignId: zod.number(),
+            name: zod.string(),
+            status: zod.string(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            replyRate: zod.number().nullable(),
+          }),
+        ),
+        byStep: zod.array(
+          zod.object({
+            step: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            complained: zod.number(),
+            complaintRate: zod.number().nullable(),
+          }),
+        ),
+      }),
+      deliverability: zod.object({
+        window14d: zod.object({
+          sent: zod.number(),
+          delivered: zod.number(),
+          bounced: zod.number(),
+          complained: zod.number(),
+          bounceRate: zod.number().nullable(),
+          complaintRate: zod.number().nullable(),
+        }),
+        status: zod.enum([
+          "ok",
+          "warn",
+          "throttled",
+          "paused",
+          "insufficient_data",
+        ]),
+        guard: zod.object({
+          status: zod.string(),
+          since: zod.string().nullable(),
+          reason: zod.string().nullable(),
+          baseCap: zod.number(),
+          effectiveCap: zod.number(),
+        }),
+      }),
+      experiments: zod.object({
+        proposed: zod.number(),
+        running: zod.number(),
+        decisionsDue7d: zod.number(),
+        decided30d: zod.number(),
+      }),
+      dataQuality: zod.array(zod.string()),
+    })
+    .describe(
+      "Outcome KPIs computed from production tables (control-plane\/growth\/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.",
+    ),
+  guidance: zod.object({
+    prioritize: zod.array(
+      zod.object({
+        segmentType: zod.enum(["region", "venue_type"]),
+        segment: zod.string(),
+        sent: zod.number(),
+        positiveReplyRate: zod.number().nullish(),
+        signupRate: zod.number().nullish(),
+        until: zod.string().nullish(),
+      }),
+    ),
+    pause: zod.array(
+      zod.object({
+        segmentType: zod.enum(["region", "venue_type"]),
+        segment: zod.string(),
+        sent: zod.number(),
+        positiveReplyRate: zod.number().nullish(),
+        signupRate: zod.number().nullish(),
+        until: zod.string().nullish(),
+      }),
+    ),
+    updatedAt: zod.string().nullable(),
+  }),
+  variants: zod.array(
+    zod.object({
+      variantKey: zod.string(),
+      name: zod.string(),
+      isControl: zod.boolean(),
+      active: zod.boolean(),
+      weight: zod.number(),
+      sent: zod.number(),
+      delivered: zod.number(),
+      replied: zod.number(),
+      positiveReplied: zod.number(),
+      signups: zod.number(),
+      replyRate: zod.number().nullable(),
+      positiveReplyRate: zod.number().nullable(),
+      signupRate: zod.number().nullable(),
+      smoothedPositiveReplyRate: zod.number(),
+    }),
+  ),
+  adaptations: zod.array(
+    zod.object({
+      id: zod.number(),
+      ruleKey: zod.string(),
+      subjectType: zod.string(),
+      subjectId: zod.string().nullable(),
+      action: zod.string(),
+      before: zod.record(zod.string(), zod.unknown()).nullable(),
+      after: zod.record(zod.string(), zod.unknown()).nullable(),
+      reason: zod.string(),
+      snapshotId: zod.number().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  metricKeys: zod.array(
+    zod.object({
+      key: zod.string(),
+      label: zod.string(),
+      unit: zod.enum(["rate", "hours", "cents", "count"]),
+      direction: zod.enum(["higher", "lower"]),
+      supportsSegment: zod.boolean(),
+      supportsVariant: zod.boolean(),
+    }),
+  ),
+  loopEnabled: zod.boolean(),
+  latestDigest: zod
+    .object({
+      id: zod.number(),
+      weekStart: zod.coerce.date(),
+      document: zod.record(zod.string(), zod.unknown()),
+      polishedBy: zod.string().nullable(),
+      actionId: zod.number().nullable(),
+      sentTo: zod.array(zod.string()).nullable(),
+      sentAt: zod.coerce.date().nullable(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+      html: zod
+        .string()
+        .describe("Rendered email HTML for the sandboxed preview iframe"),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Take a fresh KPI snapshot now (also runs the experiment evaluator and adaptation rules)
+ */
+export const RecomputeControlGrowthResponse = zod.object({
+  snapshotId: zod.number().nullable(),
+  computedAt: zod.coerce.date(),
+  kpis: zod
+    .object({
+      version: zod.number(),
+      computedAt: zod.coerce.date(),
+      window: zod.object({
+        start30d: zod.coerce.date(),
+        start14d: zod.coerce.date(),
+        start7d: zod.coerce.date(),
+        cohortStart: zod.coerce.date(),
+      }),
+      signups: zod.object({
+        orgs7d: zod.number(),
+        orgs30d: zod.number(),
+        venues7d: zod.number(),
+        venues30d: zod.number(),
+        attributedToOutbound30d: zod.number(),
+        byWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            venues: zod.number(),
+            attributed: zod.number(),
+          }),
+        ),
+      }),
+      activation: zod.object({
+        minPhotos: zod.number(),
+        funnel: zod.object({
+          orgs: zod.number(),
+          withVenue: zod.number(),
+          photosReady: zod.number(),
+          firstGallery: zod.number(),
+          galleryViewed: zod.number(),
+          secondGallery14d: zod.number(),
+        }),
+        rates: zod.object({
+          withVenue: zod.number().nullable(),
+          photosReady: zod.number().nullable(),
+          firstGallery: zod.number().nullable(),
+          galleryViewed: zod.number().nullable(),
+          secondGallery14d: zod.number().nullable(),
+        }),
+        timeToFirstGalleryHours: zod.object({
+          median: zod.number().nullable(),
+          p75: zod.number().nullable(),
+          n: zod.number(),
+        }),
+        firstGalleryWithin7d: zod.number().nullable(),
+        firstGalleryWithin14d: zod.number().nullable(),
+        byCohortWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            photosReady: zod.number(),
+            firstGallery: zod.number(),
+            galleryViewed: zod.number(),
+            secondGallery14d: zod.number(),
+            paid: zod.number(),
+            matured: zod.boolean(),
+          }),
+        ),
+      }),
+      trialToPaid: zod.object({
+        overall: zod.object({
+          orgs: zod.number(),
+          paid: zod.number(),
+          rate: zod.number().nullable(),
+        }),
+        byActivation: zod.object({
+          activated: zod.object({
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+          }),
+          notActivated: zod.object({
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+          }),
+        }),
+        byCohortWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+            matured: zod.boolean(),
+          }),
+        ),
+        medianDaysToPaid: zod.number().nullable(),
+      }),
+      revenue: zod.object({
+        planMix: zod.record(zod.string(), zod.number()),
+        paidOrgs: zod.number(),
+        subscriptionOrgs: zod.number(),
+        mrrCents: zod.number(),
+        arpaCents: zod.number().nullable(),
+        packPurchases30d: zod.number(),
+        packRevenueCents30d: zod.number(),
+        prices: zod.object({
+          source: zod.enum(["env", "stripe"]),
+          starterCents: zod.number(),
+          growthCents: zod.number(),
+          creditPackCents: zod.number(),
+        }),
+      }),
+      credits: zod.object({
+        purchased30d: zod.number(),
+        subscriptionGranted30d: zod.number(),
+        consumed30d: zod.number(),
+        refunded30d: zod.number(),
+        promo30d: zod.number(),
+        trialGranted30d: zod.number(),
+        consumedPerPaidOrg30d: zod.number().nullable(),
+        float: zod.number(),
+      }),
+      churn: zod.object({
+        subscriptionsDeleted30d: zod.number(),
+        trialsExpired30d: zod.number(),
+        trialsExpiredWithoutPurchase30d: zod.number(),
+        paidOrgsAtWindowStart: zod.number(),
+        logoChurnRate30d: zod.number().nullable(),
+        trialsExpiringNext7d: zod.number(),
+        trialsExpiringNext7dWithoutGallery: zod.number(),
+      }),
+      outbound: zod.object({
+        funnel: zod.object({
+          drafted: zod.number(),
+          approved: zod.number(),
+          sent: zod.number(),
+          delivered: zod.number(),
+          bounced: zod.number(),
+          complained: zod.number(),
+          replied: zod.number(),
+          positiveReplied: zod.number(),
+          signups: zod.number(),
+          activated: zod.number(),
+          paid: zod.number(),
+          legacySends: zod.number(),
+        }),
+        rates: zod.object({
+          deliveryRate: zod.number().nullable(),
+          bounceRate: zod.number().nullable(),
+          complaintRate: zod.number().nullable(),
+          replyRate: zod.number().nullable(),
+          positiveReplyRate: zod.number().nullable(),
+          signupRate: zod.number().nullable(),
+          paidRate: zod.number().nullable(),
+        }),
+        bySegment: zod.array(
+          zod.object({
+            segmentType: zod.enum(["region", "venue_type"]),
+            segment: zod.string(),
+            prospects: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            activated: zod.number(),
+            paid: zod.number(),
+            replyRate: zod.number().nullable(),
+            positiveReplyRate: zod.number().nullable(),
+            signupRate: zod.number().nullable(),
+            guidance: zod.enum(["prioritize", "pause"]).nullable(),
+          }),
+        ),
+        byVariant: zod.array(
+          zod.object({
+            variantKey: zod.string(),
+            name: zod.string(),
+            isControl: zod.boolean(),
+            active: zod.boolean(),
+            weight: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            replyRate: zod.number().nullable(),
+            positiveReplyRate: zod.number().nullable(),
+            signupRate: zod.number().nullable(),
+            smoothedPositiveReplyRate: zod.number(),
+          }),
+        ),
+        byCampaign: zod.array(
+          zod.object({
+            campaignId: zod.number(),
+            name: zod.string(),
+            status: zod.string(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            replyRate: zod.number().nullable(),
+          }),
+        ),
+        byStep: zod.array(
+          zod.object({
+            step: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            complained: zod.number(),
+            complaintRate: zod.number().nullable(),
+          }),
+        ),
+      }),
+      deliverability: zod.object({
+        window14d: zod.object({
+          sent: zod.number(),
+          delivered: zod.number(),
+          bounced: zod.number(),
+          complained: zod.number(),
+          bounceRate: zod.number().nullable(),
+          complaintRate: zod.number().nullable(),
+        }),
+        status: zod.enum([
+          "ok",
+          "warn",
+          "throttled",
+          "paused",
+          "insufficient_data",
+        ]),
+        guard: zod.object({
+          status: zod.string(),
+          since: zod.string().nullable(),
+          reason: zod.string().nullable(),
+          baseCap: zod.number(),
+          effectiveCap: zod.number(),
+        }),
+      }),
+      experiments: zod.object({
+        proposed: zod.number(),
+        running: zod.number(),
+        decisionsDue7d: zod.number(),
+        decided30d: zod.number(),
+      }),
+      dataQuality: zod.array(zod.string()),
+    })
+    .describe(
+      "Outcome KPIs computed from production tables (control-plane\/growth\/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.",
+    ),
+  guidance: zod.object({
+    prioritize: zod.array(
+      zod.object({
+        segmentType: zod.enum(["region", "venue_type"]),
+        segment: zod.string(),
+        sent: zod.number(),
+        positiveReplyRate: zod.number().nullish(),
+        signupRate: zod.number().nullish(),
+        until: zod.string().nullish(),
+      }),
+    ),
+    pause: zod.array(
+      zod.object({
+        segmentType: zod.enum(["region", "venue_type"]),
+        segment: zod.string(),
+        sent: zod.number(),
+        positiveReplyRate: zod.number().nullish(),
+        signupRate: zod.number().nullish(),
+        until: zod.string().nullish(),
+      }),
+    ),
+    updatedAt: zod.string().nullable(),
+  }),
+  variants: zod.array(
+    zod.object({
+      variantKey: zod.string(),
+      name: zod.string(),
+      isControl: zod.boolean(),
+      active: zod.boolean(),
+      weight: zod.number(),
+      sent: zod.number(),
+      delivered: zod.number(),
+      replied: zod.number(),
+      positiveReplied: zod.number(),
+      signups: zod.number(),
+      replyRate: zod.number().nullable(),
+      positiveReplyRate: zod.number().nullable(),
+      signupRate: zod.number().nullable(),
+      smoothedPositiveReplyRate: zod.number(),
+    }),
+  ),
+  adaptations: zod.array(
+    zod.object({
+      id: zod.number(),
+      ruleKey: zod.string(),
+      subjectType: zod.string(),
+      subjectId: zod.string().nullable(),
+      action: zod.string(),
+      before: zod.record(zod.string(), zod.unknown()).nullable(),
+      after: zod.record(zod.string(), zod.unknown()).nullable(),
+      reason: zod.string(),
+      snapshotId: zod.number().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  metricKeys: zod.array(
+    zod.object({
+      key: zod.string(),
+      label: zod.string(),
+      unit: zod.enum(["rate", "hours", "cents", "count"]),
+      direction: zod.enum(["higher", "lower"]),
+      supportsSegment: zod.boolean(),
+      supportsVariant: zod.boolean(),
+    }),
+  ),
+  loopEnabled: zod.boolean(),
+  latestDigest: zod
+    .object({
+      id: zod.number(),
+      weekStart: zod.coerce.date(),
+      document: zod.record(zod.string(), zod.unknown()),
+      polishedBy: zod.string().nullable(),
+      actionId: zod.number().nullable(),
+      sentTo: zod.array(zod.string()).nullable(),
+      sentAt: zod.coerce.date().nullable(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+      html: zod
+        .string()
+        .describe("Rendered email HTML for the sandboxed preview iframe"),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Pause, resume, reweight or reword a copy variant
+ */
+export const UpdateControlCopyVariantParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const updateControlCopyVariantBodyWeightMin = 0;
+export const updateControlCopyVariantBodyWeightMax = 1;
+
+export const updateControlCopyVariantBodyAngleMin = 20;
+export const updateControlCopyVariantBodyAngleMax = 600;
+
+export const updateControlCopyVariantBodyNameMin = 3;
+export const updateControlCopyVariantBodyNameMax = 80;
+
+export const UpdateControlCopyVariantBody = zod.object({
+  active: zod.boolean().optional(),
+  weight: zod
+    .number()
+    .min(updateControlCopyVariantBodyWeightMin)
+    .max(updateControlCopyVariantBodyWeightMax)
+    .optional(),
+  angle: zod
+    .string()
+    .min(updateControlCopyVariantBodyAngleMin)
+    .max(updateControlCopyVariantBodyAngleMax)
+    .optional(),
+  name: zod
+    .string()
+    .min(updateControlCopyVariantBodyNameMin)
+    .max(updateControlCopyVariantBodyNameMax)
+    .optional(),
+});
+
+export const UpdateControlCopyVariantResponse = zod.object({
+  variant: zod.object({
+    id: zod.number(),
+    key: zod.string(),
+    name: zod.string(),
+    angle: zod.string(),
+    defaultAsk: zod.enum(["preview", "call"]),
+    isControl: zod.boolean(),
+    active: zod.boolean(),
+    weight: zod.number(),
+    pausedReason: zod.string().nullable(),
+    createdBy: zod.string(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Operator resets the deliverability guard to ok and restores the base daily cap
+ */
+export const resetControlDeliverabilityGuardBodyNoteMin = 5;
+export const resetControlDeliverabilityGuardBodyNoteMax = 400;
+
+export const ResetControlDeliverabilityGuardBody = zod.object({
+  note: zod
+    .string()
+    .min(resetControlDeliverabilityGuardBodyNoteMin)
+    .max(resetControlDeliverabilityGuardBodyNoteMax),
+});
+
+export const ResetControlDeliverabilityGuardResponse = zod.object({
+  snapshotId: zod.number().nullable(),
+  computedAt: zod.coerce.date(),
+  kpis: zod
+    .object({
+      version: zod.number(),
+      computedAt: zod.coerce.date(),
+      window: zod.object({
+        start30d: zod.coerce.date(),
+        start14d: zod.coerce.date(),
+        start7d: zod.coerce.date(),
+        cohortStart: zod.coerce.date(),
+      }),
+      signups: zod.object({
+        orgs7d: zod.number(),
+        orgs30d: zod.number(),
+        venues7d: zod.number(),
+        venues30d: zod.number(),
+        attributedToOutbound30d: zod.number(),
+        byWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            venues: zod.number(),
+            attributed: zod.number(),
+          }),
+        ),
+      }),
+      activation: zod.object({
+        minPhotos: zod.number(),
+        funnel: zod.object({
+          orgs: zod.number(),
+          withVenue: zod.number(),
+          photosReady: zod.number(),
+          firstGallery: zod.number(),
+          galleryViewed: zod.number(),
+          secondGallery14d: zod.number(),
+        }),
+        rates: zod.object({
+          withVenue: zod.number().nullable(),
+          photosReady: zod.number().nullable(),
+          firstGallery: zod.number().nullable(),
+          galleryViewed: zod.number().nullable(),
+          secondGallery14d: zod.number().nullable(),
+        }),
+        timeToFirstGalleryHours: zod.object({
+          median: zod.number().nullable(),
+          p75: zod.number().nullable(),
+          n: zod.number(),
+        }),
+        firstGalleryWithin7d: zod.number().nullable(),
+        firstGalleryWithin14d: zod.number().nullable(),
+        byCohortWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            photosReady: zod.number(),
+            firstGallery: zod.number(),
+            galleryViewed: zod.number(),
+            secondGallery14d: zod.number(),
+            paid: zod.number(),
+            matured: zod.boolean(),
+          }),
+        ),
+      }),
+      trialToPaid: zod.object({
+        overall: zod.object({
+          orgs: zod.number(),
+          paid: zod.number(),
+          rate: zod.number().nullable(),
+        }),
+        byActivation: zod.object({
+          activated: zod.object({
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+          }),
+          notActivated: zod.object({
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+          }),
+        }),
+        byCohortWeek: zod.array(
+          zod.object({
+            weekStart: zod.coerce.date(),
+            orgs: zod.number(),
+            paid: zod.number(),
+            rate: zod.number().nullable(),
+            matured: zod.boolean(),
+          }),
+        ),
+        medianDaysToPaid: zod.number().nullable(),
+      }),
+      revenue: zod.object({
+        planMix: zod.record(zod.string(), zod.number()),
+        paidOrgs: zod.number(),
+        subscriptionOrgs: zod.number(),
+        mrrCents: zod.number(),
+        arpaCents: zod.number().nullable(),
+        packPurchases30d: zod.number(),
+        packRevenueCents30d: zod.number(),
+        prices: zod.object({
+          source: zod.enum(["env", "stripe"]),
+          starterCents: zod.number(),
+          growthCents: zod.number(),
+          creditPackCents: zod.number(),
+        }),
+      }),
+      credits: zod.object({
+        purchased30d: zod.number(),
+        subscriptionGranted30d: zod.number(),
+        consumed30d: zod.number(),
+        refunded30d: zod.number(),
+        promo30d: zod.number(),
+        trialGranted30d: zod.number(),
+        consumedPerPaidOrg30d: zod.number().nullable(),
+        float: zod.number(),
+      }),
+      churn: zod.object({
+        subscriptionsDeleted30d: zod.number(),
+        trialsExpired30d: zod.number(),
+        trialsExpiredWithoutPurchase30d: zod.number(),
+        paidOrgsAtWindowStart: zod.number(),
+        logoChurnRate30d: zod.number().nullable(),
+        trialsExpiringNext7d: zod.number(),
+        trialsExpiringNext7dWithoutGallery: zod.number(),
+      }),
+      outbound: zod.object({
+        funnel: zod.object({
+          drafted: zod.number(),
+          approved: zod.number(),
+          sent: zod.number(),
+          delivered: zod.number(),
+          bounced: zod.number(),
+          complained: zod.number(),
+          replied: zod.number(),
+          positiveReplied: zod.number(),
+          signups: zod.number(),
+          activated: zod.number(),
+          paid: zod.number(),
+          legacySends: zod.number(),
+        }),
+        rates: zod.object({
+          deliveryRate: zod.number().nullable(),
+          bounceRate: zod.number().nullable(),
+          complaintRate: zod.number().nullable(),
+          replyRate: zod.number().nullable(),
+          positiveReplyRate: zod.number().nullable(),
+          signupRate: zod.number().nullable(),
+          paidRate: zod.number().nullable(),
+        }),
+        bySegment: zod.array(
+          zod.object({
+            segmentType: zod.enum(["region", "venue_type"]),
+            segment: zod.string(),
+            prospects: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            activated: zod.number(),
+            paid: zod.number(),
+            replyRate: zod.number().nullable(),
+            positiveReplyRate: zod.number().nullable(),
+            signupRate: zod.number().nullable(),
+            guidance: zod.enum(["prioritize", "pause"]).nullable(),
+          }),
+        ),
+        byVariant: zod.array(
+          zod.object({
+            variantKey: zod.string(),
+            name: zod.string(),
+            isControl: zod.boolean(),
+            active: zod.boolean(),
+            weight: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            replyRate: zod.number().nullable(),
+            positiveReplyRate: zod.number().nullable(),
+            signupRate: zod.number().nullable(),
+            smoothedPositiveReplyRate: zod.number(),
+          }),
+        ),
+        byCampaign: zod.array(
+          zod.object({
+            campaignId: zod.number(),
+            name: zod.string(),
+            status: zod.string(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            positiveReplied: zod.number(),
+            signups: zod.number(),
+            replyRate: zod.number().nullable(),
+          }),
+        ),
+        byStep: zod.array(
+          zod.object({
+            step: zod.number(),
+            sent: zod.number(),
+            delivered: zod.number(),
+            replied: zod.number(),
+            complained: zod.number(),
+            complaintRate: zod.number().nullable(),
+          }),
+        ),
+      }),
+      deliverability: zod.object({
+        window14d: zod.object({
+          sent: zod.number(),
+          delivered: zod.number(),
+          bounced: zod.number(),
+          complained: zod.number(),
+          bounceRate: zod.number().nullable(),
+          complaintRate: zod.number().nullable(),
+        }),
+        status: zod.enum([
+          "ok",
+          "warn",
+          "throttled",
+          "paused",
+          "insufficient_data",
+        ]),
+        guard: zod.object({
+          status: zod.string(),
+          since: zod.string().nullable(),
+          reason: zod.string().nullable(),
+          baseCap: zod.number(),
+          effectiveCap: zod.number(),
+        }),
+      }),
+      experiments: zod.object({
+        proposed: zod.number(),
+        running: zod.number(),
+        decisionsDue7d: zod.number(),
+        decided30d: zod.number(),
+      }),
+      dataQuality: zod.array(zod.string()),
+    })
+    .describe(
+      "Outcome KPIs computed from production tables (control-plane\/growth\/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.",
+    ),
+  guidance: zod.object({
+    prioritize: zod.array(
+      zod.object({
+        segmentType: zod.enum(["region", "venue_type"]),
+        segment: zod.string(),
+        sent: zod.number(),
+        positiveReplyRate: zod.number().nullish(),
+        signupRate: zod.number().nullish(),
+        until: zod.string().nullish(),
+      }),
+    ),
+    pause: zod.array(
+      zod.object({
+        segmentType: zod.enum(["region", "venue_type"]),
+        segment: zod.string(),
+        sent: zod.number(),
+        positiveReplyRate: zod.number().nullish(),
+        signupRate: zod.number().nullish(),
+        until: zod.string().nullish(),
+      }),
+    ),
+    updatedAt: zod.string().nullable(),
+  }),
+  variants: zod.array(
+    zod.object({
+      variantKey: zod.string(),
+      name: zod.string(),
+      isControl: zod.boolean(),
+      active: zod.boolean(),
+      weight: zod.number(),
+      sent: zod.number(),
+      delivered: zod.number(),
+      replied: zod.number(),
+      positiveReplied: zod.number(),
+      signups: zod.number(),
+      replyRate: zod.number().nullable(),
+      positiveReplyRate: zod.number().nullable(),
+      signupRate: zod.number().nullable(),
+      smoothedPositiveReplyRate: zod.number(),
+    }),
+  ),
+  adaptations: zod.array(
+    zod.object({
+      id: zod.number(),
+      ruleKey: zod.string(),
+      subjectType: zod.string(),
+      subjectId: zod.string().nullable(),
+      action: zod.string(),
+      before: zod.record(zod.string(), zod.unknown()).nullable(),
+      after: zod.record(zod.string(), zod.unknown()).nullable(),
+      reason: zod.string(),
+      snapshotId: zod.number().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  metricKeys: zod.array(
+    zod.object({
+      key: zod.string(),
+      label: zod.string(),
+      unit: zod.enum(["rate", "hours", "cents", "count"]),
+      direction: zod.enum(["higher", "lower"]),
+      supportsSegment: zod.boolean(),
+      supportsVariant: zod.boolean(),
+    }),
+  ),
+  loopEnabled: zod.boolean(),
+  latestDigest: zod
+    .object({
+      id: zod.number(),
+      weekStart: zod.coerce.date(),
+      document: zod.record(zod.string(), zod.unknown()),
+      polishedBy: zod.string().nullable(),
+      actionId: zod.number().nullable(),
+      sentTo: zod.array(zod.string()).nullable(),
+      sentAt: zod.coerce.date().nullable(),
+      createdBy: zod.string(),
+      createdAt: zod.coerce.date(),
+      html: zod
+        .string()
+        .describe("Rendered email HTML for the sandboxed preview iframe"),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Edit card fields while proposed or running; start a proposed experiment
+ */
+export const UpdateControlExperimentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateControlExperimentBodyHypothesisMin = 10;
+export const updateControlExperimentBodyHypothesisMax = 1000;
+
+export const updateControlExperimentBodyMinDetectableLiftExclusiveMin = 0;
+export const updateControlExperimentBodyMinDetectableLiftMax = 5;
+
+export const UpdateControlExperimentBody = zod.object({
+  hypothesis: zod
+    .string()
+    .min(updateControlExperimentBodyHypothesisMin)
+    .max(updateControlExperimentBodyHypothesisMax)
+    .optional(),
+  segment: zod.string().nullish(),
+  variantKey: zod.string().nullish(),
+  baseline: zod.number().nullish(),
+  minDetectableLift: zod
+    .number()
+    .gt(updateControlExperimentBodyMinDetectableLiftExclusiveMin)
+    .max(updateControlExperimentBodyMinDetectableLiftMax)
+    .optional(),
+  killThreshold: zod.number().nullish(),
+  decisionDate: zod.coerce.date().optional(),
+  assignments: zod.record(zod.string(), zod.unknown()).nullish(),
+  status: zod.enum(["running"]).optional(),
+});
+
+export const UpdateControlExperimentResponse = zod.object({
+  experiment: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    hypothesis: zod.string(),
+    metric: zod.string(),
+    variants: zod.record(zod.string(), zod.unknown()).nullish(),
+    status: zod.enum(["proposed", "running", "completed", "aborted"]),
+    result: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    startedAt: zod.coerce.date().nullish(),
+    endedAt: zod.coerce.date().nullish(),
+    primaryMetricKey: zod.string().nullish(),
+    baseline: zod.number().nullish(),
+    minDetectableLift: zod.number().nullish(),
+    killThreshold: zod.number().nullish(),
+    decisionDate: zod.coerce.date().nullish(),
+    segment: zod.string().nullish(),
+    variantKey: zod.string().nullish(),
+    assignments: zod.record(zod.string(), zod.unknown()).nullish(),
+    decision: zod.enum(["win", "kill", "inconclusive", "extended"]).nullish(),
+    decidedBy: zod.string().nullish(),
+    decidedAt: zod.coerce.date().nullish(),
+    observedValue: zod.number().nullish(),
+    observedN: zod.number().nullish(),
+    evaluation: zod.record(zod.string(), zod.unknown()).nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Run the deterministic evaluator now without deciding
+ */
+export const EvaluateControlExperimentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const EvaluateControlExperimentResponse = zod.object({
+  experiment: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    hypothesis: zod.string(),
+    metric: zod.string(),
+    variants: zod.record(zod.string(), zod.unknown()).nullish(),
+    status: zod.enum(["proposed", "running", "completed", "aborted"]),
+    result: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    startedAt: zod.coerce.date().nullish(),
+    endedAt: zod.coerce.date().nullish(),
+    primaryMetricKey: zod.string().nullish(),
+    baseline: zod.number().nullish(),
+    minDetectableLift: zod.number().nullish(),
+    killThreshold: zod.number().nullish(),
+    decisionDate: zod.coerce.date().nullish(),
+    segment: zod.string().nullish(),
+    variantKey: zod.string().nullish(),
+    assignments: zod.record(zod.string(), zod.unknown()).nullish(),
+    decision: zod.enum(["win", "kill", "inconclusive", "extended"]).nullish(),
+    decidedBy: zod.string().nullish(),
+    decidedAt: zod.coerce.date().nullish(),
+    observedValue: zod.number().nullish(),
+    observedN: zod.number().nullish(),
+    evaluation: zod.record(zod.string(), zod.unknown()).nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  evaluation: zod.object({
+    decision: zod.enum([
+      "continue",
+      "win",
+      "kill",
+      "inconclusive",
+      "not_measurable",
+    ]),
+    observedValue: zod.number().nullable(),
+    n: zod.number(),
+    baseline: zod.number().nullable(),
+    target: zod.number().nullable(),
+    requiredN: zod.number().nullable(),
+    underpowered: zod.boolean(),
+    reason: zod.string(),
+    evaluatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Operator decision (win, kill, inconclusive, or extend the decision date)
+ */
+export const DecideControlExperimentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const decideControlExperimentBodyNoteMax = 1000;
+
+export const DecideControlExperimentBody = zod.object({
+  decision: zod.enum(["win", "kill", "inconclusive", "extended"]),
+  note: zod.string().max(decideControlExperimentBodyNoteMax).optional(),
+  newDecisionDate: zod.coerce.date().optional(),
+});
+
+export const DecideControlExperimentResponse = zod.object({
+  experiment: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    hypothesis: zod.string(),
+    metric: zod.string(),
+    variants: zod.record(zod.string(), zod.unknown()).nullish(),
+    status: zod.enum(["proposed", "running", "completed", "aborted"]),
+    result: zod.string().nullish(),
+    createdByAgent: zod.string().nullish(),
+    startedAt: zod.coerce.date().nullish(),
+    endedAt: zod.coerce.date().nullish(),
+    primaryMetricKey: zod.string().nullish(),
+    baseline: zod.number().nullish(),
+    minDetectableLift: zod.number().nullish(),
+    killThreshold: zod.number().nullish(),
+    decisionDate: zod.coerce.date().nullish(),
+    segment: zod.string().nullish(),
+    variantKey: zod.string().nullish(),
+    assignments: zod.record(zod.string(), zod.unknown()).nullish(),
+    decision: zod.enum(["win", "kill", "inconclusive", "extended"]).nullish(),
+    decidedBy: zod.string().nullish(),
+    decidedAt: zod.coerce.date().nullish(),
+    observedValue: zod.number().nullish(),
+    observedN: zod.number().nullish(),
+    evaluation: zod.record(zod.string(), zod.unknown()).nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Build (or rebuild) this week's digest now and queue the send action
+ */
+export const GenerateControlDigestBody = zod.object({
+  force: zod.boolean().optional(),
 });

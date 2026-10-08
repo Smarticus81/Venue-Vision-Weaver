@@ -13,6 +13,7 @@ export const ControlActionStatus = {
   pending: "pending",
   approved: "approved",
   rejected: "rejected",
+  executing: "executing",
   executed: "executed",
   failed: "failed",
 } as const;

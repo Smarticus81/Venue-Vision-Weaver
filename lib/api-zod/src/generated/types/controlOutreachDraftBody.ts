@@ -16,4 +16,6 @@ export interface ControlOutreachDraftBody {
    */
   step?: number;
   refreshResearch?: boolean;
+  /** Force a control_copy_variants key; omitted = the studio chooses by weight. */
+  variantKey?: string | null;
 }

@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GeneratedAsset } from "./generatedAsset";
+import type { SessionDetailResponseCreatedVia } from "./sessionDetailResponseCreatedVia";
+import type { SessionDetailResponseKind } from "./sessionDetailResponseKind";
 import type { SessionDetailResponseStatus } from "./sessionDetailResponseStatus";
 import type { VenuePublicResponse } from "./venuePublicResponse";
 
@@ -22,8 +24,9 @@ export interface SessionDetailResponse {
   /** True if an email is on file. The email itself is never returned to non-owners. */
   hasCoupleEmail?: boolean;
   shareToken?: string | null;
-  /** Estimated USD cost to generate this gallery. */
-  estimatedCostUsd?: number;
+  kind: SessionDetailResponseKind;
+  createdVia: SessionDetailResponseCreatedVia;
+  weddingMonth?: string | null;
   createdAt: Date;
   completedAt?: Date | null;
   venue?: VenuePublicResponse;

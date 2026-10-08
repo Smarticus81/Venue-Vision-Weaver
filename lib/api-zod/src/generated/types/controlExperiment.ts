@@ -5,6 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ControlExperimentAssignments } from "./controlExperimentAssignments";
+import type { ControlExperimentDecision } from "./controlExperimentDecision";
+import type { ControlExperimentEvaluationProperty } from "./controlExperimentEvaluationProperty";
 import type { ControlExperimentStatus } from "./controlExperimentStatus";
 import type { ControlExperimentVariants } from "./controlExperimentVariants";
 
@@ -19,6 +22,20 @@ export interface ControlExperiment {
   createdByAgent?: string | null;
   startedAt?: Date | null;
   endedAt?: Date | null;
+  primaryMetricKey?: string | null;
+  baseline?: number | null;
+  minDetectableLift?: number | null;
+  killThreshold?: number | null;
+  decisionDate?: Date | null;
+  segment?: string | null;
+  variantKey?: string | null;
+  assignments?: ControlExperimentAssignments;
+  decision?: ControlExperimentDecision;
+  decidedBy?: string | null;
+  decidedAt?: Date | null;
+  observedValue?: number | null;
+  observedN?: number | null;
+  evaluation?: ControlExperimentEvaluationProperty;
   createdAt: Date;
   updatedAt: Date;
 }

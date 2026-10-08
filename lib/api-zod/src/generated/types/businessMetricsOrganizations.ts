@@ -13,4 +13,5 @@ export type BusinessMetricsOrganizations = {
   totalCreditsBalance: number;
   lowCreditCount: number;
   paidCount: number;
+  paidSubscriptionCount?: number;
 };

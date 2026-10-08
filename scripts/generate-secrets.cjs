@@ -1,5 +1,5 @@
 /**
- * Generate cryptographically secure values for UPLOAD_TOKEN_SECRET and SESSION_SECRET.
+ * Generate a cryptographically secure value for UPLOAD_TOKEN_SECRET.
  * Usage: node scripts/generate-secrets.cjs
  *        pnpm run generate:secrets
  */
@@ -10,11 +10,9 @@ function generateSecret(bytes = 32) {
 }
 
 const uploadTokenSecret = generateSecret();
-const sessionSecret = generateSecret();
 
 console.log("");
-console.log("Add these to .env and Railway (use different values in each environment):");
+console.log("Add this to .env and Railway (use a different value in each environment):");
 console.log("");
 console.log(`UPLOAD_TOKEN_SECRET=${uploadTokenSecret}`);
-console.log(`SESSION_SECRET=${sessionSecret}`);
 console.log("");

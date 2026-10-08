@@ -16,17 +16,16 @@ import {
   CreateSessionParams,
   CreateSessionBody,
   GetSessionParams,
-  ListVenueSessionsParams,
 } from "@workspace/api-zod";
-import { estimateSessionCostUsd } from "../lib/cost.js";
 import {
   creditsForSession,
   countVenueSessionsToday,
-  hasSufficientCredits,
   VENUE_DAILY_SESSION_CAP,
-  MIN_VENUE_PHOTOS,
-  toPublicVenue,
 } from "../lib/credits.js";
+import { assertCanSpend, SPEND_ERRORS } from "../lib/trial.js";
+import { toPublicVenue, isVenueReady } from "../lib/venueResponse.js";
+import { MIN_COUPLE_REFERENCES } from "../lib/referenceImage.js";
+import { recordGalleryEvent, hashClientIp } from "../lib/galleryEvents.js";
 import {
   sendSessionCreatedNotification,
   sendGalleryToCouple,
@@ -44,6 +43,7 @@ import {
   assertReferenceImageQuality,
   hammingDistance,
   MIN_REFERENCE_EDGE_PX,
+  NEAR_DUPLICATE_HAMMING,
   type ReferenceImageQuality,
 } from "../lib/referenceImageQuality.js";
 import {
@@ -55,7 +55,7 @@ import { findGalleryStyle } from "../lib/galleryStyles.js";
 const router: IRouter = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_COUPLE_PHOTOS = 1;
+const MIN_COUPLE_PHOTOS = MIN_COUPLE_REFERENCES;
 const MAX_COUPLE_PHOTOS = 3;
 const MIN_COUPLE_PHOTO_EDGE_PX = MIN_REFERENCE_EDGE_PX;
 const MAX_COUPLE_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -74,18 +74,27 @@ function buildSessionDetailPayload(session: typeof coupleSessionsTable.$inferSel
     coupleName: session.coupleName,
     hasCoupleEmail: !!session.coupleEmail,
     shareToken: session.shareToken,
-    ...(options.includeEmail
-      ? {
-          estimatedCostUsd: estimateSessionCostUsd(),
-        }
-      : {}),
+    kind: session.kind,
+    createdVia: session.createdVia,
+    weddingMonth: session.weddingMonth,
     createdAt: session.createdAt,
     completedAt: session.completedAt,
     venue: venue ? toPublicVenue(venue, venueMedia) : null,
     generatedAssets,
   };
   if (options.includeEmail) {
-    return { ...base, coupleEmail: session.coupleEmail };
+    return {
+      ...base,
+      coupleEmail: session.coupleEmail,
+      viewCount: session.viewCount,
+      ctaClicks: session.ctaClicks,
+      firstViewedAt: session.firstViewedAt,
+      bookedAt: session.bookedAt,
+      consentAt: session.consentAt,
+      failureDetail: session.failureDetail,
+      // Filled by the gallery pipeline workstream from render telemetry.
+      qualitySummary: null,
+    };
   }
   return base;
 }
@@ -161,7 +170,7 @@ async function validateCouplePhotoObjectKeys(objectKeys: string[], venueId: numb
 
   for (let i = 0; i < qualities.length; i++) {
     for (let j = i + 1; j < qualities.length; j++) {
-      if (hammingDistance(qualities[i]!.perceptualHash, qualities[j]!.perceptualHash) <= 2) {
+      if (hammingDistance(qualities[i]!.perceptualHash, qualities[j]!.perceptualHash) <= NEAR_DUPLICATE_HAMMING) {
         throw new Error(
           `Couple photos ${i + 1} and ${j + 1} look nearly identical. Upload distinct angles or expressions for better likeness.`,
         );
@@ -269,25 +278,25 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  const hasCredits = await hasSufficientCredits(venue.id, neededCredits);
-  if (!hasCredits) {
-    res.status(402).json({
-      error: "No credits remaining. Ask the venue to add credits.",
-    });
+  // Trial clock + balance (lib/trial.ts): a lapsed trial is blocked by time
+  // even when credits remain; the code lets the couple app explain which.
+  const spend = await assertCanSpend(venue.id, neededCredits);
+  if (!spend.ok) {
+    res.status(402).json({ error: SPEND_ERRORS[spend.reason], code: spend.reason });
     return;
   }
 
-  // Refuse to create a session if the venue has no media. The AI prompt is
-  // built from the venue's photos, so generation against an empty venue is
-  // either nonsensical or will outright fail downstream - block it here with
-  // a friendly message so the couple isn't charged time/cost on a doomed run.
+  // Refuse to create a session unless the venue is ready: enough reference
+  // photos AND every coverage role present (the same rule the public venue
+  // payload's isReady flag reports). Generation against thin coverage either
+  // fails downstream or produces an unconvincing gallery - block it here so
+  // the couple isn't charged time/cost on a doomed run.
   const venueMediaForReadiness = await db
     .select({ coverage: venueMediaTable.coverage })
     .from(venueMediaTable)
     .where(eq(venueMediaTable.venueId, venue.id));
-  const venueMediaCount = venueMediaForReadiness.length;
 
-  if (!venueMediaCount || venueMediaCount < MIN_VENUE_PHOTOS) {
+  if (!isVenueReady(venueMediaForReadiness)) {
     // Couple-facing copy: the couple sees this message, so it must not read
     // like venue setup instructions.
     res.status(409).json({
@@ -397,9 +406,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
   }
 
   if (!session) {
-    res.status(402).json({
-      error: "No credits remaining. Ask the venue to add credits.",
-    });
+    res.status(402).json({ error: SPEND_ERRORS.insufficient_credits, code: "insufficient_credits" });
     return;
   }
 
@@ -537,6 +544,19 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
     return;
   }
 
+  // "viewed" has one writer (lib/galleryEvents.ts): a ready couple gallery
+  // opened through its share link, deduped per viewer per UTC day. Owner
+  // previews through the public URL count too; sample sessions never do.
+  if (session.status === "ready" && session.kind === "couple") {
+    void recordGalleryEvent({
+      sessionId: session.id,
+      venueId: session.venueId,
+      eventType: "viewed",
+      source: "share_page",
+      ipHash: hashClientIp(clientKey(req)),
+    });
+  }
+
   const [venue] = await db
     .select()
     .from(venuesTable)
@@ -564,46 +584,6 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
   res.json(buildSessionDetailPayload(session, venue, venueMedia, publicGeneratedAssets, { includeEmail: false }));
 });
 
-
-// GET /venues/:slug/sessions (owner session)
-router.get("/venues/:slug/sessions", async (req, res): Promise<void> => {
-  const params = ListVenueSessionsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const venue = await requireOrgVenue(req, res, params.data.slug);
-  if (!venue) return;
-
-  const sessions = await db
-    .select({
-      id: coupleSessionsTable.id,
-      venueId: coupleSessionsTable.venueId,
-      status: coupleSessionsTable.status,
-      coupleName: coupleSessionsTable.coupleName,
-      coupleEmail: coupleSessionsTable.coupleEmail,
-      shareToken: coupleSessionsTable.shareToken,
-      createdAt: coupleSessionsTable.createdAt,
-      completedAt: coupleSessionsTable.completedAt,
-    })
-    .from(coupleSessionsTable)
-    .where(eq(coupleSessionsTable.venueId, venue.id))
-    .orderBy(sql`${coupleSessionsTable.createdAt} desc`);
-
-  const sessionsWithThumbnails = await Promise.all(
-    sessions.map(async (session) => {
-      const thumbnailObjectKey = await readyGalleryThumbnailObjectKey(session.id, session.status);
-      return {
-        ...session,
-        thumbnailObjectKey,
-        estimatedCostUsd: estimateSessionCostUsd(),
-      };
-    })
-  );
-
-  res.json({ sessions: sessionsWithThumbnails });
-});
 
 // POST /sessions/recover  (magic-link recovery; never reveals if email exists)
 router.post("/sessions/recover", async (req, res): Promise<void> => {

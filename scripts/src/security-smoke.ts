@@ -151,13 +151,11 @@ const { trustProxySetting } = trustProxyModule;
 const sessionCleanupModule = (await import(
   new URL("../../artifacts/api-server/src/lib/sessionCleanupConfig.ts", import.meta.url).href
 )) as {
-  ownerAuthCleanupBatchSize: (env?: NodeJS.ProcessEnv) => number;
   staleProcessingSessionMinutes: (env?: NodeJS.ProcessEnv) => number;
   uploadIntentCleanupBatchSize: (env?: NodeJS.ProcessEnv) => number;
 };
 
-const { ownerAuthCleanupBatchSize, staleProcessingSessionMinutes, uploadIntentCleanupBatchSize } =
-  sessionCleanupModule;
+const { staleProcessingSessionMinutes, uploadIntentCleanupBatchSize } = sessionCleanupModule;
 
 const sessionVisibilityModule = (await import(
   new URL("../../artifacts/api-server/src/lib/sessionVisibility.ts", import.meta.url).href
@@ -229,7 +227,6 @@ const originalEnv = {
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL,
   NANO_BANANA_MODEL: process.env.NANO_BANANA_MODEL,
   GEMINI_IMAGE_FALLBACK_MODELS: process.env.GEMINI_IMAGE_FALLBACK_MODELS,
-  GEMINI_USE_INTERACTIONS_API: process.env.GEMINI_USE_INTERACTIONS_API,
   IMAGE_MODELS: process.env.IMAGE_MODELS,
   IMAGE_MODEL: process.env.IMAGE_MODEL,
   IMAGE_FALLBACK_MODELS: process.env.IMAGE_FALLBACK_MODELS,
@@ -490,7 +487,6 @@ try {
     DATABASE_URL: "postgresql://user:pass@aws-0-us.pooler.supabase.com:5432/postgres?sslmode=require",
     APP_BASE_URL: "https://dreemer.examplevenue.com",
     UPLOAD_TOKEN_SECRET: "long-upload-token-secret",
-    SESSION_SECRET: "long-session-secret",
     SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "sb_service_role_live_key_123",
     CLERK_SECRET_KEY: "sk_live_1234567890abcdef",
@@ -768,21 +764,6 @@ try {
     "expired upload-intent cleanup caps startup work",
   );
   assert.equal(
-    ownerAuthCleanupBatchSize({} as NodeJS.ProcessEnv),
-    500,
-    "expired owner-auth cleanup defaults to a bounded batch",
-  );
-  assert.equal(
-    ownerAuthCleanupBatchSize({ OWNER_AUTH_CLEANUP_BATCH_SIZE: "2" } as NodeJS.ProcessEnv),
-    50,
-    "expired owner-auth cleanup refuses dangerously tiny batches",
-  );
-  assert.equal(
-    ownerAuthCleanupBatchSize({ OWNER_AUTH_CLEANUP_BATCH_SIZE: "99999" } as NodeJS.ProcessEnv),
-    5000,
-    "expired owner-auth cleanup caps startup work",
-  );
-  assert.equal(
     canExposeGeneratedAssetsToSharePage("processing"),
     false,
     "share-token session responses do not expose partial generated assets while processing",
@@ -1012,8 +993,8 @@ try {
   );
   assert.match(
     databaseReadinessSource,
-    /REQUIRED_DATABASE_COLUMNS[\s\S]*generated_assets[\s\S]*quality_report[\s\S]*owner_login_tokens[\s\S]*token_hash[\s\S]*owner_sessions[\s\S]*session_hash[\s\S]*missingRequiredDatabaseColumns[\s\S]*information_schema\.columns/s,
-    "database readiness checks launch-critical owner auth and gallery metadata columns",
+    /REQUIRED_DATABASE_COLUMNS[\s\S]*organizations: \[[\s\S]*"clerk_org_id"[\s\S]*venues: \[[\s\S]*"organization_id"[\s\S]*generated_assets[\s\S]*quality_report[\s\S]*credit_transactions: \[[\s\S]*"organization_id"[\s\S]*control_outreach_emails[\s\S]*unsubscribe_token[\s\S]*missingRequiredDatabaseColumns[\s\S]*information_schema\.columns/s,
+    "database readiness checks launch-critical organization, billing-ledger, outreach, and gallery metadata columns",
   );
   assert.match(
     databaseReadinessSource,
@@ -1022,13 +1003,13 @@ try {
   );
   assert.match(
     databaseReadinessSource,
-    /REQUIRED_DATABASE_NOT_NULL_COLUMNS[\s\S]*venues:[\s\S]*owner_email[\s\S]*couple_sessions:[\s\S]*couple_email[\s\S]*share_token[\s\S]*owner_login_tokens[\s\S]*token_hash[\s\S]*owner_sessions[\s\S]*revoked[\s\S]*nullableRequiredDatabaseColumns[\s\S]*is_nullable/s,
-    "database readiness checks launch-critical venue owner, session identity, and owner-auth not-null column constraints",
+    /REQUIRED_DATABASE_NOT_NULL_COLUMNS[\s\S]*organizations:[\s\S]*clerk_org_id[\s\S]*venues:[\s\S]*owner_email[\s\S]*couple_sessions:[\s\S]*couple_email[\s\S]*share_token[\s\S]*control_outreach_emails:[\s\S]*unsubscribe_token[\s\S]*nullableRequiredDatabaseColumns[\s\S]*is_nullable/s,
+    "database readiness checks launch-critical organization, venue owner, session identity, and outreach not-null column constraints",
   );
   assert.match(
     databaseReadinessSource,
-    /REQUIRED_DATABASE_INDEXES[\s\S]*venues\.slug\.unique[\s\S]*upload_intents_object_key_unique[\s\S]*generated_assets_object_key_unique[\s\S]*generated_assets_session_slot_unique[\s\S]*credit_transactions_stripe_event_id_unique[\s\S]*is not null[\s\S]*owner_login_tokens\.token_hash\.unique[\s\S]*owner_sessions\.session_hash\.unique[\s\S]*missingRequiredDatabaseIndexes[\s\S]*pg_indexes/s,
-    "database readiness checks public slug, upload, gallery asset, owner-auth, and Stripe webhook uniqueness indexes",
+    /REQUIRED_DATABASE_INDEXES[\s\S]*organizations\.clerk_org_id\.unique[\s\S]*venues\.slug\.unique[\s\S]*upload_intents_object_key_unique[\s\S]*generated_assets_object_key_unique[\s\S]*generated_assets_session_slot_unique[\s\S]*credit_transactions_stripe_event_id_unique[\s\S]*is not null[\s\S]*control_prospects_email_unique[\s\S]*control_email_suppressions_email_unique[\s\S]*missingRequiredDatabaseIndexes[\s\S]*pg_indexes/s,
+    "database readiness checks organization, public slug, upload, gallery asset, outreach suppression, and Stripe webhook uniqueness indexes",
   );
   assert.match(
     databaseReadinessSource,
@@ -1260,10 +1241,10 @@ try {
     /cleanupGeneratedAssetsForSession\(sessionId: number\)[\s\S]*generatedAssetsTable\.objectKey[\s\S]*delete\(generatedAssetsTable\)[\s\S]*deleteObjectEntity\(asset\.objectKey\)[\s\S]*cleanupOrphanedSessions[\s\S]*cleanupGeneratedAssetsForSession\(row\.id\)[\s\S]*refundCreditsForSession\(row\.id\)/s,
     "server startup deletes partial generated gallery assets before refunding stale processing sessions",
   );
-  assert.match(
+  assert.doesNotMatch(
     serverIndex,
-    /cleanupExpiredOwnerAuth[\s\S]*ownerAuthCleanupBatchSize\(\)[\s\S]*ownerLoginTokensTable[\s\S]*isNotNull\(ownerLoginTokensTable\.usedAt\)[\s\S]*ownerSessionsTable[\s\S]*eq\(ownerSessionsTable\.revoked, true\)[\s\S]*delete\(ownerLoginTokensTable\)[\s\S]*delete\(ownerSessionsTable\)[\s\S]*cleanupExpiredOwnerAuth\(\)/s,
-    "server startup deletes expired or spent owner login tokens and expired or revoked owner sessions",
+    /ownerLoginTokensTable|ownerSessionsTable|cleanupExpiredOwnerAuth/,
+    "server startup no longer touches the retired owner-auth tables (Clerk owns owner sign-in)",
   );
   assert.match(
     rateLimitSource,
@@ -1628,7 +1609,6 @@ try {
   process.env.GEMINI_IMAGE_MODELS = "gemini-3-pro-image";
   delete process.env.GEMINI_IMAGE_MODEL;
   delete process.env.GEMINI_IMAGE_FALLBACK_MODELS;
-  delete process.env.GEMINI_USE_INTERACTIONS_API;
 
   const generated = svgImage("generated");
   const reference = { buffer: svgImage("reference"), mimeType: "image/svg+xml" };

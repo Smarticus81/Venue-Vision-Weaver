@@ -1,4 +1,4 @@
-﻿openapi: 3.1.0
+openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
@@ -30,6 +30,10 @@ tags:
       governed actions, record prospect outcomes, work agent tasks, and audit
       everything. Auth is a Clerk session whose email is in
       CONTROL_PLANE_OPERATOR_EMAILS.
+  - name: styles
+    description: Gallery style catalog.
+  - name: public
+    description: Unauthenticated site configuration.
 paths:
   /healthz:
     get:
@@ -66,18 +70,6 @@ paths:
                 $ref: "#/components/schemas/ReadinessStatus"
 
   /venues:
-    get:
-      operationId: listVenues
-      tags: [venues]
-      summary: Deprecated public venue directory
-      deprecated: true
-      responses:
-        "404":
-          description: Directory disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
     post:
       operationId: createVenue
       tags: [venues]
@@ -194,6 +186,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrganizationResponse"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: No active organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      operationId: updateOrganization
+      tags: [organization]
+      summary: Update organization preferences (aggregate-proof opt-in, contact email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrganizationBody"
+      responses:
+        "200":
+          description: Organization summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "401":
           description: Not signed in
           content:
@@ -335,31 +362,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
-  /venues/{slug}/stats:
-    get:
-      operationId: getVenueStats
-      tags: [venues]
-      summary: Get venue statistics
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Venue stats
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VenueStatsResponse"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
   /venues/{slug}/media:
     get:
       operationId: listVenueMedia
@@ -484,29 +486,6 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           description: Venue not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-    get:
-      operationId: listVenueSessions
-      tags: [sessions]
-      summary: List all sessions for a venue (owner session)
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: List of sessions
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListSessionsResponse"
-        "401":
-          description: Unauthorized
           content:
             application/json:
               schema:
@@ -749,6 +728,257 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "502":
           description: The email could not be delivered right now (couple-facing message, no config detail).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /public/config:
+    get:
+      operationId: getPublicConfig
+      tags: [public]
+      summary: Published prices, trial terms, founding offer, proof mode and contact address for the public site
+      description: No auth. Cached 60s. The same JSON is injected into the HTML shell as <meta name="dreemer-public-config">.
+      responses:
+        "200":
+          description: Public config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicConfig"
+
+  /sessions/by-token/{shareToken}/events:
+    post:
+      operationId: recordGalleryEvent
+      tags: [sessions]
+      summary: Record a share-page event (shared, cta_click) for the gallery funnel
+      description: Public, rate-limited per IP. "viewed" is recorded server-side by GET /sessions/by-token and is rejected here.
+      parameters:
+        - { name: shareToken, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GalleryEventBody"
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GalleryEventResponse"
+        "400":
+          description: Invalid event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/sessions/{id}/booked:
+    post:
+      operationId: setSessionBooked
+      tags: [venues]
+      summary: Venue marks a couple as booked (or undoes it)
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSessionBookedBody"
+      responses:
+        "200":
+          description: Updated summary row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionSummary"
+        "401":
+          description: Sign in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Venue belongs to another organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue or session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/media/import-website:
+    post:
+      operationId: importVenueWebsiteMedia
+      tags: [venues]
+      summary: Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWebsiteMediaBody"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWebsiteMediaResponse"
+        "400":
+          description: No website URL on file or invalid URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Sign in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Import already ran recently
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/sample-gallery:
+    post:
+      operationId: createSampleGallery
+      tags: [venues]
+      summary: Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "201":
+          description: Sample session created and queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          description: Sign in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Venue has no usable space photos yet, or a sample is already rendering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Demo couple assets are not available on this server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /venues/{slug}/tour-card-downloaded:
+    post:
+      operationId: markTourCardDownloaded
+      tags: [venues]
+      summary: Onboarding checklist — record that the printable tour card was downloaded
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Venue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueResponse"
+        "401":
+          description: Sign in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /events:
+    post:
+      operationId: recordFunnelEvent
+      tags: [public]
+      summary: Record an owner-funnel event from the public site or dashboard
+      description: Public, rate-limited per IP. Events are validated against a fixed list and written to funnel_events.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FunnelEventBody"
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelEventResponse"
+        "400":
+          description: Invalid event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /outreach/claim/{token}:
+    get:
+      operationId: getOutreachClaim
+      tags: [public]
+      summary: Resolve an outreach claim link to the venue it was sent to (public, pre-fills signup)
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Claim details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutreachClaimResponse"
+        "404":
+          description: Unknown or expired claim token
           content:
             application/json:
               schema:
@@ -1021,12 +1251,19 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, approved, rejected, executed, failed]
+            enum: [pending, approved, rejected, executing, executed, failed]
         - name: limit
           in: query
           required: false
           schema:
             type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: Actions
@@ -1134,6 +1371,12 @@ paths:
       tags: [control-plane]
       summary: Experiment portfolio
       parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [proposed, running, completed, aborted]
         - name: limit
           in: query
           required: false
@@ -1146,6 +1389,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ControlExperimentsResponse"
+    post:
+      operationId: createControlExperiment
+      tags: [control-plane]
+      summary: Create an experiment card (operator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlExperimentCreateBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlExperimentResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Portfolio full (3 proposed + running)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /control/audit:
     get:
@@ -1178,6 +1450,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ControlPoliciesResponse"
+
+  /control/policies/{key}:
+    put:
+      operationId: updateControlPolicy
+      tags: [control-plane]
+      summary: Operator edits one governance policy value (validated per key, bounds enforced)
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlPolicyUpdateBody"
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlPolicyResponse"
+        "400":
+          description: Unknown key, wrong field, or value out of bounds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /control/metrics/history:
     get:
@@ -1215,11 +1520,37 @@ paths:
           required: false
           schema:
             type: integer
+        - name: vettingStatus
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [unvetted, passed, review, failed, error]
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive match on name, email, website, or region.
+          schema:
+            type: string
+            maxLength: 120
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [newest, score, updated]
         - name: limit
           in: query
           required: false
           schema:
             type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: Prospects
@@ -1284,6 +1615,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/ControlCampaignsResponse"
 
+  /control/campaigns/{id}/status:
+    post:
+      operationId: setControlCampaignStatus
+      tags: [control-plane]
+      summary: Operator launches, pauses, resumes, or completes a campaign
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlCampaignStatusBody"
+      responses:
+        "200":
+          description: Updated campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlCampaignResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Invalid status transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
   /control/outreach/emails:
     get:
       operationId: listControlOutreachEmails
@@ -1301,11 +1671,24 @@ paths:
           required: false
           schema:
             type: integer
+        - name: awaiting
+          in: query
+          required: false
+          description: When true, only drafts whose send action is still pending.
+          schema:
+            type: boolean
         - name: limit
           in: query
           required: false
           schema:
             type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: Emails
@@ -1417,31 +1800,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
-  /control/outreach/emails/{id}/sample-preview:
-    post:
-      operationId: requestControlSamplePreview
-      tags: [control-plane]
-      summary: Operator-only hook to generate a labeled Dreemer sample image for the venue (stubbed)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Updated detail
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ControlOutreachEmailDetailResponse"
-        "501":
-          description: Sample previews are not available in this build
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-
   /control/prospects/{id}/draft:
     post:
       operationId: draftControlOutreachEmail
@@ -1478,31 +1836,360 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-
-  /control/prospects/{id}/research:
-    post:
-      operationId: researchControlProspect
+  /control/prospects/{id}/evidence:
+    get:
+      operationId: getControlProspectEvidence
       tags: [control-plane]
-      summary: Re-run the venue website research (facts and photos) for a prospect
+      summary: Vetting verdict, every check with its evidence, verified facts with sources, and research for one prospect
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200":
-          description: Research result
+          description: Evidence
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ControlProspectResearchResponse"
+                $ref: "#/components/schemas/ControlProspectEvidenceResponse"
         "404":
           description: Prospect not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/prospects/{id}/vet:
+    post:
+      operationId: vetControlProspect
+      tags: [control-plane]
+      summary: Run (or re-run) legitimacy vetting for a prospect now
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VetControlProspectBody"
+      responses:
+        "200":
+          description: Evidence after vetting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectEvidenceResponse"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/prospects/{id}/vetting/override:
+    post:
+      operationId: overrideControlProspectVetting
+      tags: [control-plane]
+      summary: Operator decision on a prospect's legitimacy (pass or fail) with a note
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OverrideControlProspectVettingBody"
+      responses:
+        "200":
+          description: Evidence after override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectEvidenceResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/prospects/{id}/facts:
+    post:
+      operationId: addControlProspectFact
+      tags: [control-plane]
+      summary: Add an operator-verified venue fact with its source URL
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddControlProspectFactBody"
+      responses:
+        "201":
+          description: Evidence after adding the fact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectEvidenceResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/prospects/{id}/facts/{factId}:
+    delete:
+      operationId: removeControlProspectFact
+      tags: [control-plane]
+      summary: Remove a fact so the copywriter can no longer cite it
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: factId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Evidence after removal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlProspectEvidenceResponse"
+        "404":
+          description: Prospect or fact not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/outreach/sending:
+    get:
+      operationId: getControlOutreachSending
+      tags: [control-plane]
+      summary: Deliverability guard, daily cap, and 14-day sending health for prospect outreach
+      responses:
+        "200":
+          description: Sending state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachSendingState"
+    post:
+      operationId: setControlOutreachSending
+      tags: [control-plane]
+      summary: Pause or reset the deliverability guard (reset is always manual)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetControlOutreachSendingBody"
+      responses:
+        "200":
+          description: Sending state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlOutreachSendingState"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /control/growth:
+    get:
+      operationId: getControlGrowth
+      tags: [control-plane]
+      summary: Outcome KPIs, adaptation state, copy variants, recent rule firings, latest digest
+      responses:
+        "200":
+          description: Growth loop state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlGrowthResponse"
+
+  /control/growth/recompute:
+    post:
+      operationId: recomputeControlGrowth
+      tags: [control-plane]
+      summary: Take a fresh KPI snapshot now (also runs the experiment evaluator and adaptation rules)
+      responses:
+        "200":
+          description: Snapshot taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlGrowthResponse"
+
+  /control/growth/variants/{key}:
+    post:
+      operationId: updateControlCopyVariant
+      tags: [control-plane]
+      summary: Pause, resume, reweight or reword a copy variant
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlCopyVariantUpdateBody"
+      responses:
+        "200":
+          description: Updated variant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlCopyVariantResponse"
+        "404":
+          description: Variant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: The control variant cannot be deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/growth/guard/reset:
+    post:
+      operationId: resetControlDeliverabilityGuard
+      tags: [control-plane]
+      summary: Operator resets the deliverability guard to ok and restores the base daily cap
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlGuardResetBody"
+      responses:
+        "200":
+          description: Guard reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlGrowthResponse"
+
+  /control/experiments/{id}:
+    post:
+      operationId: updateControlExperiment
+      tags: [control-plane]
+      summary: Edit card fields while proposed or running; start a proposed experiment
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlExperimentUpdateBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlExperimentResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Experiment is not editable in its current status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/experiments/{id}/evaluate:
+    post:
+      operationId: evaluateControlExperiment
+      tags: [control-plane]
+      summary: Run the deterministic evaluator now without deciding
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlExperimentEvaluationResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/experiments/{id}/decision:
+    post:
+      operationId: decideControlExperiment
+      tags: [control-plane]
+      summary: Operator decision (win, kill, inconclusive, or extend the decision date)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlExperimentDecisionBody"
+      responses:
+        "200":
+          description: Decided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlExperimentResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Only running experiments can be decided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /control/digest/generate:
+    post:
+      operationId: generateControlDigest
+      tags: [control-plane]
+      summary: Build (or rebuild) this week's digest now and queue the send action
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlDigestGenerateBody"
+      responses:
+        "201":
+          description: Digest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlDigestResponse"
 
 components:
   schemas:
@@ -1544,6 +2231,10 @@ components:
               $ref: "#/components/schemas/ReadinessCheckState"
             ffmpeg:
               $ref: "#/components/schemas/ReadinessCheckState"
+            auth:
+              $ref: "#/components/schemas/ReadinessCheckState"
+            rls:
+              $ref: "#/components/schemas/ReadinessCheckState"
 
     ReadinessCheckState:
       type: string
@@ -1555,6 +2246,9 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          description: Machine-readable reason, e.g. trial_expired, insufficient_credits, no_active_organization.
 
     CreateVenueBody:
       type: object
@@ -1628,13 +2322,25 @@ components:
           type: string
           nullable: true
           description: Public tour booking URL.
+        incentiveText:
+          type: string
+          nullable: true
+          description: One line shown under the reel on the share page.
+        tourCardDownloadedAt:
+          type: string
+          format: date-time
+          nullable: true
+        websiteImportedAt:
+          type: string
+          format: date-time
+          nullable: true
         organizationId:
           type: integer
           nullable: true
           description: Billing organization that owns this venue.
         plan:
           type: string
-          enum: [trial, starter, growth, none]
+          enum: [trial, starter, growth, payg, none]
           description: Organization plan (billing lives on the organization).
         creditsBalance:
           type: integer
@@ -1702,21 +2408,11 @@ components:
         bookingUrl:
           type: string
           nullable: true
-
-    RecoverOwnerBody:
-      type: object
-      required: [email]
-      properties:
-        email:
+        incentiveText:
           type: string
-          format: email
-
-    SimpleAcceptedResponse:
-      type: object
-      required: [accepted]
-      properties:
-        accepted:
-          type: boolean
+          nullable: true
+          maxLength: 160
+          description: One line shown under the reel on the share page. Null clears it.
 
     OrganizationResponse:
       type: object
@@ -1724,7 +2420,7 @@ components:
       properties:
         organization:
           type: object
-          required: [id, name, plan, creditsBalance, clerkOrgId]
+          required: [id, name, plan, creditsBalance, clerkOrgId, trial, shareAggregates]
           properties:
             id:
               type: integer
@@ -1732,7 +2428,7 @@ components:
               type: string
             plan:
               type: string
-              enum: [trial, starter, growth, none]
+              enum: [trial, starter, growth, payg, none]
             creditsBalance:
               type: integer
             billingPeriodEnd:
@@ -1741,6 +2437,22 @@ components:
               nullable: true
             clerkOrgId:
               type: string
+            contactEmail:
+              type: string
+              nullable: true
+            firstPaidAt:
+              type: string
+              format: date-time
+              nullable: true
+            churnedAt:
+              type: string
+              format: date-time
+              nullable: true
+            shareAggregates:
+              type: boolean
+              description: Venue opted in to anonymised aggregate proof on the public site.
+            trial:
+              $ref: "#/components/schemas/TrialState"
             role:
               type: string
               nullable: true
@@ -1795,7 +2507,7 @@ components:
 
     VenuePublicResponse:
       type: object
-      required: [id, name, slug, media, isReady]
+      required: [id, name, slug, media, isReady, bookingReady, turnstileSiteKey, missingCoverages]
       description: Couple-facing venue profile. Never exposes billing or credit balances.
       properties:
         id:
@@ -1840,44 +2552,25 @@ components:
             start a gallery (the server's session-create guard applies the same
             rule). Couple-facing surfaces must use this flag instead of
             counting media themselves.
+        bookingReady:
+          type: boolean
+          description: True when the venue has a booking URL, website, or contact email the share-page date CTA can use.
+        turnstileSiteKey:
+          type: string
+          nullable: true
+          description: Cloudflare Turnstile site key when bot protection is enabled on session creation; null otherwise.
+        missingCoverages:
+          type: array
+          description: Coverage roles the venue still lacks reference photos for (empty when ready).
+          items:
+            $ref: "#/components/schemas/VenueMediaCoverage"
+        incentiveText:
+          type: string
+          nullable: true
+          description: One line the venue shows under the reel on the share page.
         uploadToken:
           type: string
           description: Short-lived venue-scoped token required for couple photo upload URL requests.
-
-    ListVenuesResponse:
-      type: object
-      required: [venues]
-      properties:
-        venues:
-          type: array
-          items:
-            $ref: "#/components/schemas/VenueDirectoryItem"
-
-    VenueDirectoryItem:
-      type: object
-      required: [id, name, slug, mediaCount, createdAt]
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        slug:
-          type: string
-        tagline:
-          type: string
-          nullable: true
-        description:
-          type: string
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
-        mediaCount:
-          type: integer
-          description: Number of venue photos on file. Always >= 1 for listed venues.
-        thumbnailObjectKey:
-          type: string
-          nullable: true
 
     VenueMediaItem:
       type: object
@@ -1933,25 +2626,6 @@ components:
           items:
             $ref: "#/components/schemas/SessionSummary"
 
-    VenueStatsResponse:
-      type: object
-      required: [totalSessions, readySessions, processingSessions, failedSessions, avgCompletionSeconds, totalEstimatedCostUsd]
-      properties:
-        totalSessions:
-          type: integer
-        readySessions:
-          type: integer
-        processingSessions:
-          type: integer
-        failedSessions:
-          type: integer
-        avgCompletionSeconds:
-          type: number
-          nullable: true
-        totalEstimatedCostUsd:
-          type: number
-          description: Sum of estimated USD costs across all sessions for this venue.
-
     CreateSessionBody:
       type: object
       required: [couplePhotoKeys, coupleEmail]
@@ -1960,7 +2634,7 @@ components:
           type: array
           items:
             type: string
-          minItems: 1
+          minItems: 2
           maxItems: 3
         styleId:
           type: string
@@ -1972,6 +2646,20 @@ components:
           type: string
           format: email
           description: Required. Used for recovery emails and notifications.
+        turnstileToken:
+          type: string
+          description: Cloudflare Turnstile response token. Verified only when TURNSTILE_SECRET_KEY is set on the server.
+        weddingMonth:
+          type: string
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          description: The month the couple is thinking of, "YYYY-MM". Passed to the venue's date CTA.
+        consent:
+          type: boolean
+          description: Both partners agree to the AI preview and photo handling. The server rejects couple sessions without it.
+        createdVia:
+          type: string
+          enum: [couple_link, tour_day]
+          description: couple_link (default) or tour_day when a coordinator starts it for the couple.
 
     GalleryStyleSummary:
       type: object
@@ -2013,7 +2701,7 @@ components:
 
     SessionSummary:
       type: object
-      required: [id, venueId, status, createdAt]
+      required: [id, venueId, status, createdAt, kind, createdVia, viewCount, sharedCount, ctaClicks]
       properties:
         id:
           type: integer
@@ -2041,9 +2729,34 @@ components:
         shareToken:
           type: string
           nullable: true
-        estimatedCostUsd:
-          type: number
-          description: Estimated USD cost to generate this gallery.
+        kind:
+          type: string
+          enum: [couple, sample]
+        createdVia:
+          type: string
+          enum: [couple_link, tour_day, sample]
+        weddingMonth:
+          type: string
+          nullable: true
+        emailedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: First "sent" gallery event.
+        firstViewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        viewCount:
+          type: integer
+        sharedCount:
+          type: integer
+        ctaClicks:
+          type: integer
+        bookedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     SendSessionEmailBody:
       type: object
@@ -2094,7 +2807,7 @@ components:
 
     SessionDetailResponse:
       type: object
-      required: [id, venueId, status, createdAt, generatedAssets]
+      required: [id, venueId, status, createdAt, generatedAssets, kind, createdVia]
       description: Public/couple-facing session view. Intentionally omits PII like coupleEmail.
       properties:
         id:
@@ -2119,9 +2832,15 @@ components:
         shareToken:
           type: string
           nullable: true
-        estimatedCostUsd:
-          type: number
-          description: Estimated USD cost to generate this gallery.
+        kind:
+          type: string
+          enum: [couple, sample]
+        createdVia:
+          type: string
+          enum: [couple_link, tour_day, sample]
+        weddingMonth:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2141,11 +2860,41 @@ components:
         - $ref: "#/components/schemas/SessionDetailResponse"
         - type: object
           description: Owner-only session detail. Includes couple contact data for that venue owner.
+          required: [viewCount, ctaClicks]
           properties:
             coupleEmail:
               type: string
               nullable: true
               description: Couple email on file. Only returned from owner-session protected endpoints.
+            viewCount:
+              type: integer
+            ctaClicks:
+              type: integer
+            firstViewedAt:
+              type: string
+              format: date-time
+              nullable: true
+            bookedAt:
+              type: string
+              format: date-time
+              nullable: true
+            consentAt:
+              type: string
+              format: date-time
+              nullable: true
+            failureDetail:
+              type: string
+              nullable: true
+              description: Operator-facing failure detail (never shown to couples).
+            qualitySummary:
+              type: object
+              nullable: true
+              required: [belowTarget, attempts]
+              properties:
+                belowTarget:
+                  type: boolean
+                attempts:
+                  type: integer
 
     GeneratedAsset:
       type: object
@@ -2182,15 +2931,6 @@ components:
           nullable: true
           additionalProperties: true
           description: Gallery quality judge output for this still when the quality gate is enabled.
-
-    ListSessionsResponse:
-      type: object
-      required: [sessions]
-      properties:
-        sessions:
-          type: array
-          items:
-            $ref: "#/components/schemas/SessionSummary"
 
     UploadUrlRequest:
       type: object
@@ -2252,6 +2992,8 @@ components:
             lowCreditCount:
               type: integer
             paidCount:
+              type: integer
+            paidSubscriptionCount:
               type: integer
         venues:
           type: object
@@ -2317,6 +3059,8 @@ components:
           properties:
             generated7d:
               type: integer
+        growth:
+          $ref: "#/components/schemas/GrowthKpis"
 
     ControlAgent:
       type: object
@@ -2338,7 +3082,6 @@ components:
               product,
               finance,
               experiments,
-              sales,
               activation,
               governance,
             ]
@@ -2503,7 +3246,7 @@ components:
           type: boolean
         status:
           type: string
-          enum: [pending, approved, rejected, executed, failed]
+          enum: [pending, approved, rejected, executing, executed, failed]
         decidedBy:
           type: string
           nullable: true
@@ -2649,6 +3392,53 @@ components:
           type: string
           format: date-time
           nullable: true
+        primaryMetricKey:
+          type: string
+          nullable: true
+        baseline:
+          type: number
+          nullable: true
+        minDetectableLift:
+          type: number
+          nullable: true
+        killThreshold:
+          type: number
+          nullable: true
+        decisionDate:
+          type: string
+          format: date-time
+          nullable: true
+        segment:
+          type: string
+          nullable: true
+        variantKey:
+          type: string
+          nullable: true
+        assignments:
+          type: object
+          additionalProperties: true
+          nullable: true
+        decision:
+          type: string
+          enum: [win, kill, inconclusive, extended]
+          nullable: true
+        decidedBy:
+          type: string
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        observedValue:
+          type: number
+          nullable: true
+        observedN:
+          type: integer
+          nullable: true
+        evaluation:
+          type: object
+          additionalProperties: true
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2731,6 +3521,22 @@ components:
           items:
             $ref: "#/components/schemas/ControlPolicy"
 
+    ControlPolicyUpdateBody:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: object
+          additionalProperties: true
+          description: The policy's full value object; validated per key (field name and bounds).
+
+    ControlPolicyResponse:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          $ref: "#/components/schemas/ControlPolicy"
+
     ControlMetricsSnapshot:
       type: object
       required: [id, metrics, createdAt]
@@ -2755,7 +3561,7 @@ components:
     ControlProspect:
       type: object
       required:
-        [id, name, email, source, score, status, campaignStep, contactCount, createdAt, updatedAt]
+        [id, name, email, source, score, status, campaignStep, contactCount, vettingStatus, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -2803,6 +3609,41 @@ components:
         createdByAgent:
           type: string
           nullable: true
+        vettingStatus:
+          type: string
+          enum: [unvetted, passed, review, failed, error]
+        legitimacyScore:
+          type: integer
+          nullable: true
+        vettedAt:
+          type: string
+          format: date-time
+          nullable: true
+        venueType:
+          type: string
+          nullable: true
+        repliedAt:
+          type: string
+          format: date-time
+          nullable: true
+        replySentiment:
+          type: string
+          enum: [positive, neutral, negative]
+          nullable: true
+        convertedAt:
+          type: string
+          format: date-time
+          nullable: true
+        convertedOrganizationId:
+          type: integer
+          nullable: true
+        convertedCampaignId:
+          type: integer
+          nullable: true
+        attributionMethod:
+          type: string
+          enum: [email, website_domain, email_domain, manual]
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2829,6 +3670,18 @@ components:
             Operator-recorded outcome. "contacted" is reserved for the governed
             send action and cannot be set here.
           enum: [new, qualified, replied, converted, unsubscribed, disqualified]
+        replySentiment:
+          type: string
+          enum: [positive, neutral, negative]
+          nullable: true
+          description: Only with status replied.
+        organizationId:
+          type: integer
+          nullable: true
+          description: Only with status converted; the organization that signed up.
+        note:
+          type: string
+          maxLength: 400
 
     ControlProspectResponse:
       type: object
@@ -2888,6 +3741,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ControlCampaign"
+
+    ControlCampaignStatusBody:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, paused, completed]
+        note:
+          type: string
+          maxLength: 400
+
+    ControlCampaignResponse:
+      type: object
+      required: [campaign]
+      properties:
+        campaign:
+          $ref: "#/components/schemas/ControlCampaign"
 
     ControlVenueFacts:
       type: object
@@ -2969,17 +3840,6 @@ components:
           type: string
           format: date-time
 
-    ControlProspectResearchResponse:
-      type: object
-      required: [research, assets]
-      properties:
-        research:
-          $ref: "#/components/schemas/ControlProspectResearch"
-        assets:
-          type: array
-          items:
-            $ref: "#/components/schemas/ControlOutreachAsset"
-
     ControlOutreachEmail:
       type: object
       required:
@@ -3021,6 +3881,22 @@ components:
           type: array
           items:
             type: integer
+        variantKey:
+          type: string
+          nullable: true
+        citedFacts:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ControlCitedFact"
+        vettingSnapshot:
+          type: object
+          nullable: true
+          required: [status, score, vettedAt]
+          properties:
+            status: { type: string }
+            score: { type: integer }
+            vettedAt: { type: string, format: date-time }
         draftNotes:
           type: object
           additionalProperties: true
@@ -3046,6 +3922,14 @@ components:
         bounceReason:
           type: string
           nullable: true
+        openedAt:
+          type: string
+          format: date-time
+          nullable: true
+        clickedAt:
+          type: string
+          format: date-time
+          nullable: true
         lastError:
           type: string
           nullable: true
@@ -3064,7 +3948,7 @@ components:
 
     ControlOutreachProspectSummary:
       type: object
-      required: [id, name, email, status]
+      required: [id, name, email, status, vettingStatus]
       properties:
         id:
           type: integer
@@ -3076,6 +3960,8 @@ components:
           type: string
           nullable: true
         status:
+          type: string
+        vettingStatus:
           type: string
         website:
           type: string
@@ -3109,7 +3995,7 @@ components:
 
     ControlOutreachEmailDetail:
       type: object
-      required: [email, prospect, assets, preview, warnings, editable, samplePreviewsEnabled]
+      required: [email, prospect, assets, preview, warnings, editable, facts, approvable]
       properties:
         email:
           $ref: "#/components/schemas/ControlOutreachEmail"
@@ -3137,6 +4023,16 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ControlProspectResearch"
+        vetting:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ControlProspectVetting"
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlProspectFact"
+        approvable:
+          type: boolean
         assets:
           type: array
           items:
@@ -3157,7 +4053,7 @@ components:
                 type: string
         warnings:
           type: object
-          required: [research, config]
+          required: [research, config, vetting]
           properties:
             research:
               type: array
@@ -3167,9 +4063,11 @@ components:
               type: array
               items:
                 type: string
+            vetting:
+              type: array
+              items:
+                type: string
         editable:
-          type: boolean
-        samplePreviewsEnabled:
           type: boolean
 
     ControlOutreachEmailDetailResponse:
@@ -3185,7 +4083,7 @@ components:
         subject:
           type: string
           minLength: 3
-          maxLength: 80
+          maxLength: 50
         body:
           type: string
           minLength: 20
@@ -3237,3 +4135,850 @@ components:
           maximum: 10
         refreshResearch:
           type: boolean
+        variantKey:
+          type: string
+          nullable: true
+          description: Force a control_copy_variants key; omitted = the studio chooses by weight.
+
+    ControlCitedFact:
+      type: object
+      required: [kind, value, sourceUrl]
+      properties:
+        kind: { type: string }
+        value: { type: string }
+        sourceUrl: { type: string }
+
+    ControlVettingEvidence:
+      type: object
+      required: [url, observedAt]
+      properties:
+        url: { type: string }
+        excerpt: { type: string, nullable: true }
+        observedAt: { type: string, format: date-time }
+
+    ControlVettingCheck:
+      type: object
+      required: [key, outcome, points, hardFail, detail, evidence]
+      properties:
+        key: { type: string }
+        outcome:
+          type: string
+          enum: [pass, warn, fail, skip, error]
+        points: { type: integer }
+        hardFail: { type: boolean }
+        detail: { type: string }
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlVettingEvidence"
+        data:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    ControlProspectVetting:
+      type: object
+      required: [id, prospectId, status, score, tier, hardFails, checks, summary, contactDomain, vettedAt, expiresAt, vettedBy]
+      properties:
+        id: { type: integer }
+        prospectId: { type: integer }
+        status:
+          type: string
+          enum: [passed, review, failed, error]
+        score: { type: integer }
+        tier:
+          type: string
+          enum: [A, AB]
+        hardFails:
+          type: array
+          items: { type: string }
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlVettingCheck"
+        summary: { type: string }
+        contactDomain: { type: string }
+        mxProvider: { type: string, nullable: true }
+        domainRegisteredAt: { type: string, format: date-time, nullable: true }
+        firstCaptureAt: { type: string, format: date-time, nullable: true }
+        placesPlaceId: { type: string, nullable: true }
+        vettedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        vettedBy: { type: string }
+
+    ControlProspectFact:
+      type: object
+      required: [id, prospectId, kind, value, sourceUrl, sourceKind, status, createdBy, createdAt]
+      properties:
+        id: { type: integer }
+        prospectId: { type: integer }
+        kind:
+          type: string
+          enum: [venue_name, space, location, capacity, style, owner_name, email, phone, address, marketplace, social, google_rating, wedding_signal]
+        value: { type: string }
+        sourceUrl: { type: string }
+        sourceKind:
+          type: string
+          enum: [website, json_ld, rdap, wayback, dns, places, agent_research, operator]
+        excerpt: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [verified, unverified, stale]
+        verifiedAt: { type: string, format: date-time, nullable: true }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ControlProspectEvidenceResponse:
+      type: object
+      required: [prospect, facts, assets]
+      properties:
+        prospect:
+          $ref: "#/components/schemas/ControlProspect"
+        vetting:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ControlProspectVetting"
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlProspectFact"
+        research:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ControlProspectResearch"
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlOutreachAsset"
+
+    VetControlProspectBody:
+      type: object
+      properties:
+        refresh: { type: boolean }
+
+    OverrideControlProspectVettingBody:
+      type: object
+      required: [decision, note]
+      properties:
+        decision:
+          type: string
+          enum: [pass, fail]
+        note: { type: string, minLength: 5, maxLength: 400 }
+
+    AddControlProspectFactBody:
+      type: object
+      required: [kind, value, sourceUrl]
+      properties:
+        kind:
+          type: string
+          enum: [space, location, capacity, style, owner_name, phone, address, marketplace, social]
+        value: { type: string, minLength: 2, maxLength: 160 }
+        sourceUrl: { type: string, minLength: 8, maxLength: 2000 }
+
+    ControlDeliverabilityGuard:
+      type: object
+      required: [status, okDays]
+      properties:
+        status:
+          type: string
+          enum: [ok, warn, throttled, paused]
+        since: { type: string, format: date-time, nullable: true }
+        reason: { type: string, nullable: true }
+        okDays: { type: number }
+
+    ControlOutreachSendingState:
+      type: object
+      required: [guard, dailyCap, health]
+      properties:
+        guard:
+          $ref: "#/components/schemas/ControlDeliverabilityGuard"
+        dailyCap:
+          type: object
+          required: [policyMax, sentToday]
+          properties:
+            policyMax: { type: integer }
+            sentToday: { type: integer }
+        health:
+          type: object
+          required: [windowDays, sent, bounced, complained, bounceRatePct]
+          properties:
+            windowDays: { type: integer }
+            sent: { type: integer }
+            bounced: { type: integer }
+            complained: { type: integer }
+            bounceRatePct: { type: number }
+
+    SetControlOutreachSendingBody:
+      type: object
+      required: [paused, note]
+      properties:
+        paused: { type: boolean }
+        note: { type: string, minLength: 5, maxLength: 400 }
+
+    # ----- shared (trial / public site) -----
+    TrialState:
+      type: object
+      required: [onTrial, endsAt, daysLeft, expired, creditsRemaining]
+      properties:
+        onTrial: { type: boolean }
+        endsAt: { type: string, format: date-time, nullable: true }
+        daysLeft: { type: integer, nullable: true }
+        expired: { type: boolean }
+        creditsRemaining: { type: integer }
+
+    UpdateOrganizationBody:
+      type: object
+      properties:
+        shareAggregates: { type: boolean }
+        contactEmail: { type: string, format: email, nullable: true }
+
+    PricingConfig:
+      type: object
+      required: [currency, label, starterMonthly, growthMonthly, creditPack, starterCredits, growthCredits, creditPackCredits]
+      properties:
+        currency: { type: string, description: "ISO 4217, e.g. USD" }
+        label: { type: string, nullable: true, description: 'Printed beside the prices, e.g. "Launch prices"' }
+        starterMonthly: { type: number, description: Whole currency units }
+        growthMonthly: { type: number }
+        creditPack: { type: number }
+        starterCredits: { type: integer }
+        growthCredits: { type: integer }
+        creditPackCredits: { type: integer }
+
+    TrialConfig:
+      type: object
+      required: [credits, days]
+      properties:
+        credits: { type: integer }
+        days: { type: integer }
+
+    FoundingOffer:
+      type: object
+      required: [slotsLeft, slotsTotal]
+      properties:
+        slotsLeft: { type: integer }
+        slotsTotal: { type: integer }
+
+    ProofAggregates:
+      type: object
+      required: [venues, galleries, openedRate, ctaClickRate, bookedCount, since]
+      properties:
+        venues: { type: integer }
+        galleries: { type: integer }
+        openedRate: { type: number, description: "0-100, one decimal" }
+        ctaClickRate: { type: number, description: "0-100, one decimal" }
+        bookedCount: { type: integer }
+        since: { type: string, format: date-time }
+
+    PublicConfig:
+      type: object
+      required: [pricing, trial, founding, proof, contactEmail, billingConfigured, retentionDays]
+      properties:
+        pricing: { $ref: "#/components/schemas/PricingConfig" }
+        trial: { $ref: "#/components/schemas/TrialConfig" }
+        founding:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/FoundingOffer"
+        proof:
+          type: object
+          required: [mode]
+          properties:
+            mode: { type: string, enum: [partner, aggregate] }
+            aggregates:
+              nullable: true
+              allOf:
+                - $ref: "#/components/schemas/ProofAggregates"
+        contactEmail: { type: string, nullable: true }
+        billingConfigured: { type: boolean }
+        retentionDays: { type: integer, description: Days couple source photos are kept after delivery }
+
+    GalleryEventBody:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [shared, cta_click, download] }
+        source: { type: string, enum: [share_page, email], description: Defaults to share_page }
+
+    GalleryEventResponse:
+      type: object
+      required: [recorded]
+      properties:
+        recorded: { type: boolean }
+
+    SetSessionBookedBody:
+      type: object
+      required: [booked]
+      properties:
+        booked: { type: boolean }
+
+    ImportWebsiteMediaBody:
+      type: object
+      properties:
+        websiteUrl: { type: string, description: Overrides and saves venue.websiteUrl when given }
+
+    ImportWebsiteMediaResponse:
+      type: object
+      required: [imported, candidatesFound, warnings]
+      properties:
+        imported:
+          type: array
+          items: { $ref: "#/components/schemas/VenueMediaItem" }
+        candidatesFound: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+
+    # ----- growth loop -----
+    GrowthRateTriple:
+      type: object
+      required: [orgs, paid, rate]
+      properties:
+        orgs: { type: integer }
+        paid: { type: integer }
+        rate: { type: number, nullable: true }
+
+    GrowthSegmentStat:
+      type: object
+      required: [segmentType, segment, prospects, sent, delivered, replied, positiveReplied, signups, activated, paid, replyRate, positiveReplyRate, signupRate, guidance]
+      properties:
+        segmentType: { type: string, enum: [region, venue_type] }
+        segment: { type: string }
+        prospects: { type: integer }
+        sent: { type: integer }
+        delivered: { type: integer }
+        replied: { type: integer }
+        positiveReplied: { type: integer }
+        signups: { type: integer }
+        activated: { type: integer }
+        paid: { type: integer }
+        replyRate: { type: number, nullable: true }
+        positiveReplyRate: { type: number, nullable: true }
+        signupRate: { type: number, nullable: true }
+        guidance: { type: string, enum: [prioritize, pause], nullable: true }
+
+    GrowthVariantStat:
+      type: object
+      required: [variantKey, name, isControl, active, weight, sent, delivered, replied, positiveReplied, signups, replyRate, positiveReplyRate, signupRate, smoothedPositiveReplyRate]
+      properties:
+        variantKey: { type: string }
+        name: { type: string }
+        isControl: { type: boolean }
+        active: { type: boolean }
+        weight: { type: number }
+        sent: { type: integer }
+        delivered: { type: integer }
+        replied: { type: integer }
+        positiveReplied: { type: integer }
+        signups: { type: integer }
+        replyRate: { type: number, nullable: true }
+        positiveReplyRate: { type: number, nullable: true }
+        signupRate: { type: number, nullable: true }
+        smoothedPositiveReplyRate: { type: number }
+
+    GrowthKpis:
+      type: object
+      description: Outcome KPIs computed from production tables (control-plane/growth/kpiTypes.ts). Rates are fractions 0..1, money in integer cents, durations in hours.
+      required: [version, computedAt, window, signups, activation, trialToPaid, revenue, credits, churn, outbound, deliverability, experiments, dataQuality]
+      properties:
+        version: { type: integer }
+        computedAt: { type: string, format: date-time }
+        window:
+          type: object
+          required: [start30d, start14d, start7d, cohortStart]
+          properties:
+            start30d: { type: string, format: date-time }
+            start14d: { type: string, format: date-time }
+            start7d: { type: string, format: date-time }
+            cohortStart: { type: string, format: date-time }
+        signups:
+          type: object
+          required: [orgs7d, orgs30d, venues7d, venues30d, attributedToOutbound30d, byWeek]
+          properties:
+            orgs7d: { type: integer }
+            orgs30d: { type: integer }
+            venues7d: { type: integer }
+            venues30d: { type: integer }
+            attributedToOutbound30d: { type: integer }
+            byWeek:
+              type: array
+              items:
+                type: object
+                required: [weekStart, orgs, venues, attributed]
+                properties:
+                  weekStart: { type: string, format: date-time }
+                  orgs: { type: integer }
+                  venues: { type: integer }
+                  attributed: { type: integer }
+        activation:
+          type: object
+          required: [minPhotos, funnel, rates, timeToFirstGalleryHours, firstGalleryWithin7d, firstGalleryWithin14d, byCohortWeek]
+          properties:
+            minPhotos: { type: integer }
+            funnel:
+              type: object
+              required: [orgs, withVenue, photosReady, firstGallery, galleryViewed, secondGallery14d]
+              properties:
+                orgs: { type: integer }
+                withVenue: { type: integer }
+                photosReady: { type: integer }
+                firstGallery: { type: integer }
+                galleryViewed: { type: integer }
+                secondGallery14d: { type: integer }
+            rates:
+              type: object
+              required: [withVenue, photosReady, firstGallery, galleryViewed, secondGallery14d]
+              properties:
+                withVenue: { type: number, nullable: true }
+                photosReady: { type: number, nullable: true }
+                firstGallery: { type: number, nullable: true }
+                galleryViewed: { type: number, nullable: true }
+                secondGallery14d: { type: number, nullable: true }
+            timeToFirstGalleryHours:
+              type: object
+              required: [median, p75, n]
+              properties:
+                median: { type: number, nullable: true }
+                p75: { type: number, nullable: true }
+                n: { type: integer }
+            firstGalleryWithin7d: { type: number, nullable: true }
+            firstGalleryWithin14d: { type: number, nullable: true }
+            byCohortWeek:
+              type: array
+              items:
+                type: object
+                required: [weekStart, orgs, photosReady, firstGallery, galleryViewed, secondGallery14d, paid, matured]
+                properties:
+                  weekStart: { type: string, format: date-time }
+                  orgs: { type: integer }
+                  photosReady: { type: integer }
+                  firstGallery: { type: integer }
+                  galleryViewed: { type: integer }
+                  secondGallery14d: { type: integer }
+                  paid: { type: integer }
+                  matured: { type: boolean }
+        trialToPaid:
+          type: object
+          required: [overall, byActivation, byCohortWeek, medianDaysToPaid]
+          properties:
+            overall: { $ref: "#/components/schemas/GrowthRateTriple" }
+            byActivation:
+              type: object
+              required: [activated, notActivated]
+              properties:
+                activated: { $ref: "#/components/schemas/GrowthRateTriple" }
+                notActivated: { $ref: "#/components/schemas/GrowthRateTriple" }
+            byCohortWeek:
+              type: array
+              items:
+                type: object
+                required: [weekStart, orgs, paid, rate, matured]
+                properties:
+                  weekStart: { type: string, format: date-time }
+                  orgs: { type: integer }
+                  paid: { type: integer }
+                  rate: { type: number, nullable: true }
+                  matured: { type: boolean }
+            medianDaysToPaid: { type: number, nullable: true }
+        revenue:
+          type: object
+          required: [planMix, paidOrgs, subscriptionOrgs, mrrCents, arpaCents, packPurchases30d, packRevenueCents30d, prices]
+          properties:
+            planMix:
+              type: object
+              additionalProperties: { type: integer }
+            paidOrgs: { type: integer }
+            subscriptionOrgs: { type: integer }
+            mrrCents: { type: integer }
+            arpaCents: { type: integer, nullable: true }
+            packPurchases30d: { type: integer }
+            packRevenueCents30d: { type: integer }
+            prices:
+              type: object
+              required: [source, starterCents, growthCents, creditPackCents]
+              properties:
+                source: { type: string, enum: [env, stripe] }
+                starterCents: { type: integer }
+                growthCents: { type: integer }
+                creditPackCents: { type: integer }
+        credits:
+          type: object
+          required: [purchased30d, subscriptionGranted30d, consumed30d, refunded30d, promo30d, trialGranted30d, consumedPerPaidOrg30d, float]
+          properties:
+            purchased30d: { type: integer }
+            subscriptionGranted30d: { type: integer }
+            consumed30d: { type: integer }
+            refunded30d: { type: integer }
+            promo30d: { type: integer }
+            trialGranted30d: { type: integer }
+            consumedPerPaidOrg30d: { type: number, nullable: true }
+            float: { type: integer }
+        churn:
+          type: object
+          required: [subscriptionsDeleted30d, trialsExpired30d, trialsExpiredWithoutPurchase30d, paidOrgsAtWindowStart, logoChurnRate30d, trialsExpiringNext7d, trialsExpiringNext7dWithoutGallery]
+          properties:
+            subscriptionsDeleted30d: { type: integer }
+            trialsExpired30d: { type: integer }
+            trialsExpiredWithoutPurchase30d: { type: integer }
+            paidOrgsAtWindowStart: { type: integer }
+            logoChurnRate30d: { type: number, nullable: true }
+            trialsExpiringNext7d: { type: integer }
+            trialsExpiringNext7dWithoutGallery: { type: integer }
+        outbound:
+          type: object
+          required: [funnel, rates, bySegment, byVariant, byCampaign, byStep]
+          properties:
+            funnel:
+              type: object
+              required: [drafted, approved, sent, delivered, bounced, complained, replied, positiveReplied, signups, activated, paid, legacySends]
+              properties:
+                drafted: { type: integer }
+                approved: { type: integer }
+                sent: { type: integer }
+                delivered: { type: integer }
+                bounced: { type: integer }
+                complained: { type: integer }
+                replied: { type: integer }
+                positiveReplied: { type: integer }
+                signups: { type: integer }
+                activated: { type: integer }
+                paid: { type: integer }
+                legacySends: { type: integer }
+            rates:
+              type: object
+              required: [deliveryRate, bounceRate, complaintRate, replyRate, positiveReplyRate, signupRate, paidRate]
+              properties:
+                deliveryRate: { type: number, nullable: true }
+                bounceRate: { type: number, nullable: true }
+                complaintRate: { type: number, nullable: true }
+                replyRate: { type: number, nullable: true }
+                positiveReplyRate: { type: number, nullable: true }
+                signupRate: { type: number, nullable: true }
+                paidRate: { type: number, nullable: true }
+            bySegment:
+              type: array
+              items: { $ref: "#/components/schemas/GrowthSegmentStat" }
+            byVariant:
+              type: array
+              items: { $ref: "#/components/schemas/GrowthVariantStat" }
+            byCampaign:
+              type: array
+              items:
+                type: object
+                required: [campaignId, name, status, sent, delivered, replied, positiveReplied, signups, replyRate]
+                properties:
+                  campaignId: { type: integer }
+                  name: { type: string }
+                  status: { type: string }
+                  sent: { type: integer }
+                  delivered: { type: integer }
+                  replied: { type: integer }
+                  positiveReplied: { type: integer }
+                  signups: { type: integer }
+                  replyRate: { type: number, nullable: true }
+            byStep:
+              type: array
+              items:
+                type: object
+                required: [step, sent, delivered, replied, complained, complaintRate]
+                properties:
+                  step: { type: integer }
+                  sent: { type: integer }
+                  delivered: { type: integer }
+                  replied: { type: integer }
+                  complained: { type: integer }
+                  complaintRate: { type: number, nullable: true }
+        deliverability:
+          type: object
+          required: [window14d, status, guard]
+          properties:
+            window14d:
+              type: object
+              required: [sent, delivered, bounced, complained, bounceRate, complaintRate]
+              properties:
+                sent: { type: integer }
+                delivered: { type: integer }
+                bounced: { type: integer }
+                complained: { type: integer }
+                bounceRate: { type: number, nullable: true }
+                complaintRate: { type: number, nullable: true }
+            status: { type: string, enum: [ok, warn, throttled, paused, insufficient_data] }
+            guard:
+              type: object
+              required: [status, since, reason, baseCap, effectiveCap]
+              properties:
+                status: { type: string }
+                since: { type: string, nullable: true }
+                reason: { type: string, nullable: true }
+                baseCap: { type: integer }
+                effectiveCap: { type: integer }
+        experiments:
+          type: object
+          required: [proposed, running, decisionsDue7d, decided30d]
+          properties:
+            proposed: { type: integer }
+            running: { type: integer }
+            decisionsDue7d: { type: integer }
+            decided30d: { type: integer }
+        dataQuality:
+          type: array
+          items: { type: string }
+
+    ControlSegmentGuidanceEntry:
+      type: object
+      required: [segmentType, segment, sent]
+      properties:
+        segmentType: { type: string, enum: [region, venue_type] }
+        segment: { type: string }
+        sent: { type: integer }
+        positiveReplyRate: { type: number, nullable: true }
+        signupRate: { type: number, nullable: true }
+        until: { type: string, nullable: true }
+
+    ControlSegmentGuidance:
+      type: object
+      required: [prioritize, pause, updatedAt]
+      properties:
+        prioritize:
+          type: array
+          items: { $ref: "#/components/schemas/ControlSegmentGuidanceEntry" }
+        pause:
+          type: array
+          items: { $ref: "#/components/schemas/ControlSegmentGuidanceEntry" }
+        updatedAt: { type: string, nullable: true }
+
+    ControlCopyVariant:
+      type: object
+      required: [id, key, name, angle, defaultAsk, isControl, active, weight, pausedReason, createdBy, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        key: { type: string }
+        name: { type: string }
+        angle: { type: string }
+        defaultAsk: { type: string, enum: [preview, call] }
+        isControl: { type: boolean }
+        active: { type: boolean }
+        weight: { type: number }
+        pausedReason: { type: string, nullable: true }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ControlCopyVariantUpdateBody:
+      type: object
+      properties:
+        active: { type: boolean }
+        weight: { type: number, minimum: 0, maximum: 1 }
+        angle: { type: string, minLength: 20, maxLength: 600 }
+        name: { type: string, minLength: 3, maxLength: 80 }
+
+    ControlCopyVariantResponse:
+      type: object
+      required: [variant]
+      properties:
+        variant: { $ref: "#/components/schemas/ControlCopyVariant" }
+
+    ControlAdaptation:
+      type: object
+      required: [id, ruleKey, subjectType, subjectId, action, before, after, reason, snapshotId, createdAt]
+      properties:
+        id: { type: integer }
+        ruleKey: { type: string }
+        subjectType: { type: string }
+        subjectId: { type: string, nullable: true }
+        action: { type: string }
+        before: { type: object, additionalProperties: true, nullable: true }
+        after: { type: object, additionalProperties: true, nullable: true }
+        reason: { type: string }
+        snapshotId: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ControlGuardResetBody:
+      type: object
+      required: [note]
+      properties:
+        note: { type: string, minLength: 5, maxLength: 400 }
+
+    ControlMetricKey:
+      type: object
+      required: [key, label, unit, direction, supportsSegment, supportsVariant]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        unit: { type: string, enum: [rate, hours, cents, count] }
+        direction: { type: string, enum: [higher, lower] }
+        supportsSegment: { type: boolean }
+        supportsVariant: { type: boolean }
+
+    ControlDigest:
+      type: object
+      required: [id, weekStart, document, polishedBy, actionId, sentTo, sentAt, createdBy, createdAt, html]
+      properties:
+        id: { type: integer }
+        weekStart: { type: string, format: date-time }
+        document: { type: object, additionalProperties: true }
+        polishedBy: { type: string, nullable: true }
+        actionId: { type: integer, nullable: true }
+        sentTo:
+          type: array
+          nullable: true
+          items: { type: string }
+        sentAt: { type: string, format: date-time, nullable: true }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        html: { type: string, description: Rendered email HTML for the sandboxed preview iframe }
+
+    ControlDigestResponse:
+      type: object
+      required: [digest]
+      properties:
+        digest: { $ref: "#/components/schemas/ControlDigest" }
+
+    ControlDigestGenerateBody:
+      type: object
+      properties:
+        force: { type: boolean }
+
+    ControlGrowthResponse:
+      type: object
+      required: [snapshotId, computedAt, kpis, guidance, variants, adaptations, metricKeys, loopEnabled, latestDigest]
+      properties:
+        snapshotId: { type: integer, nullable: true }
+        computedAt: { type: string, format: date-time }
+        kpis: { $ref: "#/components/schemas/GrowthKpis" }
+        guidance: { $ref: "#/components/schemas/ControlSegmentGuidance" }
+        variants:
+          type: array
+          items: { $ref: "#/components/schemas/GrowthVariantStat" }
+        adaptations:
+          type: array
+          items: { $ref: "#/components/schemas/ControlAdaptation" }
+        metricKeys:
+          type: array
+          items: { $ref: "#/components/schemas/ControlMetricKey" }
+        loopEnabled: { type: boolean }
+        latestDigest:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ControlDigest"
+
+    ControlExperimentCreateBody:
+      type: object
+      required: [name, hypothesis, metric, primaryMetricKey, minDetectableLift, decisionDate]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        hypothesis: { type: string, minLength: 10, maxLength: 1000 }
+        metric: { type: string, minLength: 3, maxLength: 200 }
+        primaryMetricKey: { type: string }
+        segment: { type: string, nullable: true }
+        variantKey: { type: string, nullable: true }
+        baseline: { type: number, nullable: true }
+        minDetectableLift: { type: number, exclusiveMinimum: 0, maximum: 5 }
+        killThreshold: { type: number, nullable: true }
+        decisionDate: { type: string, format: date-time }
+        assignments: { type: object, additionalProperties: true, nullable: true }
+        startNow: { type: boolean }
+
+    ControlExperimentUpdateBody:
+      type: object
+      properties:
+        hypothesis: { type: string, minLength: 10, maxLength: 1000 }
+        segment: { type: string, nullable: true }
+        variantKey: { type: string, nullable: true }
+        baseline: { type: number, nullable: true }
+        minDetectableLift: { type: number, exclusiveMinimum: 0, maximum: 5 }
+        killThreshold: { type: number, nullable: true }
+        decisionDate: { type: string, format: date-time }
+        assignments: { type: object, additionalProperties: true, nullable: true }
+        status: { type: string, enum: [running] }
+
+    ControlExperimentDecisionBody:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [win, kill, inconclusive, extended] }
+        note: { type: string, maxLength: 1000 }
+        newDecisionDate: { type: string, format: date-time }
+
+    ControlExperimentResponse:
+      type: object
+      required: [experiment]
+      properties:
+        experiment: { $ref: "#/components/schemas/ControlExperiment" }
+
+    ControlExperimentEvaluation:
+      type: object
+      required: [decision, observedValue, n, baseline, target, requiredN, underpowered, reason, evaluatedAt]
+      properties:
+        decision: { type: string, enum: [continue, win, kill, inconclusive, not_measurable] }
+        observedValue: { type: number, nullable: true }
+        n: { type: integer }
+        baseline: { type: number, nullable: true }
+        target: { type: number, nullable: true }
+        requiredN: { type: integer, nullable: true }
+        underpowered: { type: boolean }
+        reason: { type: string }
+        evaluatedAt: { type: string, format: date-time }
+
+    ControlExperimentEvaluationResponse:
+      type: object
+      required: [experiment, evaluation]
+      properties:
+        experiment: { $ref: "#/components/schemas/ControlExperiment" }
+        evaluation: { $ref: "#/components/schemas/ControlExperimentEvaluation" }
+
+    # ----- funnel events / claim links -----
+    FunnelEventBody:
+      type: object
+      required: [event]
+      properties:
+        event:
+          type: string
+          enum:
+            [
+              landing_view,
+              cta_click,
+              signup_started,
+              signup_completed,
+              org_created,
+              venue_created,
+              first_photo,
+              venue_ready,
+              first_gallery,
+              checkout_started,
+              checkout_completed,
+              credits_exhausted,
+              tour_card_downloaded,
+            ]
+        properties:
+          type: object
+          additionalProperties: true
+        source:
+          type: string
+          maxLength: 80
+
+    FunnelEventResponse:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+
+    OutreachClaimResponse:
+      type: object
+      required: [venueName, website, region, photoUrls, prospectId]
+      properties:
+        venueName:
+          type: string
+        website:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        photoUrls:
+          type: array
+          items:
+            type: string
+        prospectId:
+          type: integer
