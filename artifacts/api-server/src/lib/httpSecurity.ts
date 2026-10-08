@@ -52,7 +52,31 @@ export function corsOptions(env: NodeJS.ProcessEnv = process.env): CorsOptions {
   };
 }
 
-export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
+/** 180 days; Railway/Fly/Render terminate TLS, so the header only ever rides https. */
+const HSTS_VALUE = "max-age=15552000; includeSubDomains";
+
+/**
+ * True when the request reached us over TLS: directly, or via a trusted proxy
+ * that set X-Forwarded-Proto (Express only honours it with trust proxy on, so
+ * the raw header is checked as well for proxies the app was not told about —
+ * HSTS on a plain-http dev server is the only thing to avoid, and that is
+ * excluded by NODE_ENV).
+ */
+export function servedOverTls(
+  req: Pick<Request, "secure" | "headers">,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (env.NODE_ENV !== "production") return false;
+  if (req.secure) return true;
+  const forwarded = req.headers["x-forwarded-proto"];
+  const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return (value ?? "").split(",")[0]?.trim().toLowerCase() === "https";
+}
+
+export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
+  if (servedOverTls(req)) {
+    res.setHeader("Strict-Transport-Security", HSTS_VALUE);
+  }
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");

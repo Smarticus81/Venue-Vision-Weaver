@@ -2,7 +2,11 @@ import crypto from "crypto";
 
 const TOKEN_TTL_MS = 20 * 60 * 1000;
 
+export const COUPLE_UPLOAD_TOKEN_TTL_MS = TOKEN_TTL_MS;
+
 function uploadTokenSecret(): string {
+  // SESSION_SECRET / OWNER_SESSION_SECRET are legacy aliases kept for one
+  // release so an existing deploy keeps verifying tokens after the rename.
   const secret =
     process.env.UPLOAD_TOKEN_SECRET ??
     process.env.SESSION_SECRET ??
@@ -27,29 +31,43 @@ export function createCoupleUploadToken(venueSlug: string, now = Date.now()): st
   return `${Buffer.from(payload, "utf8").toString("base64url")}.${signPayload(payload)}`;
 }
 
-export function verifyCoupleUploadToken(token: string, venueSlug: string, now = Date.now()): boolean {
+/**
+ * Verify a couple upload token for a venue and return its expiry (epoch ms),
+ * or null when the token is malformed, forged, for another venue, or expired.
+ * The expiry lets the upload-intent row live exactly as long as the token
+ * window instead of a blanket 24 hours.
+ */
+export function coupleUploadTokenExpiry(
+  token: string,
+  venueSlug: string,
+  now = Date.now(),
+): number | null {
   const [encoded, signature] = token.split(".");
-  if (!encoded || !signature) return false;
+  if (!encoded || !signature) return null;
 
   let payload = "";
   try {
     payload = Buffer.from(encoded, "base64url").toString("utf8");
   } catch {
-    return false;
+    return null;
   }
 
   const [purpose, slug, expiresRaw] = payload.split(":");
   const expiresAt = Number(expiresRaw);
   if (purpose !== "couple" || slug !== venueSlug || !Number.isFinite(expiresAt)) {
-    return false;
+    return null;
   }
-  if (expiresAt < now) return false;
+  if (expiresAt < now) return null;
 
   const expected = signPayload(payload);
   const actualBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expected);
-  return (
+  const valid =
     actualBuffer.length === expectedBuffer.length &&
-    crypto.timingSafeEqual(actualBuffer, expectedBuffer)
-  );
+    crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+  return valid ? expiresAt : null;
+}
+
+export function verifyCoupleUploadToken(token: string, venueSlug: string, now = Date.now()): boolean {
+  return coupleUploadTokenExpiry(token, venueSlug, now) !== null;
 }

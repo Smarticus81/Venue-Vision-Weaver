@@ -1,12 +1,23 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
+import crypto from "crypto";
 import { HealthCheckResponse, ReadinessCheckResponse } from "@workspace/api-zod";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { validateProductionEnvironment } from "../lib/envValidation.js";
+import {
+  isProductionImageModelChain,
+  validateProductionEnvironment,
+} from "../lib/envValidation.js";
 import { isStripeConfigured } from "../lib/stripe.js";
 import { configuredImageModels } from "../lib/stillImageClient.js";
 import { checkFfmpegAvailable } from "../lib/motionReel.js";
-import { missingRequiredDatabaseSchema } from "../lib/databaseReadiness.js";
+import {
+  missingRequiredDatabaseSchema,
+  rowLevelSecurityReadiness,
+} from "../lib/databaseReadiness.js";
+import { clerkEnabled } from "../lib/orgAuth.js";
+import { clerkDomainMismatch } from "../lib/clerkEnv.js";
+import { isOperatorRequest } from "../control-plane/operatorAuth.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -25,16 +36,8 @@ function storageConfigured(): boolean {
   return hasSupabase || hasGcs;
 }
 
-function isSupportedImageModel(model: string): boolean {
-  return (
-    /^gpt-image-2\.5-(?:sunburst|flare)(?:-\d{4}-\d{2}-\d{2})?$/i.test(model) ||
-    /^gemini-3(?:\.\d+)?-(?:pro|flash)-image$/i.test(model)
-  );
-}
-
 function productionImageModelChainReady(): boolean {
-  const models = configuredImageModels();
-  return models[0] === "gpt-image-2.5-sunburst" && models.every(isSupportedImageModel);
+  return isProductionImageModelChain(configuredImageModels());
 }
 
 function imageProviderKeysReady(): boolean {
@@ -46,9 +49,60 @@ function imageProviderKeysReady(): boolean {
   return needsOpenAi || needsGemini;
 }
 
-router.get("/readyz", async (_req, res) => {
+/**
+ * Auth is ready when Clerk is fully configured and the production key is
+ * issued for the host the site is served from. Without it, signup, the
+ * dashboard and billing all answer 503, so a deploy must not report ok.
+ */
+export function authReadiness(): { status: "ok" | "degraded"; reasons: string[] } {
+  const reasons: string[] = [];
+  if (!clerkEnabled()) {
+    reasons.push("CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY (or VITE_CLERK_PUBLISHABLE_KEY) are required");
+  } else {
+    const expectedDomain = clerkDomainMismatch();
+    if (expectedDomain) {
+      reasons.push(`Clerk production key is issued for ${expectedDomain} but APP_BASE_URL points elsewhere`);
+    }
+  }
+  return { status: reasons.length === 0 ? "ok" : "degraded", reasons };
+}
+
+function timingSafeEquals(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+/** `x-readiness-token` matches READINESS_DETAIL_TOKEN (constant-time). */
+export function readinessTokenMatches(
+  presented: string | string[] | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const expected = env.READINESS_DETAIL_TOKEN?.trim();
+  if (!expected || expected.length < 16) return false;
+  const token = Array.isArray(presented) ? presented[0] : presented;
+  if (!token?.trim()) return false;
+  return timingSafeEquals(token.trim(), expected);
+}
+
+/**
+ * The coarse ok/degraded map is public (deploy monitors need it); the reasons
+ * behind each degraded check name tables, env keys and hosts, so they are only
+ * returned to operators or to a caller presenting READINESS_DETAIL_TOKEN.
+ */
+async function readinessDetailAuthorized(req: Request): Promise<boolean> {
+  if (readinessTokenMatches(req.headers["x-readiness-token"])) return true;
+  return isOperatorRequest(req);
+}
+
+let warnedRlsUnavailable = false;
+
+router.get("/readyz", async (req, res) => {
+  const envErrors = validateProductionEnvironment();
+  const auth = authReadiness();
   const checks: Record<string, "ok" | "degraded"> = {
-    env: validateProductionEnvironment().length === 0 ? "ok" : "degraded",
+    env: envErrors.length === 0 ? "ok" : "degraded",
+    auth: auth.status,
     database: "degraded",
     storage: storageConfigured() ? "ok" : "degraded",
     ai:
@@ -61,23 +115,47 @@ router.get("/readyz", async (_req, res) => {
     imageModel: productionImageModelChainReady() ? "ok" : "degraded",
     ffmpeg: "degraded",
   };
+  const details: Record<string, string[]> = {
+    env: envErrors,
+    auth: auth.reasons,
+    database: [],
+    rls: [],
+  };
 
   try {
     await db.execute(sql`select 1`);
     const missingSchema = await missingRequiredDatabaseSchema();
     checks.database = missingSchema.length === 0 ? "ok" : "degraded";
-  } catch {
+    details.database = missingSchema;
+
+    const rls = await rowLevelSecurityReadiness();
+    if (rls.status === "unknown") {
+      // Warn-level: the role cannot introspect pg_tables. Do not fail the
+      // deploy over a privilege gap the app itself does not need.
+      details.rls = [rls.reason];
+      if (!warnedRlsUnavailable) {
+        warnedRlsUnavailable = true;
+        logger.warn({ reason: rls.reason }, "Readiness cannot verify row-level security");
+      }
+    } else {
+      checks.rls = rls.status;
+      details.rls = rls.tablesWithoutRls.map((table) => `rls-disabled:${table}`);
+    }
+  } catch (err) {
     checks.database = "degraded";
+    details.database = [`database unreachable: ${err instanceof Error ? err.message : String(err)}`];
   }
 
-  checks.ffmpeg = await checkFfmpegAvailable() ? "ok" : "degraded";
+  checks.ffmpeg = (await checkFfmpegAvailable()) ? "ok" : "degraded";
 
   const status = Object.values(checks).every((check) => check === "ok") ? "ok" : "degraded";
   const data = ReadinessCheckResponse.parse({
     status,
     checks,
   });
-  res.status(status === "ok" ? 200 : 503).json(data);
+  const withDetails = await readinessDetailAuthorized(req);
+  res.setHeader("Cache-Control", "no-store");
+  res.status(status === "ok" ? 200 : 503).json(withDetails ? { ...data, details } : data);
 });
 
 export default router;

@@ -79,31 +79,123 @@ export interface AgentLoopResult {
 const MAX_ITERATIONS = 10;
 const MAX_TOOL_CALLS = 24;
 const MAX_TOOL_RESULT_CHARS = 24000;
+const MAX_STRING_CHARS = 2000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
-function truncateForModel(value: unknown): unknown {
+/** Per-request wall clock for one xAI call (GROK_TIMEOUT_MS, 5s-10min). */
+export function grokRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.GROK_TIMEOUT_MS?.trim());
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_REQUEST_TIMEOUT_MS;
+  return Math.min(10 * 60_000, Math.max(5_000, Math.floor(raw)));
+}
+
+/**
+ * A failed or timed-out xAI request. `status` is the HTTP status (0 for a
+ * timeout or network failure) so the runner can tell quota/outage errors
+ * (429, 5xx) from the agent's own mistakes and avoid advancing its schedule.
+ */
+export class GrokRequestError extends Error {
+  readonly status: number;
+  readonly timedOut: boolean;
+  constructor(message: string, options: { status: number; timedOut?: boolean }) {
+    super(message);
+    this.name = "GrokRequestError";
+    this.status = options.status;
+    this.timedOut = options.timedOut ?? false;
+  }
+  /** 429 and 5xx (and timeouts) are the provider's problem, not the agent's. */
+  get transient(): boolean {
+    return this.timedOut || this.status === 429 || this.status >= 500;
+  }
+}
+
+function shrinkValue(value: unknown, budget: { remaining: number }): unknown {
+  if (budget.remaining <= 0) return undefined;
+  if (typeof value === "string") {
+    const cut = Math.min(value.length, MAX_STRING_CHARS, Math.max(budget.remaining, 0));
+    budget.remaining -= cut + 2;
+    return cut < value.length ? `${value.slice(0, cut)}…[${value.length - cut} more chars]` : value;
+  }
+  if (value === null || typeof value !== "object") {
+    budget.remaining -= JSON.stringify(value)?.length ?? 4;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (budget.remaining <= 0) {
+        out.push(`…[${value.length - index} more items]`);
+        break;
+      }
+      out.push(shrinkValue(value[index], budget));
+    }
+    return out;
+  }
+  const out: Record<string, unknown> = {};
+  const entries = Object.entries(value as Record<string, unknown>);
+  for (let index = 0; index < entries.length; index += 1) {
+    const [key, entry] = entries[index];
+    if (budget.remaining <= 0) {
+      out.__truncated = `${entries.length - index} more fields omitted`;
+      break;
+    }
+    budget.remaining -= key.length + 4;
+    out[key] = shrinkValue(entry, budget);
+  }
+  return out;
+}
+
+/**
+ * Keep tool results inside the model budget without slicing JSON mid-string:
+ * long strings are shortened with a marker, arrays and objects are cut at an
+ * element boundary and say how much was dropped, so the model still receives
+ * valid structure it can reason about.
+ */
+export function truncateForModel(value: unknown): unknown {
   const json = JSON.stringify(value);
-  if (json.length <= MAX_TOOL_RESULT_CHARS) return value;
-  return {
-    truncated: true,
-    preview: json.slice(0, MAX_TOOL_RESULT_CHARS),
-    originalLength: json.length,
-  };
+  if (json === undefined || json.length <= MAX_TOOL_RESULT_CHARS) return value;
+  const compact = shrinkValue(value, { remaining: MAX_TOOL_RESULT_CHARS });
+  return { truncated: true, originalLength: json.length, result: compact };
 }
 
 async function callGrok(apiKey: string, body: Record<string, unknown>): Promise<ResponsesApiResponse> {
-  const res = await fetch(`${XAI_API_BASE()}/responses`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Grok request failed (${res.status}): ${text.slice(0, 600)}`);
+  const timeoutMs = grokRequestTimeoutMs();
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${XAI_API_BASE()}/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    text = await res.text();
+  } catch (err) {
+    const timedOut =
+      err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+    throw new GrokRequestError(
+      timedOut
+        ? `Grok request timed out after ${timeoutMs}ms`
+        : `Grok request failed: ${err instanceof Error ? err.message : String(err)}`,
+      { status: 0, timedOut },
+    );
   }
-  const json = JSON.parse(text) as ResponsesApiResponse;
+  if (!res.ok) {
+    throw new GrokRequestError(`Grok request failed (${res.status}): ${text.slice(0, 600)}`, {
+      status: res.status,
+    });
+  }
+  let json: ResponsesApiResponse;
+  try {
+    json = JSON.parse(text) as ResponsesApiResponse;
+  } catch {
+    throw new GrokRequestError(`Grok returned a non-JSON body: ${text.slice(0, 200)}`, {
+      status: res.status,
+    });
+  }
   if (json.error) {
     const message = typeof json.error === "string" ? json.error : json.error.message;
     throw new Error(`Grok error: ${message ?? "unknown"}`);
