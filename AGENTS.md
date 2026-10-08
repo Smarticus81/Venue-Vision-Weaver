@@ -1,71 +1,24 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Read `CLAUDE.md`. It is the single guide for working in this repository:
+commands, architecture, key patterns and required environment variables. This
+file only restates the three rules that coding agents most often get wrong.
 
-## Commands
+1. **OpenAPI-first, then codegen.** The API contract lives in
+   `lib/api-spec/openapi.yaml`. Change it there, then run
+   `pnpm --filter @workspace/api-spec run codegen`. Never hand-edit
+   `lib/api-client-react/src/generated/` or `lib/api-zod/src/generated/`; CI
+   fails when the committed output differs from a fresh codegen run.
+2. **Clerk is the only auth.** Members sign in with their own Clerk profile and
+   one Clerk Organization is the billing tenant. Do not add PIN, password,
+   magic-link or cookie-session flows, and use `requireOrg` /
+   `requireOrgVenue` (`artifacts/api-server/src/lib/orgAuth.ts`) for
+   org-scoped routes.
+3. **Every email to a real person is operator-approved.** Control-plane agents
+   draft; they never send. Outreach goes through the studio
+   (`artifacts/api-server/src/control-plane/outreach/`), is proposed as a
+   high-risk action, and leaves only via `sender.ts` after an operator approves
+   it in `/control`. Keep the consent, suppression, cap and unsubscribe checks
+   in that path intact.
 
-```bash
-# Full typecheck + build all packages
-pnpm run build
-
-# Typecheck only (all packages)
-pnpm run typecheck
-
-# Typecheck shared libraries only
-pnpm run typecheck:libs
-
-# API server (Express, port 5000)
-pnpm --filter @workspace/api-server run dev
-
-# Wedding web app (Vite/React)
-pnpm --filter @workspace/wedding-app run dev
-
-# Regenerate API client hooks + Zod schemas from OpenAPI spec
-pnpm --filter @workspace/api-spec run codegen
-
-# Push DB schema changes
-pnpm --filter @workspace/db run push
-
-# Verify production env, build artifacts, ffmpeg, and optional live readiness
-pnpm run verify:production -- --url https://your-dreemer-host.example
-```
-
-## Architecture
-
-This is a **pnpm monorepo** for Dreemer, a venue-paid wedding gallery platform. Venues buy credits; couples use venue-specific QR/links to generate a four-image AI vision gallery plus one branded motion reel at that specific venue.
-
-### Artifacts (deployable apps)
-
-- **`artifacts/api-server`** - Express 5 backend. Serves the wedding-app SPA as static files. Routes in `src/routes/` (venues, sessions, storage, billing, gallery styles). Credit-gated image generation (OpenAI gpt-image-2.5, Gemini fallback) with Stripe billing.
-- **`artifacts/wedding-app`** - React 19 SPA (Vite). Venue main site at `/`, signup at `/create-venue`, owner dashboard at `/dashboard/:slug`, couple flow at `/preview/:slug`, share links at `/v/:shareToken`.
-
-### Shared libraries (`lib/`)
-
-- **`lib/api-spec`** - OpenAPI 3.1 spec (`openapi.yaml`) + Orval config. Source of truth for the API contract.
-- **`lib/api-client-react`** - Auto-generated React Query hooks. Do not edit `src/generated/` manually.
-- **`lib/api-zod`** - Auto-generated Zod validation schemas. Do not edit `src/generated/` manually.
-- **`lib/db`** - Drizzle ORM schema (`venues`, `venue_media`, `couple_sessions`, `couple_media`, `generated_assets`, `credit_transactions`, owner auth tables).
-- **`lib/object-storage-web`** - Uppy-based file upload components.
-
-### Key patterns
-
-- **OpenAPI-first**: Edit `lib/api-spec/openapi.yaml`, then run codegen.
-- **Credits**: Gallery session = 1 credit. Trial venues get 5 credits on create.
-- **Owner auth**: Venue owners sign in with email magic links and an httpOnly cookie session. Do not add PIN-based flows.
-- **Billing**: Stripe Checkout + webhooks in `artifacts/api-server/src/routes/billing.ts`.
-- **Autonomous Business Control Plane**: a multi-agent operating system in `artifacts/api-server/src/control-plane/` — nine Grok-backed domain agents run on an in-process scheduler (`grok.ts` speaks xAI's OpenAI-compatible Responses API; model via `CONTROL_PLANE_MODEL`, default `grok-4.7`). The revenue trio leads: prospecting (web-search-backed discovery and fit scoring into `control_prospects`), outreach (personalized first-touch and follow-up drafts), and campaigns (multi-step sequences in `control_campaigns` with funnel readouts); support, product repair, finance, experiments, activation, and governance agents keep the business healthy. Agents read live business data through a restricted tool belt and act only through a governed action catalog (low risk auto-executes; medium/high risk waits for operator approval) — every email to a real person, campaign launch, and credit grant needs operator sign-off, with send caps, contact gaps, opt-out footers, and reply/unsubscribe locks enforced in the action layer. State lives in `lib/db` control-plane tables. Operators supervise it at `/control` (auth: Clerk session with email in `CONTROL_PLANE_OPERATOR_EMAILS`) via the `/api/control/*` routes. Without `XAI_API_KEY` the control plane boots and idles safely.
-
-### Required environment variables
-
-- `DATABASE_URL` - Supabase PostgreSQL URI (`pnpm run setup:db`)
-- `APP_BASE_URL` - Public URL for emails and Stripe redirects
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` - Billing
-- `OPENAI_API_KEY` - gpt-image-2.5 gallery image generation (primary renderer)
-- `GOOGLE_AI_API_KEY` - Gemini quality review, venue reference selection, and the image fallback
-- `XAI_API_KEY` - Grok reasoning + web research for the control-plane agents (optional at boot: agents idle without it)
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` - file uploads (`pnpm run setup:storage`)
-
-Deploy: `pnpm run build` then `node artifacts/api-server/dist/index.mjs`. First-time DB: `pnpm run setup:db`.
-Before launch, run `pnpm run verify:production` with real production env and verify the deployed `/api/readyz` endpoint. See `docs/production-readiness.md`.
-
-See `.env.example` for the full list.
+Before finishing: `pnpm run typecheck`, `pnpm run test`, `pnpm run build`.

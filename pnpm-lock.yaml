@@ -330,6 +330,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5
+      playwright:
+        specifier: ^1.63.0
+        version: 1.63.0
       sharp:
         specifier: ^0.35.2
         version: 0.35.2
@@ -352,9 +355,6 @@ importers:
       '@types/pg':
         specifier: ^8.18.0
         version: 8.18.0
-      cross-env:
-        specifier: ^7.0.3
-        version: 7.0.3
       drizzle-kit:
         specifier: ^0.31.9
         version: 0.31.9
@@ -2505,6 +2505,16 @@ packages:
 
   pino@9.14.0:
     resolution: {integrity: sha512-8OEwKp5juEvb/MjpIc4hjqfgCNysrS94RIOMXYvpYCdm/jglrKEiAYmiumbmGhCvs+IcInsphYDFwqrjr7398w==}
+    hasBin: true
+
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.63.0:
+    resolution: {integrity: sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==}
+    engines: {node: '>=20'}
     hasBin: true
 
   pngjs@5.0.0:
@@ -5166,6 +5176,12 @@ snapshots:
       safe-stable-stringify: 2.5.0
       sonic-boom: 4.2.1
       thread-stream: 3.1.0
+
+  playwright-core@1.63.0: {}
+
+  playwright@1.63.0:
+    dependencies:
+      playwright-core: 1.63.0
 
   pngjs@5.0.0: {}
 

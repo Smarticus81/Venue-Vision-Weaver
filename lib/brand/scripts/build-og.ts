@@ -2,6 +2,11 @@
  * Renders the Open Graph / Twitter card (1200×630) with the lockup and the
  * brand line, using the real web fonts. Needs Playwright + Chromium.
  *
+ * `playwright` is a devDependency of this package; the Chromium build is not
+ * installed with it. Fetch it once with
+ *   pnpm --filter @workspace/brand exec playwright install chromium
+ * (or set PLAYWRIGHT_BROWSERS_PATH to a directory that already holds one).
+ *
  * Run: pnpm --filter @workspace/brand run build:og
  */
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
