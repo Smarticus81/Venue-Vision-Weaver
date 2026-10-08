@@ -20,9 +20,12 @@ import { track, trackOnce } from "@/lib/track";
  * the next one is more likely to book, and the venue can finally see which
  * toured couples opened, shared, clicked for a date, and booked.
  *
- * Signature moment: "Do the math" — the ROI readout in the venue's own unit
- * (bookings and money), live as they type. Everything else is quiet: no
- * entrance reveals, no parallax, no scroll scrubbing.
+ * Signature moment: the room, then the couple in the room — the hero diptych.
+ * It ships static (no same-composition before/after pair exists among the
+ * committed assets, so the spec's reveal handle slipped; see design-notes.md).
+ * The ROI readout is the page's only live element: the venue's own numbers
+ * in, bookings and money out. Everything else is quiet: no entrance reveals,
+ * no parallax, no scroll scrubbing, no JS motion library on this route.
  *
  * Honesty rules: prices and trial terms come from the public config (meta tag
  * or GET /public/config), proof is partner mode until opted-in aggregates

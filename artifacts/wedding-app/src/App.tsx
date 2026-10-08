@@ -1,5 +1,4 @@
-import { MotionConfig } from "framer-motion";
-import { Suspense, lazy, type ComponentType } from "react";
+import { Suspense, lazy, type ComponentType, type ReactNode } from "react";
 import {
   Switch,
   Route,
@@ -42,6 +41,17 @@ function lazyRoute<T extends ComponentType>(loader: () => Promise<{ default: T }
 
 // The landing page is imported statically above so prospects never see the
 // route-loading fallback; every other route stays lazy.
+//
+// framer-motion is only used by the lazy product pages, so its MotionConfig
+// (reducedMotion="user") loads with them instead of sitting in the main chunk
+// ahead of the landing page's first paint. The landing page uses no JS motion.
+const MotionShell = lazyRoute(() =>
+  import("framer-motion").then((m) => ({
+    default: function Shell({ children }: { children: ReactNode }) {
+      return <m.MotionConfig reducedMotion="user">{children}</m.MotionConfig>;
+    },
+  })),
+);
 const PricingPage = lazyRoute(() => import("@/pages/PricingPage"));
 const PrivacyPage = lazyRoute(() => import("@/pages/PrivacyPage"));
 const ClaimPage = lazyRoute(() => import("@/pages/ClaimPage"));
@@ -62,10 +72,19 @@ function RedirectVenueToPreview() {
 
 function Router() {
   return (
+    <Switch>
+      {/* Venue-facing main site: the landing page paints from the main chunk, outside Suspense */}
+      <Route path="/">{() => <VenueLandingPage />}</Route>
+      <Route>{() => <LazyRoutes />}</Route>
+    </Switch>
+  );
+}
+
+function LazyRoutes() {
+  return (
     <Suspense fallback={<RouteLoading />}>
+      <MotionShell>
       <Switch>
-        {/* Venue-facing main site */}
-        <Route path="/">{() => <VenueLandingPage />}</Route>
         <Route path="/pricing">{() => <PricingPage />}</Route>
         <Route path="/privacy">{() => <PrivacyPage />}</Route>
         {/* Retired consumer-era couple entry; couples arrive via venue QR codes and links */}
@@ -113,6 +132,7 @@ function Router() {
 
         <Route>{() => <NotFound />}</Route>
       </Switch>
+      </MotionShell>
     </Suspense>
   );
 }
@@ -129,14 +149,12 @@ function RouteLoading() {
 
 function App() {
   return (
-    <MotionConfig reducedMotion="user">
-      <QueryClientProvider client={queryClient}>
-        <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </QueryClientProvider>
-    </MotionConfig>
+    <QueryClientProvider client={queryClient}>
+      <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}>
+        <Router />
+      </WouterRouter>
+      <Toaster />
+    </QueryClientProvider>
   );
 }
 

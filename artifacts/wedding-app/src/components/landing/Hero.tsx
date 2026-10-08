@@ -57,7 +57,7 @@ export function Hero({ trial }: { trial: TrialConfig }) {
           decoding="async"
         />
         <figcaption>
-          <span>The space</span>
+          <span>An example venue, empty</span>
           <span>The couple in it · AI preview</span>
         </figcaption>
       </figure>
