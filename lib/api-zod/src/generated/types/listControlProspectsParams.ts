@@ -5,10 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ListControlProspectsSort } from "./listControlProspectsSort";
 import type { ListControlProspectsStatus } from "./listControlProspectsStatus";
+import type { ListControlProspectsVettingStatus } from "./listControlProspectsVettingStatus";
 
 export type ListControlProspectsParams = {
   status?: ListControlProspectsStatus;
   campaignId?: number;
+  vettingStatus?: ListControlProspectsVettingStatus;
+  /**
+   * Case-insensitive match on name, email, website, or region.
+   * @maxLength 120
+   */
+  q?: string;
+  sort?: ListControlProspectsSort;
+  /**
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
 };

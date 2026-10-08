@@ -5,8 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ControlProspectAttributionMethod } from "./controlProspectAttributionMethod";
+import type { ControlProspectReplySentiment } from "./controlProspectReplySentiment";
 import type { ControlProspectSource } from "./controlProspectSource";
 import type { ControlProspectStatus } from "./controlProspectStatus";
+import type { ControlProspectVettingStatus } from "./controlProspectVettingStatus";
 
 export interface ControlProspect {
   id: number;
@@ -26,6 +29,16 @@ export interface ControlProspect {
   lastContactedAt?: Date | null;
   statusChangedBy?: string | null;
   createdByAgent?: string | null;
+  vettingStatus: ControlProspectVettingStatus;
+  legitimacyScore?: number | null;
+  vettedAt?: Date | null;
+  venueType?: string | null;
+  repliedAt?: Date | null;
+  replySentiment?: ControlProspectReplySentiment;
+  convertedAt?: Date | null;
+  convertedOrganizationId?: number | null;
+  convertedCampaignId?: number | null;
+  attributionMethod?: ControlProspectAttributionMethod;
   createdAt: Date;
   updatedAt: Date;
 }

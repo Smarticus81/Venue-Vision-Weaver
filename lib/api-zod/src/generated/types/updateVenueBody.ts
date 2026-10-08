@@ -22,4 +22,9 @@ export interface UpdateVenueBody {
   contactPhone?: string | null;
   websiteUrl?: string | null;
   bookingUrl?: string | null;
+  /**
+   * One line shown under the reel on the share page. Null clears it.
+   * @maxLength 160
+   */
+  incentiveText?: string | null;
 }

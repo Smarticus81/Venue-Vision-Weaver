@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SessionSummaryCreatedVia } from "./sessionSummaryCreatedVia";
+import type { SessionSummaryKind } from "./sessionSummaryKind";
 import type { SessionSummaryStatus } from "./sessionSummaryStatus";
 
 export interface SessionSummary {
@@ -17,6 +19,14 @@ export interface SessionSummary {
   coupleName?: string | null;
   coupleEmail?: string | null;
   shareToken?: string | null;
-  /** Estimated USD cost to generate this gallery. */
-  estimatedCostUsd?: number;
+  kind: SessionSummaryKind;
+  createdVia: SessionSummaryCreatedVia;
+  weddingMonth?: string | null;
+  /** First "sent" gallery event. */
+  emailedAt?: Date | null;
+  firstViewedAt?: Date | null;
+  viewCount: number;
+  sharedCount: number;
+  ctaClicks: number;
+  bookedAt?: Date | null;
 }

@@ -21,6 +21,8 @@ export interface CopyInput {
   /** Follow-up context: previous contact count and campaign guidance. */
   contactCount: number;
   stepGuidance: string | null;
+  /** Growth copy-variant angle (control_copy_variants.angle); the fallback template ignores it. */
+  variantAngle?: string | null;
   senderFirstName?: string;
 }
 
@@ -241,6 +243,7 @@ export async function writeCopy(input: CopyInput): Promise<CopyResult> {
           `The one ask: ${input.ask === "call" ? "a short 15-minute call" : "a free preview made for their venue"}`,
           `Previous emails to this person: ${input.contactCount}${input.contactCount > 0 ? " (this is a gentle follow-up; acknowledge briefly, add one new thought, do not repeat the first email)" : " (first touch)"}`,
           input.stepGuidance ? `Campaign guidance for this touch: ${input.stepGuidance}` : "",
+          input.variantAngle ? `Angle for this note: ${input.variantAngle}` : "",
           `Venue facts (the only facts you may use): ${JSON.stringify(facts)}`,
           feedback ? `Your previous draft was rejected for: ${feedback}. Fix every point.` : "",
         ]

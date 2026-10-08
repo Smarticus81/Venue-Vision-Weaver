@@ -187,12 +187,21 @@ async function adoptLegacyVenues(org: Organization, userEmail: string): Promise<
   }
 }
 
-type OrgContext = {
+export type OrgContext = {
   org: Organization;
   clerkUserId: string;
   clerkOrgId: string;
   orgRole: string | null;
 };
+
+/**
+ * True when the caller is an admin of their active Clerk organization. Thin
+ * helper so route workstreams can gate destructive routes (billing changes,
+ * org preferences) without re-reading the Clerk role string.
+ */
+export function requireOrgAdmin(ctx: Pick<OrgContext, "orgRole">): boolean {
+  return ctx.orgRole === "org:admin";
+}
 
 /**
  * Require a signed-in Clerk user with an active organization. Provisions the

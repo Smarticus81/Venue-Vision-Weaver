@@ -1,22 +1,46 @@
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 
+/**
+ * Tables the deployed build cannot run without. Owner sign-in is Clerk end to
+ * end, so the retired owner-auth tables are no longer part of the contract
+ * (see supabase/migrations/2026-10-08-drop-owner-auth.sql).
+ */
 export const REQUIRED_DATABASE_TABLES = [
+  "organizations",
   "venues",
   "venue_media",
   "upload_intents",
   "couple_sessions",
   "couple_media",
   "generated_assets",
+  "gallery_events",
+  "render_attempts",
   "credit_transactions",
-  "owner_credentials",
-  "owner_login_tokens",
-  "owner_sessions",
+  "funnel_events",
+  "control_agents",
+  "agent_runs",
+  "agent_actions",
+  "control_prospects",
+  "control_outreach_emails",
+  "control_email_suppressions",
 ] as const;
 
 export const REQUIRED_DATABASE_COLUMNS = {
+  organizations: [
+    "id",
+    "clerk_org_id",
+    "name",
+    "plan",
+    "credits_balance",
+    "stripe_customer_id",
+    "stripe_subscription_id",
+    "billing_period_end",
+    "created_at",
+  ],
   venues: [
     "id",
+    "organization_id",
     "name",
     "slug",
     "tagline",
@@ -72,8 +96,20 @@ export const REQUIRED_DATABASE_COLUMNS = {
     "quality_report",
     "created_at",
   ],
+  gallery_events: ["id", "session_id", "venue_id", "event_type", "source", "ip_hash", "meta", "created_at"],
+  render_attempts: [
+    "id",
+    "session_id",
+    "scene_id",
+    "attempt",
+    "model",
+    "fallback_used",
+    "outcome",
+    "created_at",
+  ],
   credit_transactions: [
     "id",
+    "organization_id",
     "venue_id",
     "delta",
     "reason",
@@ -81,32 +117,37 @@ export const REQUIRED_DATABASE_COLUMNS = {
     "stripe_event_id",
     "created_at",
   ],
-  owner_credentials: [
+  funnel_events: ["id", "organization_id", "venue_id", "event", "properties", "source", "created_at"],
+  control_agents: ["id", "key", "name", "domain", "status", "interval_minutes", "created_at", "updated_at"],
+  agent_runs: ["id", "agent_key", "trigger", "status", "started_at", "finished_at"],
+  agent_actions: [
     "id",
-    "owner_email",
-    "password_hash",
+    "agent_key",
+    "action_type",
+    "title",
+    "params",
+    "risk_level",
+    "requires_approval",
+    "status",
+    "created_at",
+  ],
+  control_prospects: ["id", "name", "email", "website", "status", "score", "created_at", "updated_at"],
+  control_outreach_emails: [
+    "id",
+    "prospect_id",
+    "action_id",
+    "status",
+    "subject",
+    "body",
+    "unsubscribe_token",
     "created_at",
     "updated_at",
   ],
-  owner_login_tokens: [
-    "id",
-    "token_hash",
-    "owner_email",
-    "expires_at",
-    "used_at",
-    "created_at",
-  ],
-  owner_sessions: [
-    "id",
-    "session_hash",
-    "owner_email",
-    "expires_at",
-    "revoked",
-    "created_at",
-  ],
+  control_email_suppressions: ["id", "email", "reason", "created_at"],
 } as const satisfies Record<(typeof REQUIRED_DATABASE_TABLES)[number], readonly string[]>;
 
 export const REQUIRED_DATABASE_NOT_NULL_COLUMNS = {
+  organizations: ["id", "clerk_org_id", "name", "plan", "credits_balance", "created_at"],
   venues: ["id", "name", "slug", "owner_email", "plan", "credits_balance", "created_at"],
   venue_media: ["id", "venue_id", "object_key", "coverage", "display_order", "created_at"],
   upload_intents: [
@@ -131,14 +172,44 @@ export const REQUIRED_DATABASE_NOT_NULL_COLUMNS = {
   ],
   couple_media: ["id", "session_id", "object_key", "created_at"],
   generated_assets: ["id", "session_id", "object_key", "asset_type", "display_order", "created_at"],
+  gallery_events: ["id", "session_id", "venue_id", "event_type", "created_at"],
+  render_attempts: ["id", "session_id", "scene_id", "attempt", "model", "fallback_used", "outcome", "created_at"],
   // Ledger rows belong to the organization; venue_id is nullable provenance.
   credit_transactions: ["id", "delta", "reason", "created_at"],
-  owner_credentials: ["id", "owner_email", "password_hash", "created_at", "updated_at"],
-  owner_login_tokens: ["id", "token_hash", "owner_email", "expires_at", "created_at"],
-  owner_sessions: ["id", "session_hash", "owner_email", "expires_at", "revoked", "created_at"],
+  funnel_events: ["id", "event", "created_at"],
+  control_agents: ["id", "key", "name", "domain", "status", "interval_minutes", "created_at", "updated_at"],
+  agent_runs: ["id", "agent_key", "trigger", "status", "started_at"],
+  agent_actions: [
+    "id",
+    "agent_key",
+    "action_type",
+    "title",
+    "params",
+    "risk_level",
+    "requires_approval",
+    "status",
+    "created_at",
+  ],
+  control_prospects: ["id", "name", "email", "status", "score", "created_at", "updated_at"],
+  control_outreach_emails: [
+    "id",
+    "prospect_id",
+    "status",
+    "subject",
+    "body",
+    "unsubscribe_token",
+    "created_at",
+    "updated_at",
+  ],
+  control_email_suppressions: ["id", "email", "reason", "created_at"],
 } as const satisfies Partial<Record<(typeof REQUIRED_DATABASE_TABLES)[number], readonly string[]>>;
 
 export const REQUIRED_DATABASE_INDEXES = [
+  {
+    table: "organizations",
+    label: "organizations.clerk_org_id.unique",
+    requiredFragments: ["unique", "clerk_org_id"],
+  },
   {
     table: "venues",
     label: "venues.slug.unique",
@@ -180,19 +251,22 @@ export const REQUIRED_DATABASE_INDEXES = [
     requiredFragments: ["unique", "stripe_event_id", "where", "is not null"],
   },
   {
-    table: "owner_credentials",
-    label: "owner_credentials.owner_email.unique",
-    requiredFragments: ["unique", "owner_email"],
+    table: "control_prospects",
+    name: "control_prospects_email_unique",
+    label: "control_prospects.email.unique",
+    requiredFragments: ["unique", "email"],
   },
   {
-    table: "owner_login_tokens",
-    label: "owner_login_tokens.token_hash.unique",
-    requiredFragments: ["unique", "token_hash"],
+    table: "control_outreach_emails",
+    name: "control_outreach_emails_token_unique",
+    label: "control_outreach_emails.unsubscribe_token.unique",
+    requiredFragments: ["unique", "unsubscribe_token"],
   },
   {
-    table: "owner_sessions",
-    label: "owner_sessions.session_hash.unique",
-    requiredFragments: ["unique", "session_hash"],
+    table: "control_email_suppressions",
+    name: "control_email_suppressions_email_unique",
+    label: "control_email_suppressions.email.unique",
+    requiredFragments: ["unique", "email"],
   },
 ] as const;
 

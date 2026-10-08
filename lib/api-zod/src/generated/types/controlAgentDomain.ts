@@ -18,7 +18,6 @@ export const ControlAgentDomain = {
   product: "product",
   finance: "finance",
   experiments: "experiments",
-  sales: "sales",
   activation: "activation",
   governance: "governance",
 } as const;

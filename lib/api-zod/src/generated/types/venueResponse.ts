@@ -23,6 +23,10 @@ export interface VenueResponse {
   websiteUrl?: string | null;
   /** Public tour booking URL. */
   bookingUrl?: string | null;
+  /** One line shown under the reel on the share page. */
+  incentiveText?: string | null;
+  tourCardDownloadedAt?: Date | null;
+  websiteImportedAt?: Date | null;
   /** Billing organization that owns this venue. */
   organizationId?: number | null;
   /** Organization plan (billing lives on the organization). */

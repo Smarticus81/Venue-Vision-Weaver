@@ -10,4 +10,15 @@ import type { SessionDetailResponse } from "./sessionDetailResponse";
 export type OwnerSessionDetailResponse = SessionDetailResponse & {
   /** Couple email on file. Only returned from owner-session protected endpoints. */
   coupleEmail?: string | null;
+  viewCount: number;
+  ctaClicks: number;
+  firstViewedAt?: Date | null;
+  bookedAt?: Date | null;
+  consentAt?: Date | null;
+  /** Operator-facing failure detail (never shown to couples). */
+  failureDetail?: string | null;
+  qualitySummary?: {
+    belowTarget: boolean;
+    attempts: number;
+  } | null;
 };

@@ -173,6 +173,51 @@ export async function sendRawEmail(message: {
   }
 }
 
+export interface TransactionalEmail {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers?: Record<string, string>;
+  replyTo?: string | null;
+  /** Resend tags (name/value pairs) for grouping delivery events. */
+  tags?: Array<{ name: string; value: string }>;
+}
+
+/**
+ * Generic transactional sender over the shared Resend client for lifecycle
+ * and operator email (trial nudges, low-credit reminders, weekly digest).
+ * Returns the provider message id, or null when email is disabled or the
+ * provider rejected the send (the reason is logged; callers treat null as
+ * "not delivered" and never throw on it).
+ */
+export async function sendTransactionalEmail(message: TransactionalEmail): Promise<{ id: string } | null> {
+  if (!resend) {
+    logger.warn({ to: message.to, subject: message.subject }, "RESEND_API_KEY not set - skipping email");
+    return null;
+  }
+  try {
+    const { data, error } = await resend.emails.send({
+      from: fromEmail,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      headers: message.headers,
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+      ...(message.tags?.length ? { tags: message.tags } : {}),
+    });
+    if (error) {
+      logger.error({ error, to: message.to, subject: message.subject, from: fromEmail }, "Resend email failed");
+      return null;
+    }
+    return data?.id ? { id: data.id } : null;
+  } catch (err) {
+    logger.error({ err, to: message.to, subject: message.subject }, "Email send threw");
+    return null;
+  }
+}
+
 /**
  * Generic branded email used by the Autonomous Business Control Plane for
  * governed venue outreach (activation nudges, low-credit reminders, support
@@ -229,22 +274,39 @@ export async function sendGalleryReadyNotification(
   );
 }
 
+export interface GalleryEmailOptions {
+  /** Overrides venue.name in the copy (e.g. when the caller only has a slimmer venue row). */
+  venueName?: string | null;
+  /** Secondary "check your date" link under the gallery button; omitted when absent. */
+  bookingCta?: { label: string; href: string } | null;
+}
+
 export async function sendGalleryToCouple(
   coupleEmail: string,
   session: { id: number; shareToken?: string | null; coupleName?: string | null },
   venue: { name: string },
+  options: GalleryEmailOptions = {},
 ): Promise<EmailSendResult> {
   const url = shareUrlForToken(session.shareToken);
+  const venueName = options.venueName?.trim() || venue.name;
   const greeting = session.coupleName
     ? escapeHtml(session.coupleName)
     : "there";
+  const bookingCta = options.bookingCta?.href?.trim()
+    ? `<p style="margin:20px 0 0;">
+      <a href="${escapeHtml(options.bookingCta.href.trim())}" style="color:${semantic.secondary};font-weight:600;text-decoration:none;">${escapeHtml(
+        options.bookingCta.label.trim() || `Check your date at ${venueName}`,
+      )}</a>
+    </p>`
+    : "";
   const body = `<p>Hi ${greeting},</p>
-    <p>Here are your images and reel at <strong>${escapeHtml(venue.name)}</strong>.</p>
+    <p>Here are your images and reel at <strong>${escapeHtml(venueName)}</strong>.</p>
     ${ctaButton(url, "Open your gallery")}
+    ${bookingCta}
     <p style="margin:20px 0 0;font-size:13px;color:${semantic.textMuted};">Keep this email — the button is your private link.</p>`;
   return sendEmail(
     coupleEmail,
-    `Your gallery at ${venue.name} is ready`,
+    `Your gallery at ${venueName} is ready`,
     emailLayout("Your gallery is ready", body),
   );
 }

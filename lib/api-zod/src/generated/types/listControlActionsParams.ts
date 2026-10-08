@@ -9,5 +9,12 @@ import type { ListControlActionsStatus } from "./listControlActionsStatus";
 
 export type ListControlActionsParams = {
   status?: ListControlActionsStatus;
+  /**
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
 };

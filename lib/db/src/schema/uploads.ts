@@ -18,6 +18,6 @@ export const uploadIntentsTable = pgTable(
   (table) => ({
     objectKeyUnique: uniqueIndex("upload_intents_object_key_unique").on(table.objectKey),
   }),
-);
+).enableRLS();
 
 export type UploadIntent = typeof uploadIntentsTable.$inferSelect;

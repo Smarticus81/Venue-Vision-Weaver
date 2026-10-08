@@ -5,7 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ListControlExperimentsStatus } from "./listControlExperimentsStatus";
 
 export type ListControlExperimentsParams = {
+  status?: ListControlExperimentsStatus;
   limit?: number;
 };

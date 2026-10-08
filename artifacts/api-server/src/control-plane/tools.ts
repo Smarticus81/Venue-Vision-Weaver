@@ -1,56 +1,40 @@
 import {
   db,
   venuesTable,
-  venueMediaTable,
-  organizationsTable,
   coupleSessionsTable,
   creditTransactionsTable,
   agentTasksTable,
   agentActionsTable,
   agentRunsTable,
-  controlExperimentsTable,
   controlAuditEventsTable,
   controlProspectsTable,
   controlCampaignsTable,
   AGENT_TASK_PRIORITIES,
-  EXPERIMENT_STATUSES,
   PROSPECT_STATUSES,
   PROSPECT_SOURCES,
 } from "@workspace/db";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { computeBusinessMetrics } from "./metrics.js";
-import { ACTION_CATALOG, describeActionCatalog, proposeAction } from "./actions.js";
+import { ACTION_CATALOG, describeActionCatalog, proposableActionTypes, proposeAction } from "./actions.js";
 import { getPolicyNumber, listPolicies } from "./policies.js";
 import { recordAuditEvent } from "./audit.js";
 import type { ToolDeclaration } from "./grok.js";
 import { createDraft, ensureResearch, loadProspectAssets, loadProspectById, loadResearch } from "./outreach/studio.js";
 import { publicObjectUrl } from "./outreach/config.js";
+import { daysAgo, num, str, type ControlPlaneTool, type ToolContext } from "./toolTypes.js";
+import { vettingTools } from "./vetting/tools.js";
+import { vetProspect } from "./vetting/vet.js";
+import { growthTools } from "./growth/tools.js";
+import { listOrganizationsQuery, listVenuesQuery } from "./growth/queries.js";
+import { classifyVenueType } from "./growth/segments.js";
 
-export interface ToolContext {
-  agentKey: string;
-  runId: number;
-}
+export type { ControlPlaneTool, ToolContext } from "./toolTypes.js";
 
-interface ControlPlaneTool {
-  declaration: ToolDeclaration;
-  execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
-}
-
-function num(value: unknown, fallback: number, max: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(Math.floor(n), max);
-}
-
-function str(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function daysAgo(days: number): Date {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-}
-
-const TOOLS: Record<string, ControlPlaneTool> = {
+/**
+ * Core tools every agent registry builds on. Vetting (vetting/tools.ts) and
+ * growth (growth/tools.ts) own their own records; TOOLS below merges all three.
+ */
+const CORE_TOOLS: Record<string, ControlPlaneTool> = {
   get_business_metrics: {
     declaration: {
       name: "get_business_metrics",
@@ -76,29 +60,7 @@ const TOOLS: Record<string, ControlPlaneTool> = {
     },
     async execute(args) {
       const limit = num(args.limit, 25, 100);
-      const mediaCount = sql<number>`(select count(*)::int from ${venueMediaTable} where ${venueMediaTable.venueId} = ${venuesTable.id})`;
-      const sessionCount = sql<number>`(select count(*)::int from ${coupleSessionsTable} where ${coupleSessionsTable.venueId} = ${venuesTable.id})`;
-      const rows = await db
-        .select({
-          id: venuesTable.id,
-          name: venuesTable.name,
-          slug: venuesTable.slug,
-          organizationId: venuesTable.organizationId,
-          createdAt: venuesTable.createdAt,
-          mediaCount,
-          sessionCount,
-          orgName: organizationsTable.name,
-          orgPlan: organizationsTable.plan,
-          orgCredits: organizationsTable.creditsBalance,
-        })
-        .from(venuesTable)
-        .leftJoin(organizationsTable, eq(venuesTable.organizationId, organizationsTable.id))
-        .orderBy(
-          args.sort === "least_active"
-            ? sql`(select count(*) from ${coupleSessionsTable} where ${coupleSessionsTable.venueId} = ${venuesTable.id}) asc, ${venuesTable.createdAt} desc`
-            : desc(venuesTable.createdAt),
-        )
-        .limit(limit);
+      const rows = await listVenuesQuery(limit, args.sort === "least_active" ? "least_active" : "newest");
       return { venues: rows };
     },
   },
@@ -117,23 +79,7 @@ const TOOLS: Record<string, ControlPlaneTool> = {
     },
     async execute(args) {
       const limit = num(args.limit, 25, 100);
-      const venueCount = sql<number>`(select count(*)::int from ${venuesTable} where ${venuesTable.organizationId} = ${organizationsTable.id})`;
-      const lastSession = sql<string | null>`(select max(${coupleSessionsTable.createdAt})::text from ${coupleSessionsTable} join ${venuesTable} on ${venuesTable.id} = ${coupleSessionsTable.venueId} where ${venuesTable.organizationId} = ${organizationsTable.id})`;
-      const rows = await db
-        .select({
-          id: organizationsTable.id,
-          name: organizationsTable.name,
-          plan: organizationsTable.plan,
-          creditsBalance: organizationsTable.creditsBalance,
-          billingPeriodEnd: organizationsTable.billingPeriodEnd,
-          createdAt: organizationsTable.createdAt,
-          venueCount,
-          lastSessionAt: lastSession,
-        })
-        .from(organizationsTable)
-        .orderBy(desc(organizationsTable.createdAt))
-        .limit(limit);
-      return { organizations: rows };
+      return { organizations: await listOrganizationsQuery(limit) };
     },
   },
 
@@ -305,28 +251,6 @@ const TOOLS: Record<string, ControlPlaneTool> = {
     },
   },
 
-  list_experiments: {
-    declaration: {
-      name: "list_experiments",
-      description: "All experiments with hypothesis, metric, status, and results.",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: { type: "integer", description: "Max rows (default 20, max 50)." },
-        },
-      },
-    },
-    async execute(args) {
-      const limit = num(args.limit, 20, 50);
-      const rows = await db
-        .select()
-        .from(controlExperimentsTable)
-        .orderBy(desc(controlExperimentsTable.createdAt))
-        .limit(limit);
-      return { experiments: rows };
-    },
-  },
-
   get_audit_log: {
     declaration: {
       name: "get_audit_log",
@@ -476,24 +400,33 @@ const TOOLS: Record<string, ControlPlaneTool> = {
         .from(controlProspectsTable)
         .where(eq(controlProspectsTable.email, email));
 
+      const qualification = str(args.qualification);
+
       if (existing) {
         const lockedStatuses = ["contacted", "replied", "converted", "unsubscribed"];
         const statusLocked = lockedStatuses.includes(existing.status);
+        const nextQualification = qualification ?? existing.qualification;
+        const segmentChanged = name !== existing.name || nextQualification !== existing.qualification;
+        const website = str(args.website) ?? existing.website;
         const [updated] = await db
           .update(controlProspectsTable)
           .set({
             name,
             contactName: str(args.contactName) ?? existing.contactName,
             phone: str(args.phone) ?? existing.phone,
-            website: str(args.website) ?? existing.website,
+            website,
             region: str(args.region) ?? existing.region,
             score: score ?? existing.score,
-            qualification: str(args.qualification) ?? existing.qualification,
+            qualification: nextQualification,
             status: statusLocked ? existing.status : (status ?? existing.status),
+            ...(segmentChanged || !existing.venueType
+              ? { venueType: classifyVenueType({ name, qualification: nextQualification }) }
+              : {}),
             updatedAt: new Date(),
           })
           .where(eq(controlProspectsTable.id, existing.id))
           .returning();
+        if (!updated) throw new Error(`Prospect ${existing.id} vanished during update.`);
         await recordAuditEvent({
           actorType: "agent",
           actor: ctx.agentKey,
@@ -502,11 +435,17 @@ const TOOLS: Record<string, ControlPlaneTool> = {
           subjectId: existing.id,
           detail: { email, score: score ?? existing.score, statusLocked },
         });
+        // Vetting seam: re-vet when the website changed (verdict freshness is the vetting module's call).
+        const vetting = await vetProspect(updated, {
+          force: website !== existing.website,
+          requestedBy: ctx.agentKey,
+        });
         return {
           saved: true,
           created: false,
           statusLocked,
           prospect: updated,
+          vetting,
         };
       }
 
@@ -521,20 +460,23 @@ const TOOLS: Record<string, ControlPlaneTool> = {
           region: str(args.region),
           source,
           score: score ?? 0,
-          qualification: str(args.qualification),
+          qualification,
           status: status ?? "new",
+          venueType: classifyVenueType({ name, qualification }),
           createdByAgent: ctx.agentKey,
         })
         .returning();
+      if (!prospect) throw new Error("Failed to persist prospect.");
       await recordAuditEvent({
         actorType: "agent",
         actor: ctx.agentKey,
         eventType: "prospect_created",
         subjectType: "prospect",
-        subjectId: prospect?.id,
+        subjectId: prospect.id,
         detail: { email, name, score: score ?? 0 },
       });
-      return { saved: true, created: true, prospect };
+      const vetting = await vetProspect(prospect, { force: true, requestedBy: ctx.agentKey });
+      return { saved: true, created: true, prospect, vetting };
     },
   },
 
@@ -596,7 +538,7 @@ const TOOLS: Record<string, ControlPlaneTool> = {
           steps: {
             type: "array",
             description:
-              "Ordered sequence of 1-4 touches: [{waitDays, guidance}]. waitDays is the gap after the previous touch (0 for the first).",
+              "Ordered sequence of 1-3 touches; the max_campaign_steps policy is enforced: [{waitDays, guidance}]. waitDays is the gap after the previous touch (0 for the first).",
             items: {
               type: "object",
               properties: {
@@ -617,20 +559,21 @@ const TOOLS: Record<string, ControlPlaneTool> = {
       const name = str(args.name);
       const objective = str(args.objective);
       if (!name || !objective) throw new Error("name and objective are required.");
+      const maxSteps = await getPolicyNumber("max_campaign_steps", "steps", 3);
       const stepsRaw = Array.isArray(args.steps) ? args.steps : [];
       const steps = stepsRaw
         .filter(
           (step): step is Record<string, unknown> =>
             Boolean(step) && typeof step === "object" && !Array.isArray(step),
         )
-        .slice(0, 4)
+        .slice(0, Math.max(1, maxSteps))
         .map((step, index) => ({
           step: index + 1,
           waitDays: Math.max(0, Math.min(Math.floor(Number(step.waitDays) || 0), 60)),
           guidance: str(step.guidance) ?? "",
         }));
       if (steps.length === 0 || steps.some((step) => !step.guidance)) {
-        throw new Error("steps must contain 1-4 entries, each with guidance text.");
+        throw new Error(`steps must contain 1-${maxSteps} entries, each with guidance text.`);
       }
 
       const [duplicate] = await db
@@ -827,15 +770,16 @@ const TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "propose_action",
       description:
-        `Propose a governed side effect. Low-risk actions may auto-execute; medium/high risk actions enter the operator approval queue. Action types: ${Object.values(
+        `Propose a governed side effect. Low-risk actions may auto-execute; medium/high risk actions enter the operator approval queue. Each agent may only propose the action types its definition allows. Action types: ${Object.values(
           ACTION_CATALOG,
         )
+          .filter((a) => !a.retired)
           .map((a) => `${a.type} (${a.riskLevel}): ${a.description}`)
           .join(" | ")}`,
       parameters: {
         type: "object",
         properties: {
-          actionType: { type: "string", enum: Object.keys(ACTION_CATALOG) },
+          actionType: { type: "string", enum: proposableActionTypes() },
           title: { type: "string", description: "One-line description of the concrete effect." },
           reasoning: {
             type: "string",
@@ -879,125 +823,10 @@ const TOOLS: Record<string, ControlPlaneTool> = {
       };
     },
   },
-
-  create_experiment: {
-    declaration: {
-      name: "create_experiment",
-      description:
-        "Register a growth/product experiment (status: proposed) with a falsifiable hypothesis and a primary metric.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          hypothesis: { type: "string", description: "Falsifiable statement being tested." },
-          metric: { type: "string", description: "Primary success metric." },
-          variants: {
-            type: "object",
-            description: "Optional variant descriptions, e.g. {control: '...', treatment: '...'}.",
-          },
-        },
-        required: ["name", "hypothesis", "metric"],
-      },
-    },
-    async execute(args, ctx) {
-      const name = str(args.name);
-      const hypothesis = str(args.hypothesis);
-      const metric = str(args.metric);
-      if (!name || !hypothesis || !metric) {
-        throw new Error("name, hypothesis, and metric are required.");
-      }
-      const [duplicate] = await db
-        .select({ id: controlExperimentsTable.id })
-        .from(controlExperimentsTable)
-        .where(
-          and(
-            eq(controlExperimentsTable.name, name),
-            sql`${controlExperimentsTable.status} in ('proposed', 'running')`,
-          ),
-        )
-        .limit(1);
-      if (duplicate) {
-        return { created: false, reason: "duplicate_experiment", existingExperimentId: duplicate.id };
-      }
-      const [experiment] = await db
-        .insert(controlExperimentsTable)
-        .values({
-          name,
-          hypothesis,
-          metric,
-          variants:
-            args.variants && typeof args.variants === "object" && !Array.isArray(args.variants)
-              ? (args.variants as Record<string, unknown>)
-              : null,
-          createdByAgent: ctx.agentKey,
-        })
-        .returning();
-      await recordAuditEvent({
-        actorType: "agent",
-        actor: ctx.agentKey,
-        eventType: "experiment_created",
-        subjectType: "experiment",
-        subjectId: experiment?.id,
-        detail: { name, metric },
-      });
-      return { created: true, experiment };
-    },
-  },
-
-  update_experiment: {
-    declaration: {
-      name: "update_experiment",
-      description:
-        "Move an experiment through its lifecycle (proposed -> running -> completed/aborted) and record the result readout.",
-      parameters: {
-        type: "object",
-        properties: {
-          experimentId: { type: "integer" },
-          status: { type: "string", enum: [...EXPERIMENT_STATUSES] },
-          result: { type: "string", description: "Readout / learnings. Required when completing or aborting." },
-        },
-        required: ["experimentId", "status"],
-      },
-    },
-    async execute(args, ctx) {
-      const experimentId = num(args.experimentId, 0, Number.MAX_SAFE_INTEGER);
-      const statusRaw = str(args.status);
-      if (
-        !experimentId ||
-        !EXPERIMENT_STATUSES.includes(statusRaw as (typeof EXPERIMENT_STATUSES)[number])
-      ) {
-        throw new Error(`experimentId and a status in [${EXPERIMENT_STATUSES.join(", ")}] are required.`);
-      }
-      const status = statusRaw as (typeof EXPERIMENT_STATUSES)[number];
-      const result = str(args.result);
-      if ((status === "completed" || status === "aborted") && !result) {
-        throw new Error("result is required when completing or aborting an experiment.");
-      }
-      const now = new Date();
-      const [experiment] = await db
-        .update(controlExperimentsTable)
-        .set({
-          status,
-          result: result ?? undefined,
-          startedAt: status === "running" ? now : undefined,
-          endedAt: status === "completed" || status === "aborted" ? now : undefined,
-          updatedAt: now,
-        })
-        .where(eq(controlExperimentsTable.id, experimentId))
-        .returning();
-      if (!experiment) throw new Error(`Experiment ${experimentId} not found.`);
-      await recordAuditEvent({
-        actorType: "agent",
-        actor: ctx.agentKey,
-        eventType: "experiment_updated",
-        subjectType: "experiment",
-        subjectId: experimentId,
-        detail: { status, result },
-      });
-      return { experiment };
-    },
-  },
 };
+
+/** The full registry: core + vetting + growth. Every tool granted in agents.ts must resolve here. */
+const TOOLS: Record<string, ControlPlaneTool> = { ...CORE_TOOLS, ...vettingTools, ...growthTools };
 
 export const TOOL_NAMES = Object.keys(TOOLS) as Array<keyof typeof TOOLS & string>;
 

@@ -17,4 +17,6 @@ export type ReadinessStatusChecks = {
   qualityGate: ReadinessCheckState;
   imageModel: ReadinessCheckState;
   ffmpeg: ReadinessCheckState;
+  auth?: ReadinessCheckState;
+  rls?: ReadinessCheckState;
 };

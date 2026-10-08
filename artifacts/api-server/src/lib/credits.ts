@@ -7,46 +7,13 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, gte } from "drizzle-orm";
 import { logger } from "./logger.js";
+import { assertCanSpend } from "./trial.js";
 
 const CREDITS_STANDARD = 1;
 export const VENUE_DAILY_SESSION_CAP = 50;
-export const MIN_VENUE_PHOTOS = 1;
 
 export function creditsForSession(): number {
   return CREDITS_STANDARD;
-}
-
-/** Couple-safe venue payload - no billing fields. */
-export function toPublicVenue(
-  venue: {
-    id: number;
-    name: string;
-    slug: string;
-    tagline: string | null;
-    description: string | null;
-    contactEmail: string | null;
-    contactPhone: string | null;
-    websiteUrl: string | null;
-    bookingUrl: string | null;
-    createdAt: Date;
-    creditsBalance: number;
-  },
-  media: Array<{ coverage?: string | null }>,
-) {
-  return {
-    id: venue.id,
-    name: venue.name,
-    slug: venue.slug,
-    tagline: venue.tagline,
-    description: venue.description,
-    contactEmail: venue.contactEmail,
-    contactPhone: venue.contactPhone,
-    websiteUrl: venue.websiteUrl,
-    bookingUrl: venue.bookingUrl,
-    createdAt: venue.createdAt,
-    media,
-    isReady: media.length >= MIN_VENUE_PHOTOS,
-  };
 }
 
 /**
@@ -71,7 +38,7 @@ async function getOrgCreditsBalance(orgId: number): Promise<number> {
 }
 
 /** Effective spendable balance for a venue (org balance when adopted). */
-async function getVenueCreditsBalance(venueId: number): Promise<number> {
+export async function getVenueCreditsBalance(venueId: number): Promise<number> {
   const orgId = await resolveVenueOrgId(venueId);
   if (orgId != null) return getOrgCreditsBalance(orgId);
   const [row] = await db
@@ -250,10 +217,13 @@ export async function countVenueSessionsToday(venueId: number): Promise<number> 
   return row?.count ?? 0;
 }
 
+/**
+ * Thin wrapper over the trial clock + balance check in lib/trial.ts. Route
+ * handlers that need the reason (402 code) call assertCanSpend directly.
+ */
 export async function hasSufficientCredits(
   venueId: number,
   amount: number,
 ): Promise<boolean> {
-  const balance = await getVenueCreditsBalance(venueId);
-  return balance >= amount;
+  return (await assertCanSpend(venueId, amount)).ok;
 }

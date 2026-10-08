@@ -16,6 +16,9 @@ import { grantCreditsToOrg } from "../lib/credits.js";
 import { sendControlPlaneEmail } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
 import { recordAuditEvent } from "./audit.js";
+import { executedTodayCount, startOfUtcDay } from "./actionCounts.js";
+import { getAgentDefinition } from "./agents.js";
+import { growthActions } from "./growth/actions.js";
 import { getPolicyBoolean, getPolicyNumber, setPolicy } from "./policies.js";
 import { assertProspectContactableNow } from "./outreach/contactGuards.js";
 import { defaultSendDeps, prospectEmailsSentToday, sendOutreachEmail } from "./outreach/sender.js";
@@ -33,25 +36,22 @@ export interface ActionDefinition {
   description: string;
   paramsSchema: z.ZodType<Record<string, unknown>>;
   execute: (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** Retired types stay in the catalog so historical rows render; proposing or approving them is refused. */
+  retired?: boolean;
+  /** Low-risk actions may still demand approval (e.g. until a policy flag is flipped). */
+  requiresApproval?: () => Promise<boolean>;
 }
 
-function startOfUtcDay(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-async function executedTodayCount(actionType: string): Promise<number> {
-  const [row] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(agentActionsTable)
-    .where(
-      and(
-        eq(agentActionsTable.actionType, actionType),
-        eq(agentActionsTable.status, "executed"),
-        gte(agentActionsTable.executedAt, startOfUtcDay()),
-      ),
-    );
-  return row?.total ?? 0;
+/**
+ * Pure: low risk auto-executes only when the policy allows AND the
+ * definition does not override. Medium/high risk always needs approval.
+ */
+export function computeRequiresApproval(
+  definition: Pick<ActionDefinition, "riskLevel">,
+  autoLowRisk: boolean,
+  override: boolean,
+): boolean {
+  return definition.riskLevel !== "low" || !autoLowRisk || override;
 }
 
 async function creditsGrantedToday(): Promise<number> {
@@ -134,7 +134,7 @@ const sendOutreachEmailSchema = z
 const OPT_OUT_FOOTER =
   'If you would rather not hear from us, just reply "unsubscribe" and we will not contact you again.';
 
-export const ACTION_CATALOG: Record<string, ActionDefinition> = {
+const CORE_ACTIONS: Record<string, ActionDefinition> = {
   send_venue_email: {
     type: "send_venue_email",
     riskLevel: "high",
@@ -471,16 +471,46 @@ export const ACTION_CATALOG: Record<string, ActionDefinition> = {
   },
 };
 
+/** The full catalog: core actions plus the growth workstream's (lifecycle emails, digest). */
+export const ACTION_CATALOG: Record<string, ActionDefinition> = { ...CORE_ACTIONS, ...growthActions };
+
+/** Action types agents may still propose (retired types are listed for display only). */
+export function proposableActionTypes(): string[] {
+  return Object.values(ACTION_CATALOG)
+    .filter((a) => !a.retired)
+    .map((a) => a.type);
+}
+
 export function describeActionCatalog(): Array<{
   type: string;
   riskLevel: ActionRiskLevel;
   description: string;
+  retired: boolean;
 }> {
   return Object.values(ACTION_CATALOG).map((a) => ({
     type: a.type,
     riskLevel: a.riskLevel,
     description: a.description,
+    retired: Boolean(a.retired),
   }));
+}
+
+/**
+ * Pure: may this actor propose this action type? Agents are bound to the
+ * `actions` allowlist on their AgentDefinition; actors without a definition
+ * (operator:*, system:*) and agents that declare no allowlist are unrestricted.
+ */
+export function agentMayPropose(agentKey: string, actionType: string): { allowed: true } | { allowed: false; reason: string } {
+  const definition = getAgentDefinition(agentKey);
+  if (!definition || definition.actions === undefined) return { allowed: true };
+  if (definition.actions.includes(actionType)) return { allowed: true };
+  return {
+    allowed: false,
+    reason:
+      definition.actions.length === 0
+        ? `Agent "${agentKey}" may not propose governed actions.`
+        : `Agent "${agentKey}" may only propose: ${definition.actions.join(", ")}.`,
+  };
 }
 
 /**
@@ -499,16 +529,24 @@ export async function proposeAction(input: {
   const definition = ACTION_CATALOG[input.actionType];
   if (!definition) {
     throw new Error(
-      `Unknown action type "${input.actionType}". Valid types: ${Object.keys(ACTION_CATALOG).join(", ")}.`,
+      `Unknown action type "${input.actionType}". Valid types: ${proposableActionTypes().join(", ")}.`,
     );
   }
+  if (definition.retired) {
+    throw new Error(
+      `${input.actionType} is retired and cannot be proposed. Valid types: ${proposableActionTypes().join(", ")}.`,
+    );
+  }
+  const permission = agentMayPropose(input.agentKey, input.actionType);
+  if (!permission.allowed) throw new Error(permission.reason);
   const parsed = definition.paramsSchema.safeParse(input.params);
   if (!parsed.success) {
     throw new Error(`Invalid params for ${input.actionType}: ${parsed.error.message}`);
   }
 
   const autoLowRisk = await getPolicyBoolean("auto_execute_low_risk", "enabled", true);
-  const requiresApproval = definition.riskLevel !== "low" || !autoLowRisk;
+  const overrideNeedsApproval = definition.requiresApproval ? await definition.requiresApproval() : false;
+  const requiresApproval = computeRequiresApproval(definition, autoLowRisk, overrideNeedsApproval);
 
   const [action] = await db
     .insert(agentActionsTable)
@@ -610,6 +648,11 @@ export async function decideAction(
   if (!action) throw new Error(`Action ${actionId} not found.`);
   if (action.status !== "pending") {
     throw new Error(`Action ${actionId} is "${action.status}", only pending actions can be decided.`);
+  }
+  if (decision === "approve" && ACTION_CATALOG[action.actionType]?.retired) {
+    throw new Error(
+      `${action.actionType} is retired; reject it and use the outreach studio (Pipeline → Draft email).`,
+    );
   }
 
   const [updated] = await db

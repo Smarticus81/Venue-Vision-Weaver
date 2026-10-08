@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { OrganizationResponseOrganizationPlan } from "./organizationResponseOrganizationPlan";
+import type { TrialState } from "./trialState";
 
 export type OrganizationResponseOrganization = {
   id: number;
@@ -14,6 +15,12 @@ export type OrganizationResponseOrganization = {
   creditsBalance: number;
   billingPeriodEnd?: Date | null;
   clerkOrgId: string;
+  contactEmail?: string | null;
+  firstPaidAt?: Date | null;
+  churnedAt?: Date | null;
+  /** Venue opted in to anonymised aggregate proof on the public site. */
+  shareAggregates: boolean;
+  trial: TrialState;
   /** Caller's Clerk role in this organization (e.g. org:admin). */
   role?: string | null;
   /** Whether Stripe billing is configured on this server. */

@@ -52,6 +52,7 @@ const GallerySharePage = lazyRoute(() => import("@/pages/GallerySharePage"));
 const FindMyGalleryPage = lazyRoute(() => import("@/pages/FindMyGalleryPage"));
 const OwnerLoginPage = lazyRoute(() => import("@/pages/OwnerLoginPage"));
 const ControlPlanePage = lazyRoute(() => import("@/pages/ControlPlanePage"));
+const TourDayPage = lazyRoute(() => import("@/pages/TourDayPage"));
 const NotFound = lazyRoute(() => import("@/pages/not-found"));
 
 function RedirectVenueToPreview() {
@@ -92,6 +93,7 @@ function Router() {
 
         {/* Owner profile/dashboard */}
         <Route path="/dashboard">{() => <VenueOwnerPage />}</Route>
+        <Route path="/dashboard/tour/:slug">{() => <TourDayPage />}</Route>
         <Route path="/dashboard/:slug">
           {() => <Redirect to="/dashboard" />}
         </Route>

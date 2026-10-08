@@ -16,5 +16,6 @@ export const VenueResponsePlan = {
   trial: "trial",
   starter: "starter",
   growth: "growth",
+  payg: "payg",
   none: "none",
 } as const;

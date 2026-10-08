@@ -10,5 +10,16 @@ import type { ListControlOutreachEmailsStatus } from "./listControlOutreachEmail
 export type ListControlOutreachEmailsParams = {
   status?: ListControlOutreachEmailsStatus;
   prospectId?: number;
+  /**
+   * When true, only drafts whose send action is still pending.
+   */
+  awaiting?: boolean;
+  /**
+   * @maximum 200
+   */
   limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
 };

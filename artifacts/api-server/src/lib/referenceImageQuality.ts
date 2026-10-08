@@ -9,6 +9,14 @@ type ReferenceProfile = "couple" | "venue";
  */
 export const MIN_REFERENCE_EDGE_PX = 256;
 
+/**
+ * Two couple photos whose 64-bit difference hashes are within this Hamming
+ * distance count as near-duplicates. Shared by the upload check in the
+ * sessions route and the worker's reference validation so a set accepted at
+ * upload never fails later.
+ */
+export const NEAR_DUPLICATE_HAMMING = 4;
+
 export interface ReferenceImageQuality {
   width: number;
   height: number;

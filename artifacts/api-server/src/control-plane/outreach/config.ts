@@ -61,10 +61,5 @@ export function publicObjectUrl(objectKey: string): string {
   return `${getAppBaseUrl()}/api/storage${key}`;
 }
 
-/** Sample previews are a stubbed operator hook until the generation path lands. */
-export function samplePreviewsEnabled(): boolean {
-  return process.env.OUTREACH_SAMPLE_PREVIEWS === "on";
-}
-
 /** Research results older than this are refreshed before a new draft. */
 export const RESEARCH_STALE_DAYS = 14;

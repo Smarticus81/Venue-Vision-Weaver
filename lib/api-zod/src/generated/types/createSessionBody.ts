@@ -5,10 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateSessionBodyCreatedVia } from "./createSessionBodyCreatedVia";
 
 export interface CreateSessionBody {
   /**
-   * @minItems 1
+   * @minItems 2
    * @maxItems 3
    */
   couplePhotoKeys: string[];
@@ -18,4 +19,15 @@ export interface CreateSessionBody {
   coupleName?: string;
   /** Required. Used for recovery emails and notifications. */
   coupleEmail: string;
+  /** Cloudflare Turnstile response token. Verified only when TURNSTILE_SECRET_KEY is set on the server. */
+  turnstileToken?: string;
+  /**
+   * The month the couple is thinking of, "YYYY-MM". Passed to the venue's date CTA.
+   * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+   */
+  weddingMonth?: string;
+  /** Both partners agree to the AI preview and photo handling. The server rejects couple sessions without it. */
+  consent?: boolean;
+  /** couple_link (default) or tour_day when a coordinator starts it for the couple. */
+  createdVia?: CreateSessionBodyCreatedVia;
 }

@@ -9,12 +9,10 @@ import {
   organizationsTable,
   uploadIntentsTable,
 } from "@workspace/db";
-import { estimateSessionCostUsd } from "../lib/cost.js";
 import {
   CreateVenueBody,
   GetVenueParams,
   GetVenueDashboardParams,
-  GetVenueStatsParams,
   ListVenueMediaParams,
   AddVenueMediaParams,
   AddVenueMediaBody,
@@ -23,7 +21,6 @@ import {
   UpdateVenueBody,
 } from "@workspace/api-zod";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
-import { toPublicVenue } from "../lib/credits.js";
 import {
   mimeTypeFromObjectPath,
   ObjectNotFoundError,
@@ -41,8 +38,9 @@ import {
   MIN_REFERENCE_EDGE_PX,
   type ReferenceImageQuality,
 } from "../lib/referenceImageQuality.js";
-import { ownerVenueResponse, publicContactFields } from "../lib/venueResponse.js";
+import { ownerVenueResponse, toPublicVenue } from "../lib/venueResponse.js";
 import { hasCompletePublicGalleryAssets } from "../lib/sessionVisibility.js";
+import { onVenueCreated } from "../control-plane/growth/hooks.js";
 import { logger } from "../lib/logger.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -289,6 +287,10 @@ router.post("/venues", async (req, res): Promise<void> => {
       throw new Error("Failed to create venue.");
     }
     venue = createdVenue;
+    // Growth hook (shared-contract 4.6): attribution sweep etc. Never blocks the request.
+    void onVenueCreated(ctx.org.id).catch((hookErr) =>
+      logger.warn({ err: hookErr, orgId: ctx.org.id }, "post-create growth hook failed"),
+    );
   } catch (err) {
     const pgError = err instanceof Error ? (err.cause as { code?: string; detail?: string; message?: string }) : null;
     logger.error({ err, pgCode: pgError?.code, pgDetail: pgError?.detail, pgMessage: pgError?.message }, "Failed to insert venue");
@@ -307,11 +309,6 @@ router.post("/venues", async (req, res): Promise<void> => {
   }
 
   res.status(201).json(ownerVenueResponse(venue, ctx.org));
-});
-
-// GET /venues - deprecated public directory (venue-only distribution via direct links)
-router.get("/venues", async (_req, res): Promise<void> => {
-  res.status(404).json({ error: "Venue directory is not available. Use your venue link or code." });
 });
 
 // GET /venues/:slug (public)
@@ -438,6 +435,13 @@ router.get("/venues/:slug/dashboard", async (req, res): Promise<void> => {
       shareToken: coupleSessionsTable.shareToken,
       createdAt: coupleSessionsTable.createdAt,
       completedAt: coupleSessionsTable.completedAt,
+      kind: coupleSessionsTable.kind,
+      createdVia: coupleSessionsTable.createdVia,
+      weddingMonth: coupleSessionsTable.weddingMonth,
+      firstViewedAt: coupleSessionsTable.firstViewedAt,
+      viewCount: coupleSessionsTable.viewCount,
+      ctaClicks: coupleSessionsTable.ctaClicks,
+      bookedAt: coupleSessionsTable.bookedAt,
     })
     .from(coupleSessionsTable)
     .where(eq(coupleSessionsTable.venueId, venue.id))
@@ -450,7 +454,9 @@ router.get("/venues/:slug/dashboard", async (req, res): Promise<void> => {
       return {
         ...session,
         thumbnailObjectKey,
-        estimatedCostUsd: estimateSessionCostUsd(),
+        // Aggregated from gallery_events once the sessions workstream wires it; defaults keep the contract shape.
+        emailedAt: null,
+        sharedCount: 0,
       };
     })
   );
@@ -465,60 +471,6 @@ router.get("/venues/:slug/dashboard", async (req, res): Promise<void> => {
   res.json({
     venue: ownerVenueResponse(venue, org ?? null),
     sessions: sessionsWithThumbnails,
-  });
-});
-
-// GET /venues/:slug/stats (owner session)
-router.get("/venues/:slug/stats", async (req, res): Promise<void> => {
-  const params = GetVenueStatsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const venue = await requireOrgVenue(req, res, params.data.slug);
-  if (!venue) return;
-
-  const sessions = await db
-    .select({
-      status: coupleSessionsTable.status,
-      createdAt: coupleSessionsTable.createdAt,
-      completedAt: coupleSessionsTable.completedAt,
-    })
-    .from(coupleSessionsTable)
-    .where(eq(coupleSessionsTable.venueId, venue.id));
-
-  const totalSessions = sessions.length;
-  const readySessions = sessions.filter(s => s.status === "ready").length;
-  const processingSessions = sessions.filter(s => s.status === "processing" || s.status === "pending").length;
-  const failedSessions = sessions.filter(s => s.status === "failed").length;
-  const totalEstimatedCostUsd = +sessions
-    .reduce(
-      (sum, s) =>
-        sum + estimateSessionCostUsd(),
-      0,
-    )
-    .toFixed(2);
-
-  const completedSessions = sessions.filter(
-    s => s.status === "ready" && s.completedAt
-  );
-  const avgCompletionSeconds =
-    completedSessions.length > 0
-      ? completedSessions.reduce((sum, s) => {
-          const diff =
-            (s.completedAt!.getTime() - s.createdAt.getTime()) / 1000;
-          return sum + diff;
-        }, 0) / completedSessions.length
-      : null;
-
-  res.json({
-    totalSessions,
-    readySessions,
-    processingSessions,
-    failedSessions,
-    avgCompletionSeconds,
-    totalEstimatedCostUsd,
   });
 });
 

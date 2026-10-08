@@ -5,18 +5,16 @@ import {
   db,
   coupleSessionsTable,
   generatedAssetsTable,
-  ownerLoginTokensTable,
-  ownerSessionsTable,
   uploadIntentsTable,
 } from "@workspace/db";
-import { and, asc, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
 import { refundCreditsForSession } from "./lib/credits.js";
 import { startSessionWorker } from "./lib/sessionWorker.js";
+import { startPhotoRetentionSweep } from "./lib/photoRetention.js";
 import { startControlPlaneWorker } from "./control-plane/scheduler.js";
 import { getAppBaseUrl } from "./lib/appUrl.js";
 import { assertProductionEnvironment } from "./lib/envValidation.js";
 import {
-  ownerAuthCleanupBatchSize,
   staleProcessingSessionMinutes,
   uploadIntentCleanupBatchSize,
 } from "./lib/sessionCleanupConfig.js";
@@ -114,52 +112,6 @@ async function cleanupExpiredUploadIntents(): Promise<void> {
   }
 }
 
-async function cleanupExpiredOwnerAuth(): Promise<void> {
-  const batchSize = ownerAuthCleanupBatchSize();
-  try {
-    const expiredTokens = await db
-      .select({ id: ownerLoginTokensTable.id })
-      .from(ownerLoginTokensTable)
-      .where(or(lt(ownerLoginTokensTable.expiresAt, new Date()), isNotNull(ownerLoginTokensTable.usedAt)))
-      .orderBy(asc(ownerLoginTokensTable.expiresAt))
-      .limit(batchSize);
-
-    const expiredSessions = await db
-      .select({ id: ownerSessionsTable.id })
-      .from(ownerSessionsTable)
-      .where(or(lt(ownerSessionsTable.expiresAt, new Date()), eq(ownerSessionsTable.revoked, true)))
-      .orderBy(asc(ownerSessionsTable.expiresAt))
-      .limit(batchSize);
-
-    let deletedTokens = 0;
-    for (const token of expiredTokens) {
-      const rows = await db
-        .delete(ownerLoginTokensTable)
-        .where(eq(ownerLoginTokensTable.id, token.id))
-        .returning({ id: ownerLoginTokensTable.id });
-      deletedTokens += rows.length;
-    }
-
-    let deletedSessions = 0;
-    for (const session of expiredSessions) {
-      const rows = await db
-        .delete(ownerSessionsTable)
-        .where(eq(ownerSessionsTable.id, session.id))
-        .returning({ id: ownerSessionsTable.id });
-      deletedSessions += rows.length;
-    }
-
-    if (deletedTokens > 0 || deletedSessions > 0) {
-      logger.info(
-        { deletedTokens, deletedSessions, batchSize },
-        "Cleaned up expired owner auth rows",
-      );
-    }
-  } catch (err) {
-    logger.error({ err }, "Failed to cleanup expired owner auth rows on startup");
-  }
-}
-
 // A stray rejected promise (background poller, webhook side effect, …) must
 // not take the whole site down; log it and keep serving.
 process.on("unhandledRejection", (reason) => {
@@ -191,7 +143,7 @@ app.listen(port, (err) => {
   logger.info({ port, appBaseUrl: getAppBaseUrl() }, "Server listening");
   void cleanupOrphanedSessions();
   void cleanupExpiredUploadIntents();
-  void cleanupExpiredOwnerAuth();
   startSessionWorker();
+  startPhotoRetentionSweep();
   startControlPlaneWorker();
 });

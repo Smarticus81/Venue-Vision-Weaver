@@ -24,21 +24,23 @@ import {
 } from "../lib/stripe.js";
 import {
   requireOrg,
+  requireOrgAdmin,
   requireOwnerMutationOrigin,
   ensureOrganizationByClerkId,
   fetchClerkUserEmail,
+  type OrgContext,
 } from "../lib/orgAuth.js";
+import { trialState } from "../lib/trial.js";
+import { UpdateOrganizationBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
 /* ————— Org summary (dashboard) ————— */
 
-// GET /org — the caller's organization: plan, credits, and its venues.
-router.get("/org", async (req, res): Promise<void> => {
-  const ctx = await requireOrg(req, res);
-  if (!ctx) return;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+async function organizationPayload(ctx: OrgContext) {
   const venues = await db
     .select({
       id: venuesTable.id,
@@ -51,7 +53,7 @@ router.get("/org", async (req, res): Promise<void> => {
     .where(eq(venuesTable.organizationId, ctx.org.id))
     .orderBy(venuesTable.createdAt);
 
-  res.json({
+  return {
     organization: {
       id: ctx.org.id,
       name: ctx.org.name,
@@ -59,11 +61,77 @@ router.get("/org", async (req, res): Promise<void> => {
       creditsBalance: ctx.org.creditsBalance,
       billingPeriodEnd: ctx.org.billingPeriodEnd,
       clerkOrgId: ctx.org.clerkOrgId,
+      contactEmail: ctx.org.contactEmail,
+      firstPaidAt: ctx.org.firstPaidAt,
+      churnedAt: ctx.org.churnedAt,
+      shareAggregates: ctx.org.shareAggregates,
+      trial: trialState(ctx.org),
       role: ctx.orgRole,
       billingConfigured: isStripeConfigured(),
     },
     venues,
-  });
+  };
+}
+
+// GET /org — the caller's organization: plan, credits, trial clock, and its venues.
+router.get("/org", async (req, res): Promise<void> => {
+  const ctx = await requireOrg(req, res);
+  if (!ctx) return;
+  res.json(await organizationPayload(ctx));
+});
+
+// PATCH /org — organization preferences (aggregate-proof opt-in, contact
+// email). Admins only: these change what the public site may say about the
+// venue and where lifecycle email goes.
+router.patch("/org", async (req, res): Promise<void> => {
+  if (!requireOwnerMutationOrigin(req, res)) return;
+
+  const ctx = await requireOrg(req, res);
+  if (!ctx) return;
+
+  if (!requireOrgAdmin(ctx)) {
+    res.status(403).json({
+      error: "Only organization admins can change organization settings.",
+      code: "org_admin_required",
+    });
+    return;
+  }
+
+  const body = UpdateOrganizationBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const updates: Partial<Pick<Organization, "shareAggregates" | "contactEmail">> = {};
+  if (body.data.shareAggregates !== undefined) {
+    updates.shareAggregates = body.data.shareAggregates;
+  }
+  if (body.data.contactEmail !== undefined) {
+    const email = body.data.contactEmail?.trim().toLowerCase() || null;
+    if (email && !EMAIL_REGEX.test(email)) {
+      res.status(400).json({ error: "contactEmail must be a valid email address" });
+      return;
+    }
+    updates.contactEmail = email;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(organizationsTable)
+    .set(updates)
+    .where(eq(organizationsTable.id, ctx.org.id))
+    .returning();
+  if (!updated) {
+    res.status(404).json({ error: "Organization not found" });
+    return;
+  }
+
+  res.json(await organizationPayload({ ...ctx, org: updated }));
 });
 
 // GET /org/credit-history — recent ledger rows for the caller's organization.

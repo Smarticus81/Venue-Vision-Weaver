@@ -8,7 +8,11 @@ process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 const grok = await import("./grok.js");
 const { AGENT_DEFINITIONS, AGENT_KEYS } = await import("./agents.js");
 const { TOOL_NAMES } = await import("./tools.js");
-const { ACTION_CATALOG } = await import("./actions.js");
+const { ACTION_CATALOG, computeRequiresApproval, agentMayPropose, describeActionCatalog } = await import("./actions.js");
+const { validatePolicyUpdate, POLICY_DEFAULTS } = await import("./policies.js");
+const { listOrganizationsQuery, listVenuesQuery } = await import("./growth/queries.js");
+const { classifyVenueType, normalizeRegion } = await import("./growth/segments.js");
+const { computeEffectiveCap, shouldPauseOnEvent } = await import("./outreach/sendingHealth.js");
 
 type FetchCall = { url: string; body: Record<string, unknown> };
 
@@ -245,6 +249,95 @@ test("registry: unique keys and every granted tool exists", () => {
   for (const key of ["prospecting", "outreach", "campaigns"]) {
     assert.ok(AGENT_KEYS.includes(key), `revenue agent "${key}" must exist`);
   }
+  // Step-0 registry seam: vetting + growth tools exist as stubs; the growth agent replaced experiments.
+  for (const tool of ["vet_prospect", "get_growth_kpis", "get_growth_guidance", "evaluate_experiment", "list_experiments"]) {
+    assert.ok(TOOL_NAMES.includes(tool), `tool "${tool}" must be registered`);
+  }
+  assert.ok(AGENT_KEYS.includes("growth"));
+  assert.ok(!AGENT_KEYS.includes("experiments"));
+  const prospecting = AGENT_DEFINITIONS.find((agent) => agent.key === "prospecting")!;
+  assert.match(prospecting.mission, /Pass emailSourceUrl to upsert_prospect every time/);
+  assert.match(prospecting.mission, /vet_prospect/);
+  const outreach = AGENT_DEFINITIONS.find((agent) => agent.key === "outreach")!;
+  assert.match(outreach.mission, /never propose send_prospect_email/);
+  assert.match(outreach.mission, /vettingStatus=passed/);
+  assert.match(AGENT_DEFINITIONS.find((agent) => agent.key === "governance")!.mission, /byVettingStatus/);
+  // Every agent that may propose actions declares an allowlist of catalog types.
+  for (const agent of AGENT_DEFINITIONS) {
+    if (agent.tools.includes("propose_action")) {
+      assert.ok(agent.actions && agent.actions.length > 0, `${agent.key} needs an actions allowlist`);
+    }
+    for (const actionType of agent.actions ?? []) {
+      assert.ok(ACTION_CATALOG[actionType], `${agent.key} allows unknown action "${actionType}"`);
+    }
+  }
+  assert.equal(agentMayPropose("prospecting", "send_venue_email").allowed, false);
+  assert.equal(agentMayPropose("outreach", "send_outreach_email").allowed, true);
+  assert.equal(agentMayPropose("outreach", "grant_promo_credits").allowed, false);
+  assert.equal(agentMayPropose("operator", "send_outreach_email").allowed, true);
+});
+
+test("approval helper and catalog seam", () => {
+  assert.equal(computeRequiresApproval({ riskLevel: "low" }, true, false), false);
+  assert.equal(computeRequiresApproval({ riskLevel: "low" }, true, true), true);
+  assert.equal(computeRequiresApproval({ riskLevel: "low" }, false, false), true);
+  assert.equal(computeRequiresApproval({ riskLevel: "high" }, true, false), true);
+  for (const entry of describeActionCatalog()) {
+    assert.equal(typeof entry.retired, "boolean", `${entry.type} exposes retired`);
+  }
+});
+
+test("policy edits are validated per key with bounds", () => {
+  const keys = POLICY_DEFAULTS.map((policy) => policy.key);
+  for (const key of [
+    "agents_enabled",
+    "outreach_sends_enabled",
+    "max_daily_ai_usd",
+    "max_campaign_steps",
+    "vetting_pass_score",
+    "deliverability_guard",
+    "segment_guidance",
+    "max_prospect_emails_per_day_base",
+  ]) {
+    assert.ok(keys.includes(key), `policy default "${key}"`);
+  }
+  assert.equal(new Set(keys).size, keys.length, "policy keys are unique");
+  assert.deepEqual(validatePolicyUpdate("max_campaign_steps", { steps: 2 }), { ok: true, value: { steps: 2 } });
+  assert.equal(validatePolicyUpdate("max_campaign_steps", { steps: 9 }).ok, false);
+  assert.equal(validatePolicyUpdate("max_campaign_steps", { emails: 2 }).ok, false);
+  assert.equal(validatePolicyUpdate("agents_enabled", { enabled: "yes" }).ok, false);
+  assert.equal(validatePolicyUpdate("agents_enabled", { enabled: false }).ok, true);
+  assert.equal(validatePolicyUpdate("vetting_blocked_countries", { codes: "CA, GB" }).ok, true);
+  assert.equal(validatePolicyUpdate("vetting_blocked_countries", { codes: "Canada" }).ok, false);
+  assert.equal(validatePolicyUpdate("deliverability_guard", { status: "ok" }).ok, false, "system-managed");
+  assert.equal(validatePolicyUpdate("nope", { x: 1 }).ok, false);
+});
+
+test("growth seams: alias-qualified SQL, venue classifier, guard math", () => {
+  const orgSql = listOrganizationsQuery(10).toSQL().sql;
+  assert.match(orgSql, /v\.id = cs\.venue_id/);
+  assert.doesNotMatch(orgSql, /"id" = "venue_id"|"venue_id" = "id"/);
+  const venueSql = listVenuesQuery(10, "least_active").toSQL().sql;
+  assert.match(venueSql, /vm\.venue_id = "venues"\."id"/);
+  assert.match(venueSql, /cs2\.venue_id = "venues"\."id"/);
+
+  assert.equal(classifyVenueType({ name: "Oak Hollow Barn" }), "barn_farm");
+  assert.equal(classifyVenueType({ name: "The Grand Hotel" }), "hotel_resort");
+  assert.equal(classifyVenueType({ name: "Loft 12", facts: { style: "industrial loft" } }), "urban_loft");
+  assert.equal(classifyVenueType({ name: "Smith Events" }), "other");
+  assert.equal(normalizeRegion("  austin,   tx "), "Austin, TX");
+  assert.equal(normalizeRegion(null), "Unknown");
+
+  assert.equal(computeEffectiveCap({ status: "paused" }, 15), 0);
+  assert.equal(computeEffectiveCap({ status: "throttled" }, 15), 7);
+  assert.equal(computeEffectiveCap({ status: "throttled" }, 4), 4);
+  assert.equal(computeEffectiveCap({ status: "ok" }, 15), 15);
+  const health = { windowDays: 14, sent: 25, bounced: 2, complained: 0, bounceRatePct: 8 };
+  assert.match(shouldPauseOnEvent(health, "bounced") ?? "", /bounce rate 8\.0% \(2 of 25\) over 14 days/);
+  assert.equal(shouldPauseOnEvent({ ...health, bounced: 1, bounceRatePct: 4 }, "bounced"), null);
+  assert.equal(shouldPauseOnEvent({ ...health, bounced: 2, bounceRatePct: 3.9 }, "bounced"), null);
+  assert.match(shouldPauseOnEvent({ ...health, complained: 1 }, "complained") ?? "", /1 spam complaint in 14 days/);
+  assert.equal(shouldPauseOnEvent(health, "complained"), null);
 });
 
 test("safety model: external contact and spend always require operator approval", () => {
@@ -267,9 +360,14 @@ test("safety model: external contact and spend always require operator approval"
     assert.ok(action, `action "${actionType}" must exist`);
     assert.equal(action.riskLevel, riskLevel, `${actionType} risk level`);
   }
-  // Nothing in the catalog is low risk today, so no action can auto-execute.
+  // Only growth's lifecycle/digest emails may be low risk (and they gate on a policy flag);
+  // nothing else in the catalog may auto-execute.
+  const LOW_RISK_ALLOWED = new Set(["send_lifecycle_email", "send_operator_digest"]);
   for (const action of Object.values(ACTION_CATALOG)) {
-    assert.notEqual(action.riskLevel, "low", `${action.type} must not auto-execute`);
+    if (action.riskLevel === "low") {
+      assert.ok(LOW_RISK_ALLOWED.has(action.type), `${action.type} must not be low risk`);
+      assert.equal(typeof action.requiresApproval, "function", `${action.type} needs a requiresApproval gate`);
+    }
   }
 });
 

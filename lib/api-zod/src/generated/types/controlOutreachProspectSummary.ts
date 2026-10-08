@@ -12,6 +12,7 @@ export interface ControlOutreachProspectSummary {
   email: string;
   contactName?: string | null;
   status: string;
+  vettingStatus: string;
   website?: string | null;
   region?: string | null;
 }
