@@ -74,6 +74,8 @@ export interface NapFindings {
   name: string | null;
   phone: string | null;
   address: string | null;
+  /** "City, ST" when the site states it (JSON-LD addressLocality/addressRegion); feeds the Places query. */
+  locality: string | null;
   country: string | null;
   sourceUrl: string | null;
   sourceKind: "json_ld" | "website";
@@ -483,12 +485,16 @@ export function extractNap(site: FetchedSite): NapFindings {
       const name = str(node.name);
       const phone = str(node.telephone);
       let formatted: string | null = null;
+      let locality: string | null = null;
       let country: string | null = null;
       if (address) {
         const parts = [str(address.streetAddress), str(address.addressLocality), str(address.addressRegion), str(address.postalCode)].filter(
           (part): part is string => Boolean(part),
         );
         formatted = parts.length > 0 ? parts.join(", ") : null;
+        const city = str(address.addressLocality);
+        const region = str(address.addressRegion);
+        locality = city ? (region ? `${city}, ${region}` : city) : null;
         const rawCountry = address.addressCountry;
         country =
           typeof rawCountry === "string"
@@ -498,7 +504,7 @@ export function extractNap(site: FetchedSite): NapFindings {
               : null;
       }
       if (name || phone || formatted) {
-        return { name, phone, address: formatted, country, sourceUrl: page.url, sourceKind: "json_ld" };
+        return { name, phone, address: formatted, locality, country, sourceUrl: page.url, sourceKind: "json_ld" };
       }
     }
   }
@@ -507,10 +513,24 @@ export function extractNap(site: FetchedSite): NapFindings {
     const phone = footer.match(PHONE_RE)?.[0]?.trim() ?? null;
     const address = footer.match(US_ADDRESS_RE)?.[0]?.replace(/\s+/g, " ").trim() ?? null;
     if (phone || address) {
-      return { name: null, phone, address, country: address ? "US" : null, sourceUrl: page.url, sourceKind: "website" };
+      return {
+        name: null,
+        phone,
+        address,
+        locality: address ? localityFromUsAddress(address) : null,
+        country: address ? "US" : null,
+        sourceUrl: page.url,
+        sourceKind: "website",
+      };
     }
   }
-  return { name: null, phone: null, address: null, country: null, sourceUrl: null, sourceKind: "website" };
+  return { name: null, phone: null, address: null, locality: null, country: null, sourceUrl: null, sourceKind: "website" };
+}
+
+/** "214 River Road, Hudson, NY 12534" -> "Hudson, NY". */
+function localityFromUsAddress(address: string): string | null {
+  const match = address.match(/,\s*([A-Z][\w.'’ -]{2,30}),\s*([A-Z]{2})\s+\d{5}/);
+  return match ? `${match[1]!.trim()}, ${match[2]}` : null;
 }
 
 export function checkNap(nap: NapFindings, prospectPhone: string | null, now: Date = new Date()): VettingCheck {
