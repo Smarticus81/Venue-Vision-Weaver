@@ -273,6 +273,19 @@ export const REQUIRED_DATABASE_INDEXES = [
 type TableRow = { table_name: string };
 type ColumnRow = { table_name: string; column_name: string; is_nullable: "YES" | "NO" };
 type IndexRow = { tablename: string; indexname: string; indexdef: string };
+type RlsRow = { tablename: string; rowsecurity: boolean | "t" | "f" | "true" | "false" };
+
+export type { TableRow, ColumnRow, IndexRow, RlsRow };
+
+/**
+ * Raw introspection rows the pure evaluators below consume. The async
+ * `missingRequired*` functions load them from Postgres; tests hand in fixtures.
+ */
+export interface SchemaIntrospection {
+  tables: TableRow[];
+  columns: ColumnRow[];
+  indexes: IndexRow[];
+}
 
 function rowsFromExecuteResult<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
@@ -280,29 +293,15 @@ function rowsFromExecuteResult<T>(result: unknown): T[] {
   return Array.isArray(maybeRows) ? (maybeRows as T[]) : [];
 }
 
-export async function missingRequiredDatabaseTables(): Promise<string[]> {
-  const tableNames = sql.join(
-    REQUIRED_DATABASE_TABLES.map((table) => sql`${table}`),
-    sql`, `,
-  );
-  const result = await db.execute<TableRow>(
-    sql`select table_name from information_schema.tables where table_schema = 'public' and table_name in (${tableNames})`,
-  );
-  const found = new Set(rowsFromExecuteResult<TableRow>(result).map((row) => row.table_name));
+/* ————— Pure evaluators (no database) ————— */
+
+export function evaluateMissingTables(rows: TableRow[]): string[] {
+  const found = new Set(rows.map((row) => row.table_name));
   return REQUIRED_DATABASE_TABLES.filter((table) => !found.has(table));
 }
 
-export async function missingRequiredDatabaseColumns(): Promise<string[]> {
-  const tableNames = sql.join(
-    REQUIRED_DATABASE_TABLES.map((table) => sql`${table}`),
-    sql`, `,
-  );
-  const result = await db.execute<ColumnRow>(
-    sql`select table_name, column_name, is_nullable from information_schema.columns where table_schema = 'public' and table_name in (${tableNames})`,
-  );
-  const found = new Set(
-    rowsFromExecuteResult<ColumnRow>(result).map((row) => `${row.table_name}.${row.column_name}`),
-  );
+export function evaluateMissingColumns(rows: ColumnRow[]): string[] {
+  const found = new Set(rows.map((row) => `${row.table_name}.${row.column_name}`));
   return Object.entries(REQUIRED_DATABASE_COLUMNS).flatMap(([table, columns]) =>
     columns
       .filter((column) => !found.has(`${table}.${column}`))
@@ -310,21 +309,10 @@ export async function missingRequiredDatabaseColumns(): Promise<string[]> {
   );
 }
 
-export async function nullableRequiredDatabaseColumns(): Promise<string[]> {
-  const tableNames = sql.join(
-    REQUIRED_DATABASE_TABLES.map((table) => sql`${table}`),
-    sql`, `,
-  );
-  const result = await db.execute<ColumnRow>(
-    sql`select table_name, column_name, is_nullable from information_schema.columns where table_schema = 'public' and table_name in (${tableNames})`,
-  );
+export function evaluateNullableColumns(rows: ColumnRow[]): string[] {
   const columns = new Map(
-    rowsFromExecuteResult<ColumnRow>(result).map((row) => [
-      `${row.table_name}.${row.column_name}`,
-      row.is_nullable,
-    ]),
+    rows.map((row) => [`${row.table_name}.${row.column_name}`, row.is_nullable]),
   );
-
   return Object.entries(REQUIRED_DATABASE_NOT_NULL_COLUMNS).flatMap(([table, requiredColumns]) =>
     requiredColumns
       .filter((column) => columns.get(`${table}.${column}`) === "YES")
@@ -332,12 +320,7 @@ export async function nullableRequiredDatabaseColumns(): Promise<string[]> {
   );
 }
 
-export async function missingRequiredDatabaseIndexes(): Promise<string[]> {
-  const result = await db.execute<IndexRow>(
-    sql`select tablename, indexname, indexdef from pg_indexes where schemaname = 'public'`,
-  );
-  const indexes = rowsFromExecuteResult<IndexRow>(result);
-
+export function evaluateMissingIndexes(indexes: IndexRow[]): string[] {
   return REQUIRED_DATABASE_INDEXES.flatMap((required) => {
     const candidateIndexes = indexes.filter((index) => index.tablename === required.table);
     const actual =
@@ -359,6 +342,70 @@ export async function missingRequiredDatabaseIndexes(): Promise<string[]> {
   });
 }
 
+/** Every contract violation for an introspection snapshot, prefixed by kind. */
+export function evaluateRequiredDatabaseSchema(introspection: SchemaIntrospection): string[] {
+  return [
+    ...evaluateMissingTables(introspection.tables).map((table) => `table:${table}`),
+    ...evaluateMissingColumns(introspection.columns).map((column) => `column:${column}`),
+    ...evaluateNullableColumns(introspection.columns).map((column) => `not-null:${column}`),
+    ...evaluateMissingIndexes(introspection.indexes).map((index) => `index:${index}`),
+  ];
+}
+
+function rlsEnabled(value: RlsRow["rowsecurity"]): boolean {
+  return value === true || value === "t" || value === "true";
+}
+
+/**
+ * Public tables whose row-level security is off. The server connects as the
+ * table owner and bypasses RLS, so the only thing RLS protects is the
+ * PostgREST anon/authenticated surface; every public table must have it on.
+ */
+export function evaluateRowLevelSecurity(rows: RlsRow[]): string[] {
+  return rows
+    .filter((row) => !rlsEnabled(row.rowsecurity))
+    .map((row) => row.tablename)
+    .sort();
+}
+
+/* ————— Database-backed loaders ————— */
+
+function requiredTableNameList() {
+  return sql.join(
+    REQUIRED_DATABASE_TABLES.map((table) => sql`${table}`),
+    sql`, `,
+  );
+}
+
+async function loadColumnRows(): Promise<ColumnRow[]> {
+  const result = await db.execute<ColumnRow>(
+    sql`select table_name, column_name, is_nullable from information_schema.columns where table_schema = 'public' and table_name in (${requiredTableNameList()})`,
+  );
+  return rowsFromExecuteResult<ColumnRow>(result);
+}
+
+export async function missingRequiredDatabaseTables(): Promise<string[]> {
+  const result = await db.execute<TableRow>(
+    sql`select table_name from information_schema.tables where table_schema = 'public' and table_name in (${requiredTableNameList()})`,
+  );
+  return evaluateMissingTables(rowsFromExecuteResult<TableRow>(result));
+}
+
+export async function missingRequiredDatabaseColumns(): Promise<string[]> {
+  return evaluateMissingColumns(await loadColumnRows());
+}
+
+export async function nullableRequiredDatabaseColumns(): Promise<string[]> {
+  return evaluateNullableColumns(await loadColumnRows());
+}
+
+export async function missingRequiredDatabaseIndexes(): Promise<string[]> {
+  const result = await db.execute<IndexRow>(
+    sql`select tablename, indexname, indexdef from pg_indexes where schemaname = 'public'`,
+  );
+  return evaluateMissingIndexes(rowsFromExecuteResult<IndexRow>(result));
+}
+
 export async function missingRequiredDatabaseSchema(): Promise<string[]> {
   const [missingTables, missingColumns, nullableColumns, missingIndexes] = await Promise.all([
     missingRequiredDatabaseTables(),
@@ -373,4 +420,26 @@ export async function missingRequiredDatabaseSchema(): Promise<string[]> {
     ...nullableColumns.map((column) => `not-null:${column}`),
     ...missingIndexes.map((index) => `index:${index}`),
   ];
+}
+
+export type RowLevelSecurityReadiness =
+  | { status: "ok" | "degraded"; tablesWithoutRls: string[] }
+  | { status: "unknown"; reason: string };
+
+/**
+ * RLS state of every table in the public schema. Reading pg_tables needs no
+ * special privilege on Supabase, but a locked-down role may still be refused;
+ * that is reported as "unknown" (warn-level) rather than as a failed deploy.
+ */
+export async function rowLevelSecurityReadiness(): Promise<RowLevelSecurityReadiness> {
+  try {
+    const result = await db.execute<RlsRow>(
+      sql`select tablename, rowsecurity from pg_tables where schemaname = 'public'`,
+    );
+    const tablesWithoutRls = evaluateRowLevelSecurity(rowsFromExecuteResult<RlsRow>(result));
+    return { status: tablesWithoutRls.length === 0 ? "ok" : "degraded", tablesWithoutRls };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { status: "unknown", reason: `pg_tables introspection unavailable: ${reason}` };
+  }
 }

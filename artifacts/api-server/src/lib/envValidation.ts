@@ -212,12 +212,86 @@ function isOpenAiImageModel(model: string): boolean {
  * pinned to a dated snapshot) and the Gemini 3 native image models kept as a
  * fallback.
  */
-function isProductionImageModel(model: string): boolean {
+export function isProductionImageModel(model: string): boolean {
   const trimmed = model.trim();
   return (
     /^gpt-image-2\.5-(?:sunburst|flare)(?:-\d{4}-\d{2}-\d{2})?$/i.test(trimmed) ||
     /^gemini-3(?:\.\d+)?-(?:pro|flash)-image$/i.test(trimmed)
   );
+}
+
+/**
+ * A production chain starts with the precision gpt-image model and only falls
+ * back to the other supported production models. Shared by the boot
+ * validation and /readyz so both surfaces agree on what "ready" means.
+ */
+export function isProductionImageModelChain(models: readonly string[]): boolean {
+  return models[0] === PRIMARY_IMAGE_MODEL && models.every(isProductionImageModel);
+}
+
+const EMAIL_LIST_ITEM = /^[^\s@,]+@[^\s@,]+\.[^\s@,]{2,}$/;
+
+/** Comma-separated operator allowlist: every entry must be an email address. */
+function operatorEmailsError(env: EnvLike): string | null {
+  const raw = env.CONTROL_PLANE_OPERATOR_EMAILS?.trim() ?? "";
+  if (!raw) return null;
+  const entries = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (entries.length === 0) {
+    return "CONTROL_PLANE_OPERATOR_EMAILS must list at least one email address";
+  }
+  const invalid = entries.filter((entry) => !EMAIL_LIST_ITEM.test(entry));
+  if (invalid.length > 0) {
+    return `CONTROL_PLANE_OPERATOR_EMAILS must be comma-separated email addresses; invalid: ${invalid.join(", ")}`;
+  }
+  return null;
+}
+
+function hostnameOf(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  try {
+    return new URL(value.includes("://") ? value : `https://${value}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Non-fatal production findings, logged at boot. A warning never stops the
+ * server; it points at configuration that bites later (mismatched hosts break
+ * Clerk and share links; a dev-open control plane exposes operator tools).
+ */
+export function productionEnvironmentWarnings(env: EnvLike = process.env): string[] {
+  if (env.NODE_ENV !== "production") return [];
+  const warnings: string[] = [];
+
+  const appHost = hostnameOf(env.APP_BASE_URL ?? env.PUBLIC_APP_URL);
+  const railwayHost = hostnameOf(env.RAILWAY_PUBLIC_DOMAIN);
+  if (appHost && railwayHost && appHost !== railwayHost) {
+    warnings.push(
+      `APP_BASE_URL host (${appHost}) differs from RAILWAY_PUBLIC_DOMAIN (${railwayHost}); share links and emails use APP_BASE_URL, so that host must serve this deployment`,
+    );
+  }
+  if ((env.CONTROL_PLANE_DEV_OPEN ?? "").trim().toLowerCase() === "true") {
+    warnings.push(
+      "CONTROL_PLANE_DEV_OPEN=true is ignored in production: the control plane only admits CONTROL_PLANE_OPERATOR_EMAILS",
+    );
+  }
+  if (
+    !env.TRUST_PROXY?.trim() &&
+    !env.RAILWAY_PUBLIC_DOMAIN &&
+    !env.RAILWAY_STATIC_URL &&
+    !env.FLY_APP_NAME &&
+    !env.RENDER_EXTERNAL_URL
+  ) {
+    warnings.push(
+      "TRUST_PROXY is unset and no known platform was detected; behind a reverse proxy set TRUST_PROXY=1 or per-IP rate limits collapse into one bucket",
+    );
+  }
+  return warnings;
 }
 
 export function validateProductionEnvironment(env: EnvLike = process.env): string[] {
@@ -228,10 +302,14 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
     "PORT",
     "DATABASE_URL",
     "UPLOAD_TOKEN_SECRET",
-    // Clerk is optional at boot: owner/organization routes return 503 and the
-    // web app shows a setup notice until CLERK_SECRET_KEY is configured.
-    // (WS-B: make CLERK_* and CONTROL_PLANE_OPERATOR_EMAILS required here once
-    // the security smoke's clerkless fixture is updated with it.)
+    // Owner sign-in, the dashboard and billing are all Clerk-gated: a
+    // production deploy without Clerk cannot sign up a single venue, so the
+    // keys are required (the webhook secret too, or organization names never
+    // sync). Outside production the app still degrades to a setup notice.
+    "CLERK_SECRET_KEY",
+    "CLERK_WEBHOOK_SIGNING_SECRET",
+    // The control plane fails closed behind an explicit operator allowlist.
+    "CONTROL_PLANE_OPERATOR_EMAILS",
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
     "STRIPE_PRICE_STARTER_MONTHLY",
@@ -247,6 +325,14 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
 
   if (!hasRealValue(env, "GOOGLE_AI_API_KEY") && !hasRealValue(env, "GEMINI_API_KEY")) {
     errors.push("GOOGLE_AI_API_KEY or GEMINI_API_KEY must be set");
+  }
+  if (!hasRealValue(env, "CLERK_PUBLISHABLE_KEY") && !hasRealValue(env, "VITE_CLERK_PUBLISHABLE_KEY")) {
+    errors.push("CLERK_PUBLISHABLE_KEY (or VITE_CLERK_PUBLISHABLE_KEY) must be set");
+  }
+  // With the control plane live, outreach can email real people; bounce and
+  // complaint webhooks must be verifiable or the suppression list never fills.
+  if (hasRealValue(env, "XAI_API_KEY") && !hasRealValue(env, "RESEND_WEBHOOK_SECRET")) {
+    errors.push("RESEND_WEBHOOK_SECRET must be set when XAI_API_KEY enables the control plane");
   }
 
   const port = Number(env.PORT);
@@ -274,6 +360,7 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
     stripePriceIdError(env, "STRIPE_PRICE_STARTER_MONTHLY"),
     stripePriceIdError(env, "STRIPE_PRICE_GROWTH_MONTHLY"),
     stripePriceIdError(env, "STRIPE_PRICE_CREDIT_PACK_10"),
+    operatorEmailsError(env),
   ].filter((error): error is string => Boolean(error));
   errors.push(...providerErrors);
 
