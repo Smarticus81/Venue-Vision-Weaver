@@ -81,3 +81,16 @@ WHERE EXISTS (
       AND vm.coverage = required_coverage.coverage
   )
 );
+
+SELECT
+  'duplicate_trial_grantees' AS check_name,
+  COUNT(*) AS row_count
+FROM (
+  SELECT trial_granted_by_clerk_user_id
+  FROM organizations
+  WHERE trial_granted_by_clerk_user_id IS NOT NULL
+  GROUP BY trial_granted_by_clerk_user_id
+  HAVING COUNT(*) > 1
+) duplicate_grantees;
+-- bootstrap.sql clears the later duplicates itself; `drizzle-kit push` does
+-- not, so run bootstrap.sql (or that UPDATE) first when this is non-zero.

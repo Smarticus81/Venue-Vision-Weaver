@@ -54,6 +54,7 @@ test("readTrialConfig floors the window at one day", () => {
 test("readFoundingOffer is null once the slots run out and never exceeds the total", () => {
   assert.deepEqual(readFoundingOffer({}), { slotsLeft: 10, slotsTotal: 10 });
   assert.equal(readFoundingOffer({ PUBLIC_FOUNDING_SLOTS_LEFT: "0" }), null);
+  assert.equal(readFoundingOffer({ PUBLIC_FOUNDING_SLOTS_TOTAL: "0" }), null, "TOTAL=0 turns the offer off, never a default 10");
   assert.deepEqual(
     readFoundingOffer({ PUBLIC_FOUNDING_SLOTS_LEFT: "12", PUBLIC_FOUNDING_SLOTS_TOTAL: "8" }),
     { slotsLeft: 8, slotsTotal: 8 },

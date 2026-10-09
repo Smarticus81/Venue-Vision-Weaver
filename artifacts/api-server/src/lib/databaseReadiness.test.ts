@@ -218,6 +218,16 @@ test("production requires Clerk keys and the operator allowlist", () => {
   });
   assert.ok(badOperators.some((error) => error.includes("invalid: not-an-email")));
 
+  // The deploy template's defaults must not pass as real configuration.
+  const templateDefaults = envValidation.validateProductionEnvironment({
+    ...productionEnv,
+    CONTROL_PLANE_OPERATOR_EMAILS: "founder@yourdomain.com",
+    EMAIL_FROM: "Dreemer <noreply@yourdomain.com>",
+  });
+  assert.ok(templateDefaults.some((error) => error.startsWith("CONTROL_PLANE_OPERATOR_EMAILS still holds a placeholder")));
+  assert.ok(templateDefaults.some((error) => error.startsWith("EMAIL_FROM still holds a placeholder")));
+  assert.equal(envValidation.isPlaceholderEmail("ops@yourvenue.com"), false, "a real domain that starts with 'your' is fine");
+
   // VITE_CLERK_PUBLISHABLE_KEY alone satisfies the publishable-key requirement.
   assert.deepEqual(
     envValidation.validateProductionEnvironment({
@@ -680,4 +690,25 @@ test("the operator allowlist is only ever matched against a verified Clerk addre
     }),
     "ops@example.com",
   );
+});
+
+test("bootstrap.sql can pass readiness before the owner_* drop, and dedupes trial grantees before the unique index", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const bootstrap = await readFile(new URL("../../../../supabase/bootstrap.sql", import.meta.url), "utf8");
+  for (const table of ["owner_sessions", "owner_login_tokens", "owner_credentials"]) {
+    assert.match(bootstrap, new RegExp(`ALTER TABLE IF EXISTS ${table} ENABLE ROW LEVEL SECURITY;`));
+  }
+  const dedupe = bootstrap.indexOf("SET trial_granted_by_clerk_user_id = NULL");
+  const index = bootstrap.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS organizations_trial_grantee_unique");
+  assert.ok(dedupe > 0 && index > dedupe, "the dedupe runs before the unique index");
+  assert.match(bootstrap, /ADD COLUMN IF NOT EXISTS delivery_hold_reason TEXT/);
+});
+
+test("the runtime image carries the demo couple folder where sampleGallery looks for it", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const dockerfile = await readFile(new URL("../../../../Dockerfile", import.meta.url), "utf8");
+  const runtime = dockerfile.slice(dockerfile.indexOf("AS runtime"));
+  assert.match(runtime, /COPY --from=builder[^\n]*\/app\/lib\/brand\/assets\/demo-couple \.\/lib\/brand\/assets\/demo-couple/);
+  const { demoCoupleDirCandidates } = await import("./sampleGallery.js");
+  assert.ok(demoCoupleDirCandidates({}, "/app").includes("/app/lib/brand/assets/demo-couple"));
 });

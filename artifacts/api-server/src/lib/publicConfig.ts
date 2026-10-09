@@ -96,6 +96,10 @@ export function readTrialConfig(env: NodeJS.ProcessEnv = process.env): TrialConf
 }
 
 export function readFoundingOffer(env: NodeJS.ProcessEnv = process.env): FoundingOffer | null {
+  // TOTAL=0 (accepted by envValidation) switches the founding offer off; it
+  // must never fall back to a default and publish "10 of 10" slots.
+  const rawTotal = env.PUBLIC_FOUNDING_SLOTS_TOTAL?.trim();
+  if (rawTotal !== undefined && rawTotal !== "" && Number(rawTotal) === 0) return null;
   const slotsTotal = Math.floor(envPositiveNumber(env, "PUBLIC_FOUNDING_SLOTS_TOTAL", 10));
   const rawLeft = env.PUBLIC_FOUNDING_SLOTS_LEFT?.trim();
   const slotsLeft =

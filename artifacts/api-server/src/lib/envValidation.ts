@@ -231,6 +231,31 @@ export function isProductionImageModelChain(models: readonly string[]): boolean 
 
 const EMAIL_LIST_ITEM = /^[^\s@,]+@[^\s@,]+\.[^\s@,]{2,}$/;
 
+/** Template / documentation mail domains (railway.env.template ships founder@yourdomain.com). */
+const PLACEHOLDER_EMAIL_DOMAINS = new Set([
+  ...PLACEHOLDER_HOSTS,
+  "example.org",
+  "example.net",
+  "your-domain.com",
+  "yourcompany.com",
+  "domain.com",
+  "test.com",
+]);
+
+/** The domain of an address (or of "Name <addr>"), lowercased; null when there is none. */
+function emailDomainOf(value: string): string | null {
+  const match = /<([^>]+)>/.exec(value);
+  const address = (match ? match[1] : value).trim().toLowerCase();
+  const at = address.lastIndexOf("@");
+  return at > 0 ? address.slice(at + 1) : null;
+}
+
+export function isPlaceholderEmail(value: string): boolean {
+  const domain = emailDomainOf(value);
+  if (!domain) return false;
+  return PLACEHOLDER_EMAIL_DOMAINS.has(domain) || domain.endsWith(".example") || domain.endsWith(".invalid") || domain.endsWith(".test");
+}
+
 /** Comma-separated operator allowlist: every entry must be an email address. */
 function operatorEmailsError(env: EnvLike): string | null {
   const raw = env.CONTROL_PLANE_OPERATOR_EMAILS?.trim() ?? "";
@@ -245,6 +270,12 @@ function operatorEmailsError(env: EnvLike): string | null {
   const invalid = entries.filter((entry) => !EMAIL_LIST_ITEM.test(entry));
   if (invalid.length > 0) {
     return `CONTROL_PLANE_OPERATOR_EMAILS must be comma-separated email addresses; invalid: ${invalid.join(", ")}`;
+  }
+  // A template default (founder@yourdomain.com) would hand /control to
+  // whoever registers that domain and lock the real operator out.
+  const placeholders = entries.filter((entry) => isPlaceholderEmail(entry));
+  if (placeholders.length > 0) {
+    return `CONTROL_PLANE_OPERATOR_EMAILS still holds a placeholder address (${placeholders.join(", ")}); list the real operators`;
   }
   return null;
 }
@@ -366,6 +397,8 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
 
   if ((env.EMAIL_FROM ?? "").includes("onboarding@resend.dev")) {
     errors.push("EMAIL_FROM must use a verified production sender, not onboarding@resend.dev");
+  } else if (isPlaceholderEmail(env.EMAIL_FROM ?? "")) {
+    errors.push("EMAIL_FROM still holds a placeholder address; use a sender on your verified domain");
   }
 
   if ((env.GALLERY_QUALITY_GATE ?? "on").toLowerCase() === "off") {
