@@ -195,18 +195,21 @@ export function renderShellHtml(options: ShellRenderOptions): string {
   if (options.noindex) {
     const noindexTag = `<meta name="robots" content="noindex, nofollow" />`;
     html = ROBOTS_META_PATTERN.test(html)
-      ? html.replace(ROBOTS_META_PATTERN, noindexTag)
-      : html.replace("<head>", `<head>${noindexTag}`);
+      ? html.replace(ROBOTS_META_PATTERN, () => noindexTag)
+      : html.replace("<head>", () => `<head>${noindexTag}`);
   }
 
   const headTags = `${options.headTags ?? ""}${options.replaceMetaWith ?? ""}`;
   if (headTags) {
-    html = html.replace("<head>", `<head>${headTags}`);
+    html = html.replace("<head>", () => `<head>${headTags}`);
   }
   if (options.noscript) {
+    // Replacer functions throughout: inserted text carries couple-supplied
+    // names, and a string replacement would expand "$'" or "$`" in them.
+    const noscript = options.noscript;
     html = html.includes(ROOT_DIV)
-      ? html.replace(ROOT_DIV, `${ROOT_DIV}${options.noscript}`)
-      : html.replace("<body>", `<body>${options.noscript}`);
+      ? html.replace(ROOT_DIV, () => `${ROOT_DIV}${noscript}`)
+      : html.replace("<body>", () => `<body>${noscript}`);
   }
   return html;
 }

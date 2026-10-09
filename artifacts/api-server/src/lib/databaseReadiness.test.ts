@@ -431,6 +431,20 @@ test("gallery Open Graph tags are absolute and replace the shell's defaults inst
   assert.ok(html.includes('<link rel="icon" href="/favicon.ico" />'));
 });
 
+test("couple names containing $-patterns are inserted literally, never expanded by String.replace", () => {
+  const tags = shell.galleryOpenGraphTags({
+    title: "A $' B $` C $& D at Ivy Hall",
+    description: "x",
+    pageUrl: "https://dreemer.example.com/v/abc",
+    imageUrl: "https://dreemer.example.com/og.png",
+  });
+  const html = shell.renderShellHtml({ html: shellHtml, replaceMetaWith: tags, noscript: "<p>$' and $`</p>" });
+  assert.ok(html.includes("A $&#39; B $` C $&amp; D at Ivy Hall") || html.includes("A $' B $` C $& D"));
+  assert.equal((html.match(/<head>/g) ?? []).length, 1, "no copy of the document spliced in");
+  assert.equal((html.match(/<body>/g) ?? []).length, (shellHtml.match(/<body>/g) ?? []).length);
+  assert.ok(html.includes("<p>$' and $`</p>"));
+});
+
 test("shell default preview images become absolute when no page-specific meta replaces them", () => {
   const html = shell.renderShellHtml({ html: shellHtml, assetBaseUrl: "https://dreemer.example.com/" });
   assert.ok(html.includes('<meta property="og:image" content="https://dreemer.example.com/og-image.png" />'));
@@ -632,4 +646,38 @@ test("upload-intent knobs clamp to safe ranges", () => {
   assert.equal(cleanupConfig.uploadIntentVenueDailyCap({ UPLOAD_INTENT_VENUE_DAILY_CAP: "999999" } as NodeJS.ProcessEnv), 5000);
   assert.equal(cleanupConfig.uploadIntentCoupleHourlyCap({ UPLOAD_INTENT_COUPLE_HOURLY_CAP: "abc" } as NodeJS.ProcessEnv), 60);
   assert.equal(cleanupConfig.uploadIntentCleanupBatchSize({ UPLOAD_INTENT_CLEANUP_BATCH_SIZE: "2" } as NodeJS.ProcessEnv), 10);
+});
+
+test("the operator allowlist is only ever matched against a verified Clerk address", () => {
+  const verified = { status: "verified" };
+  const unverified = { status: "unverified" };
+  // Phone/username sign-up (no primary email) that added the operator's
+  // address to its own profile without verifying it.
+  assert.equal(
+    operatorAuth.operatorEmailFromClerkUser({
+      primaryEmailAddressId: null,
+      emailAddresses: [{ id: "e1", emailAddress: "ops@example.com", verification: unverified }],
+    }),
+    null,
+  );
+  assert.equal(
+    operatorAuth.operatorEmailFromClerkUser({
+      primaryEmailAddressId: "e1",
+      emailAddresses: [
+        { id: "e1", emailAddress: "ops@example.com", verification: unverified },
+        { id: "e2", emailAddress: "Me@Venue.com", verification: verified },
+      ],
+    }),
+    "me@venue.com",
+  );
+  assert.equal(
+    operatorAuth.operatorEmailFromClerkUser({
+      primaryEmailAddressId: "e2",
+      emailAddresses: [
+        { id: "e1", emailAddress: "other@venue.com", verification: verified },
+        { id: "e2", emailAddress: "ops@example.com", verification: verified },
+      ],
+    }),
+    "ops@example.com",
+  );
 });

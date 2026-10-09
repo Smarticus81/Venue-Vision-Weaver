@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
-import { clerkEnabled } from "../lib/orgAuth.js";
+import { clerkEnabled, pickVerifiedEmail } from "../lib/orgAuth.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -52,11 +52,24 @@ type EmailFetcher = (clerkUserId: string) => Promise<string | null>;
 
 const emailCache = new Map<string, { email: string | null; at: number }>();
 
+type ClerkUserEmails = {
+  primaryEmailAddressId: string | null;
+  emailAddresses: ReadonlyArray<{ id?: string; emailAddress: string; verification?: { status?: string | null } | null }>;
+};
+
+/**
+ * The address compared with the operator allowlist: the primary address when
+ * it is verified, else the first verified one, never an unverified address.
+ * Anyone can add an unverified address (an operator's, say) to their own
+ * Clerk profile, so an unverified address proves nothing.
+ */
+export function operatorEmailFromClerkUser(user: ClerkUserEmails): string | null {
+  return pickVerifiedEmail(user.emailAddresses, user.primaryEmailAddressId, (email) => (email as { id?: string }).id ?? null);
+}
+
 async function clerkEmailFetcher(clerkUserId: string): Promise<string | null> {
   const user = await clerkClient.users.getUser(clerkUserId);
-  const email =
-    user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? null;
-  return email ? email.trim().toLowerCase() : null;
+  return operatorEmailFromClerkUser(user);
 }
 
 /**
