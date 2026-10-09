@@ -392,7 +392,7 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
               key={tile.coverage}
               className="coverage-tile"
               data-filled={filled ? "true" : "false"}
-              data-target={!filled && readiness.next === tile.coverage ? "true" : "false"}
+              data-target={!filled && readiness.missing[0] === tile.coverage ? "true" : "false"}
               data-testid={`coverage-tile-${tile.coverage}`}
               aria-label={`${tile.label}: ${filled ? `${items.length} ${items.length === 1 ? "photo" : "photos"}` : "no photo yet"}`}
             >
