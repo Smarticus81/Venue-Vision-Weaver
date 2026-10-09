@@ -615,3 +615,195 @@ test("grok: tolerant JSON parsing for structured completions", () => {
   assert.equal(grok.parseJsonObject("[1,2]"), null);
   assert.equal(grok.parseJsonObject("nope"), null);
 });
+
+/* ————— Send gates: deferred (draft kept, action back to pending) vs failed ————— */
+
+const { isDeferredSendError } = await import("./sendErrors.js");
+const studioModule = await import("./studio.js");
+const configModule = await import("./config.js");
+const webhook = await import("./resendWebhook.js");
+const venueEmail = await import("./venueEmail.js");
+
+async function expectSendRefusal(
+  overrides: SendWorldOverrides,
+  message: RegExp,
+  kind: "deferred" | "failed",
+): Promise<ReturnType<typeof fakeSendWorld>> {
+  const world = fakeSendWorld(overrides);
+  let caught: unknown = null;
+  await sender.sendOutreachEmail(42, world.deps).catch((err: unknown) => {
+    caught = err;
+  });
+  assert.ok(caught instanceof Error, `expected a refusal matching ${message}`);
+  assert.match((caught as Error).message, message);
+  assert.equal(world.calls.deliver.length, 0, `${message} must not deliver`);
+  assert.equal(isDeferredSendError(caught), kind === "deferred", `${message} should be ${kind}`);
+  assert.equal(world.calls.markDeferred.length, kind === "deferred" ? 1 : 0);
+  assert.equal(world.calls.markFailed.length, kind === "failed" ? 1 : 0);
+  return world;
+}
+
+test("sender: fixable preconditions keep the draft (deferred)", async () => {
+  await expectSendRefusal({ cap: { cap: 15, sentToday: 15 } }, /Daily prospect email cap reached \(15\/15\)/, "deferred");
+  await expectSendRefusal({ cap: { cap: 0, sentToday: 0 } }, /paused \(daily cap is 0\)/, "deferred");
+  await expectSendRefusal(
+    { guard: { status: "paused", since: null, reason: "1 spam complaint in 14 days", okDays: 0 } },
+    /paused by the deliverability guard \(1 spam complaint/,
+    "deferred",
+  );
+  await expectSendRefusal({ sendsEnabled: false }, /frozen/, "deferred");
+  await expectSendRefusal({ vetting: null }, /has not been vetted/, "deferred");
+  await expectSendRefusal({ vetting: vettingRow({ status: "review", score: 48 }) }, /48\/100/, "deferred");
+  await expectSendRefusal({ vetting: vettingRow({ status: "error" }) }, /could not complete/, "deferred");
+  await expectSendRefusal({ facts: [factRow(1, "space", "The Barn")] }, /cites 1 verified venue fact/, "deferred");
+  await expectSendRefusal({ subject: "Re: your venue" }, /fake a reply/, "deferred");
+  await expectSendRefusal({ config: { postalAddressIsPlaceholder: true } }, /OUTREACH_POSTAL_ADDRESS/, "deferred");
+  await expectSendRefusal({ config: { replyTo: null } }, /OUTREACH_REPLY_TO is not set/, "deferred");
+  await expectSendRefusal({ config: { replyTo: "sam@gmail.com" } }, /free-mail/, "deferred");
+  await expectSendRefusal({ config: { sandboxSender: true } }, /sandbox/, "deferred");
+  await expectSendRefusal({ config: { resendConfigured: false } }, /RESEND_API_KEY/, "deferred");
+  await expectSendRefusal({ lastContactedAt: new Date(SEND_NOW.getTime() - 10 * 3_600_000) }, /72h gap/, "deferred");
+  await expectSendRefusal({ campaignId: 3, campaignStatus: "paused" }, /Campaign 3 is "paused"/, "deferred");
+});
+
+test("sender: blocked recipients and provider rejections fail the email", async () => {
+  await expectSendRefusal({ suppressed: true }, /suppression list/, "failed");
+  await expectSendRefusal({ vetting: vettingRow({ status: "failed", summary: "Failed 12/100: parked domain" }) }, /may not be emailed/, "failed");
+  await expectSendRefusal({ campaignId: 3, campaignStatus: "completed" }, /Campaign 3 is "completed"/, "failed");
+  await expectSendRefusal({ deliverError: "The email provider rejected the send." }, /provider rejected/, "failed");
+});
+
+test("sender: an expired passed verdict re-vets once and sends when it still passes; vetting runs before config checks", async () => {
+  const expired = vettingRow({ expiresAt: new Date(SEND_NOW.getTime() - 3_600_000) });
+  const ok = fakeSendWorld({ vetting: expired, revet: vettingRow() });
+  const result = await sender.sendOutreachEmail(42, ok.deps);
+  assert.equal(result.sent, true);
+  assert.equal(ok.calls.revet.length, 1);
+
+  const stale = await expectSendRefusal(
+    { vetting: expired, revet: vettingRow({ status: "review", score: 50, expiresAt: new Date(SEND_NOW.getTime() + 86_400_000) }) },
+    /needs an operator decision/,
+    "deferred",
+  );
+  assert.equal(stale.calls.revet.length, 1);
+
+  // With delivery unconfigured, the vetting refusal still comes first.
+  await expectSendRefusal({ vetting: vettingRow({ status: "failed" }), config: { resendConfigured: false } }, /may not be emailed/, "failed");
+});
+
+test("sender: the cap message distinguishes a guard pause from a normal cap", () => {
+  assert.match(sender.dailyCapMessage({ cap: 0, sentToday: 0 }), /paused/);
+  assert.match(sender.dailyCapMessage({ cap: 10, sentToday: 10 }), /10\/10/);
+});
+
+test("contact guards: refusal codes separate a waiting gap from permanent blocks", () => {
+  const ok = { suppressed: false, existingCustomerSlug: null };
+  const codeOf = (fn: () => void): string | null => {
+    try {
+      fn();
+      return null;
+    } catch (err) {
+      return (err as InstanceType<typeof guards.ContactGuardError>).code;
+    }
+  };
+  assert.equal(codeOf(() => guards.assertProspectContactable(baseProspect, policy, { ...ok, suppressed: true })), "suppressed");
+  assert.equal(codeOf(() => guards.assertProspectContactable({ ...baseProspect, status: "replied" }, policy, ok)), "status");
+  assert.equal(codeOf(() => guards.assertProspectContactable({ ...baseProspect, contactCount: 3 }, policy, ok)), "lifetime_cap");
+  assert.equal(
+    codeOf(() =>
+      guards.assertProspectContactable({ ...baseProspect, lastContactedAt: new Date(SEND_NOW.getTime() - 3_600_000) }, policy, ok, SEND_NOW),
+    ),
+    "gap",
+  );
+});
+
+/* ————— Studio rules (pure) ————— */
+
+test("studio: campaign touches must be active, enrolled, and in step order", () => {
+  const prospect = { id: 1, campaignId: 3, campaignStep: 1 };
+  const campaign = { id: 3, status: "active", steps: [{ step: 1 }, { step: 2 }, { step: 3 }] };
+  assert.deepEqual(studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect, campaign }), { campaignId: 3, step: 2 });
+  assert.throws(() => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: 3, prospect, campaign }), /due step 2/);
+  assert.throws(
+    () => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect, campaign: { ...campaign, status: "paused" } }),
+    /only active campaigns/,
+  );
+  assert.throws(
+    () => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect: { ...prospect, campaignId: 9 }, campaign }),
+    /not enrolled/,
+  );
+  assert.throws(
+    () => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect: { ...prospect, campaignStep: 3 }, campaign }),
+    /completed the sequence/,
+  );
+  // An inherited campaign that is not active simply makes the note a standalone touch.
+  assert.deepEqual(
+    studioModule.resolveCampaignTouch({ requestedCampaignId: null, requestedStep: null, prospect, campaign: { ...campaign, status: "draft" } }),
+    { campaignId: null, step: null },
+  );
+  assert.deepEqual(
+    studioModule.resolveCampaignTouch({ requestedCampaignId: null, requestedStep: null, prospect: { ...prospect, campaignId: null }, campaign: null }),
+    { campaignId: null, step: null },
+  );
+});
+
+test("studio: failed research waits a day before re-crawling; good research lasts two weeks", () => {
+  const now = new Date("2026-10-08T12:00:00Z");
+  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000);
+  assert.equal(studioModule.researchIsFresh({ status: "fetch_failed", fetchedAt: hoursAgo(2) }, now), true);
+  assert.equal(studioModule.researchIsFresh({ status: "fetch_failed", fetchedAt: hoursAgo(25) }, now), false);
+  assert.equal(studioModule.researchIsFresh({ status: "ok", fetchedAt: hoursAgo(24 * 13) }, now), true);
+  assert.equal(studioModule.researchIsFresh({ status: "no_images", fetchedAt: hoursAgo(24 * 15) }, now), false);
+});
+
+test("studio: provider events are monotonic; opens and clicks stamp their first time", () => {
+  const at = new Date("2026-10-08T12:00:00Z");
+  const base = { status: "sent", deliveredAt: null, openedAt: null, clickedAt: null };
+  assert.deepEqual(studioModule.deliveryEventPatch(base, { eventType: "delivered", at }), { deliveredAt: at, status: "delivered" });
+  assert.deepEqual(studioModule.deliveryEventPatch({ ...base, status: "bounced" }, { eventType: "delivered", at }), { deliveredAt: at });
+  assert.deepEqual(studioModule.deliveryEventPatch({ ...base, status: "complained" }, { eventType: "bounced", at }), {});
+  assert.equal(studioModule.deliveryEventPatch({ ...base, status: "delivered" }, { eventType: "complained", at }).status, "complained");
+  assert.deepEqual(studioModule.deliveryEventPatch(base, { eventType: "opened", at }), { openedAt: at });
+  assert.deepEqual(studioModule.deliveryEventPatch({ ...base, openedAt: at }, { eventType: "opened", at: new Date() }), {});
+  assert.deepEqual(studioModule.deliveryEventPatch(base, { eventType: "clicked", at }), { openedAt: at, clickedAt: at });
+  assert.equal(webhook.EVENT_MAP["email.opened"], "opened");
+  assert.equal(webhook.EVENT_MAP["email.clicked"], "clicked");
+});
+
+test("claim links: the default CTA is the tracked claim URL with UTM parameters", () => {
+  delete process.env.OUTREACH_CTA_URL;
+  const url = new URL(configModule.outreachDefaultCtaUrl("Willow House", { token: "claimtoken1234567890", campaignId: 3, variantKey: "v2" }));
+  assert.equal(url.origin, "https://studio.test");
+  assert.equal(url.pathname, "/claim/claimtoken1234567890");
+  assert.equal(url.searchParams.get("utm_source"), "dreemer-outreach");
+  assert.equal(url.searchParams.get("utm_medium"), "email");
+  assert.equal(url.searchParams.get("utm_campaign"), "campaign-3");
+  assert.equal(url.searchParams.get("utm_content"), "v2");
+  const firstTouch = new URL(configModule.claimUrl("tok_abcdefghijklmnop"));
+  assert.equal(firstTouch.searchParams.get("utm_campaign"), "first-touch");
+});
+
+test("webhook: inbound replies are matched by the sender address", () => {
+  assert.equal(webhook.inboundSenderAddress("Dana Whitfield <Dana@WillowHouse.test>"), "dana@willowhouse.test");
+  assert.equal(webhook.inboundSenderAddress([{ email: "owner@venue.test", name: "Owner" }]), "owner@venue.test");
+  assert.equal(webhook.inboundSenderAddress("not an address"), null);
+  assert.equal(webhook.inboundSenderAddress(undefined), null);
+});
+
+test("venue email: operational notes carry a why-line, the postal address and List-Unsubscribe", () => {
+  const rendered = venueEmail.renderVenueEmail({
+    subject: "Your first gallery",
+    paragraphs: ["Hi Dana,", "Your QR card is <ready>."],
+    venueName: "Willow House",
+    postalAddress: "Dreemer · 1 Main St",
+    unsubscribeMailbox: "hello@dreemer.co",
+  });
+  assert.match(rendered.html, /&lt;ready&gt;/);
+  assert.match(rendered.text, /you manage Willow House/);
+  assert.match(rendered.text, /Dreemer · 1 Main St/);
+  assert.equal(rendered.headers["List-Unsubscribe"], "<mailto:hello@dreemer.co?subject=unsubscribe>");
+  assert.deepEqual(
+    venueEmail.renderVenueEmail({ subject: "s", paragraphs: ["x"], venueName: "V", postalAddress: "a", unsubscribeMailbox: null }).headers,
+    {},
+  );
+});
