@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { eq, and, sql, gte, gt, isNull } from "drizzle-orm";
+import { eq, and, sql, gte, gt, isNull, ne } from "drizzle-orm";
 import {
   db,
   coupleSessionsTable,
@@ -434,6 +434,19 @@ async function notifyCreditsExhausted(
   if (!result.sent) logger.warn({ venueId: venue.id, reason: result.reason }, "Credits-exhausted owner email not sent");
 }
 
+/**
+ * Credits that re-arm the low-credit email: purchases and grants only. A
+ * session_refund gives back a credit the org already had, so it is not a new
+ * grant and must not cause another "low credit" email after each failure.
+ */
+export function lowCreditGrantWhere(organizationId: number) {
+  return and(
+    eq(creditTransactionsTable.organizationId, organizationId),
+    gt(creditTransactionsTable.delta, 0),
+    ne(creditTransactionsTable.reason, "session_refund"),
+  );
+}
+
 async function maybeSendLowCreditEmail(venue: CreateVenueRow): Promise<void> {
   if (venue.organizationId == null) return;
   const [org] = await db
@@ -447,7 +460,7 @@ async function maybeSendLowCreditEmail(venue: CreateVenueRow): Promise<void> {
   const [grant] = await db
     .select({ createdAt: sql<Date | string | null>`max(${creditTransactionsTable.createdAt})` })
     .from(creditTransactionsTable)
-    .where(and(eq(creditTransactionsTable.organizationId, venue.organizationId), gt(creditTransactionsTable.delta, 0)));
+    .where(lowCreditGrantWhere(venue.organizationId));
   const lastGrantAt = grant?.createdAt ? new Date(grant.createdAt) : null;
   if (!shouldSendLowCreditEmail({ balance: org.creditsBalance, lowCreditNotifiedAt: org.lowCreditNotifiedAt, lastGrantAt })) return;
 

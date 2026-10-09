@@ -248,27 +248,37 @@ export async function setOrgCreditsBalance(
 }
 
 
+/**
+ * Guard for clearing a session's charge: only a session that ended `failed`
+ * is ever refunded (a gallery that turned ready was delivered and keeps its
+ * charge, even if a deadline or the reaper calls failSession late), and the
+ * charge must still be the amount we read, so a refund happens once.
+ */
+export function refundableSessionWhere(sessionId: number, creditsCharged: number) {
+  return and(
+    eq(coupleSessionsTable.id, sessionId),
+    eq(coupleSessionsTable.status, "failed"),
+    eq(coupleSessionsTable.creditsCharged, creditsCharged),
+  );
+}
+
 export async function refundCreditsForSession(sessionId: number): Promise<boolean> {
   const refunded = await db.transaction(async (tx) => {
     const [session] = await tx
       .select({
         venueId: coupleSessionsTable.venueId,
+        status: coupleSessionsTable.status,
         creditsCharged: coupleSessionsTable.creditsCharged,
       })
       .from(coupleSessionsTable)
       .where(eq(coupleSessionsTable.id, sessionId));
 
-    if (!session || session.creditsCharged <= 0) return null;
+    if (!session || session.status !== "failed" || session.creditsCharged <= 0) return null;
 
     const [cleared] = await tx
       .update(coupleSessionsTable)
       .set({ creditsCharged: 0 })
-      .where(
-        and(
-          eq(coupleSessionsTable.id, sessionId),
-          eq(coupleSessionsTable.creditsCharged, session.creditsCharged),
-        ),
-      )
+      .where(refundableSessionWhere(sessionId, session.creditsCharged))
       .returning({ id: coupleSessionsTable.id });
 
     if (!cleared) return null;

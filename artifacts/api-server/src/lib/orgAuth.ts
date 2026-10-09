@@ -415,6 +415,26 @@ function trialClaimantOnce(clerkOrgId: string, clerkUserId: string): string | nu
   return clerkUserId;
 }
 
+/**
+ * Run fn with the acting user offered as trial claimant (once per org+user
+ * per process). The memo is only kept when fn completes: a claim that threw
+ * (a DB timeout, a reset connection) is offered again on the next request,
+ * so a transient error never leaves the org without its trial.
+ */
+export async function withTrialClaimantOnce<T>(
+  clerkOrgId: string,
+  clerkUserId: string,
+  fn: (claimant: string | null) => Promise<T>,
+): Promise<T> {
+  const claimant = trialClaimantOnce(clerkOrgId, clerkUserId);
+  try {
+    return await fn(claimant);
+  } catch (err) {
+    if (claimant) trialClaimAttempted.delete(`${clerkOrgId}:${clerkUserId}`);
+    throw err;
+  }
+}
+
 /** Test hook: forget the per-process memos. */
 export function resetOrgAuthMemos(): void {
   adoptionAttempted.clear();
@@ -510,9 +530,10 @@ export async function requireOrg(req: Request, res: Response): Promise<OrgContex
     return null;
   }
 
-  let org = await ensureOrganizationByClerkId(auth.orgId, undefined, {
-    clerkUserId: trialClaimantOnce(auth.orgId, auth.userId),
-  });
+  const clerkOrgId = auth.orgId;
+  let org = await withTrialClaimantOnce(clerkOrgId, auth.userId, (claimant) =>
+    ensureOrganizationByClerkId(clerkOrgId, undefined, { clerkUserId: claimant }),
+  );
 
   org = await runFirstTouchPasses(org, auth.userId);
 
@@ -532,9 +553,10 @@ export async function getCallerOrgDbId(req: Request): Promise<number | null> {
   if (!clerkEnabled()) return null;
   const auth = getAuth(req);
   if (!auth.userId || !auth.orgId) return null;
-  const org = await ensureOrganizationByClerkId(auth.orgId, undefined, {
-    clerkUserId: trialClaimantOnce(auth.orgId, auth.userId),
-  });
+  const clerkOrgId = auth.orgId;
+  const org = await withTrialClaimantOnce(clerkOrgId, auth.userId, (claimant) =>
+    ensureOrganizationByClerkId(clerkOrgId, undefined, { clerkUserId: claimant }),
+  );
   return org.id;
 }
 

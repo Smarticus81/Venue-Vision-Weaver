@@ -152,6 +152,18 @@ test("low-credit email goes out once per dip, again only after a later grant", (
   );
 });
 
+test("a session_refund never re-arms the low-credit email (only purchases and grants do)", async () => {
+  const { db, creditTransactionsTable } = await import("@workspace/db");
+  const query = db
+    .select({ id: creditTransactionsTable.id })
+    .from(creditTransactionsTable)
+    .where(sessions.lowCreditGrantWhere(12))
+    .toSQL();
+  assert.match(query.sql, /"reason" <> \$\d/);
+  assert.ok(query.params.includes("session_refund"));
+  assert.ok(query.params.includes(12));
+});
+
 test("gallery recovery matches the address exactly (lower(email) = $1), never with LIKE", () => {
   const query = sessions.recoverableSessionsQuery("a_b%c@example.com").toSQL();
   assert.match(query.sql, /lower\("couple_sessions"\."couple_email"\) = \$\d/);

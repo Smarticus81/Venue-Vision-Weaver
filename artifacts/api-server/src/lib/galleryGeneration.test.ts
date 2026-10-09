@@ -19,9 +19,11 @@ const { GalleryJudgeUnavailableError, GalleryQualityError } = await import("./ga
 const { StillImageBlockedError, StillImageRequestError, SessionDeadlineError } = await import("./stillImageErrors.js");
 const { createSessionWorker, REAPER_GRACE_MS, sessionDeadlineMsFromEnv, maxConcurrentSessionsFromEnv } =
   await import("./sessionWorker.js");
-const { deliverReadyGallery, deliveryHoldReason, failSession, failureDetailFor } = await import(
+const { deliverReadyGallery, deliveryHoldReason, failSession, failureDetailFor, reconcileFailedRefunds } = await import(
   "./gallerySessionPipeline.js"
 );
+const { refundableSessionWhere } = await import("./credits.js");
+const { db, coupleSessionsTable } = await import("@workspace/db");
 const { renderPriceEnvKey, renderUnitPriceUsd, summarizeRenderCost } = await import("./renderTelemetry.js");
 const { composeReelFrame, kenBurnsFilter, strokeTextFor, buildReelTitleCard, layoutVenueTitle } = await import(
   "./motionReel.js"
@@ -513,6 +515,31 @@ test("failSession is a no-op for funnel when another path already failed the ses
   assert.equal(await failSession({ id: 42, venueId: 3 }, new SessionDeadlineError(1000), deps), false);
   assert.equal(calls.funnel.length, 0);
   assert.equal(calls.refunds, 1, "the refund itself is idempotent (credits_charged guard)");
+});
+
+test("refund guard only matches a failed session, so a gallery that turned ready keeps its charge", () => {
+  const query = db
+    .update(coupleSessionsTable)
+    .set({ creditsCharged: 0 })
+    .where(refundableSessionWhere(42, 1))
+    .toSQL();
+  assert.match(query.sql, /"status" = \$\d+/);
+  assert.ok(query.params.includes("failed"));
+  assert.ok(query.params.includes(42));
+});
+
+test("reconcileFailedRefunds retries refunds for failed sessions that still hold a charge", async () => {
+  const attempted: number[] = [];
+  const refunded = await reconcileFailedRefunds({
+    listFailedCharged: async () => [7, 8, 9],
+    refund: async (id) => {
+      attempted.push(id);
+      if (id === 8) throw new Error("connection reset");
+      return id === 7;
+    },
+  });
+  assert.deepEqual(attempted, [7, 8, 9]);
+  assert.deepEqual(refunded, [7]);
 });
 
 test("failSession forces the failed status when the guarded update throws", async () => {

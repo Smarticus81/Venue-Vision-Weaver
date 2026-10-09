@@ -152,19 +152,51 @@ function invoiceLines(invoice: unknown): LooseRecord[] {
   return data.map(asRecord).filter((line): line is LooseRecord => line != null);
 }
 
+function linePriceId(line: LooseRecord): string | null {
+  return idOf(line.price) ?? idOf(asRecord(asRecord(line.pricing)?.price_details)?.price);
+}
+
+/** Classic `line.proration`, or basil `line.parent.{subscription,invoice}_item_details.proration`. */
+function isProrationLine(line: LooseRecord): boolean {
+  if (line.proration === true) return true;
+  const parent = asRecord(line.parent);
+  return (
+    asRecord(parent?.subscription_item_details)?.proration === true ||
+    asRecord(parent?.invoice_item_details)?.proration === true
+  );
+}
+
 /** Price ids on the invoice lines, classic `line.price.id` or basil `line.pricing.price_details.price`. */
 export function invoiceLinePriceIds(invoice: unknown): string[] {
   const ids: string[] = [];
   for (const line of invoiceLines(invoice)) {
-    const classic = idOf(line.price);
-    if (classic) {
-      ids.push(classic);
-      continue;
-    }
-    const basil = idOf(asRecord(asRecord(line.pricing)?.price_details)?.price);
-    if (basil) ids.push(basil);
+    const id = linePriceId(line);
+    if (id) ids.push(id);
   }
   return ids;
+}
+
+/**
+ * Price ids of what the invoice actually bills, best evidence first: the
+ * regular (non-proration) period lines, then positive proration lines
+ * ("Remaining time on Growth"). Credit lines for unused time on the old price
+ * ("Unused time on Starter", negative) are never used, so an upgrade or a
+ * downgrade is read as the new tier, not the one being left.
+ */
+export function invoiceBilledPriceIds(invoice: unknown): string[] {
+  const regular: string[] = [];
+  const prorated: string[] = [];
+  for (const line of invoiceLines(invoice)) {
+    const id = linePriceId(line);
+    if (!id) continue;
+    if (!isProrationLine(line)) {
+      regular.push(id);
+      continue;
+    }
+    const amount = line.amount;
+    if (typeof amount === "number" && amount > 0) prorated.push(id);
+  }
+  return [...regular, ...prorated];
 }
 
 /** Latest line period end (unix seconds) on the invoice, or null. */
