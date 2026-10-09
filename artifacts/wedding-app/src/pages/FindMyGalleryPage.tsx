@@ -1,25 +1,27 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Mail, Check } from "lucide-react";
-import { requestRecoveryEmail } from "@/lib/savedSessions";
-import { FormLayout } from "@/components/layout/SiteChrome";
+import { Loader2, Check } from "lucide-react";
+import { requestRecoveryEmail } from "@/lib/recovery";
+import { CoupleChrome } from "@/components/layout/CoupleChrome";
 export default function FindMyGalleryPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <FormLayout
-      label="Find my gallery"
-      title="Get your gallery link again."
-      description="Enter the email you used when you made your gallery. We’ll send your private links to that address."
-    >
-      <div aria-live="polite">
+    <CoupleChrome venue={null} fallbackName="Find my gallery">
+      <section className="cp-message" aria-live="polite">
+        <p className="eyebrow">Find my gallery</p>
+        <h1>Get your gallery link again.</h1>
+        <p>
+          Enter the email you used when you made your gallery. We’ll send your private links to that address.
+        </p>
         {submitted ? (
           <>
-            <Check className="text-success mb-4" />
-            <h2>Check your inbox</h2>
+            <h2 className="cp-recover__done">
+              <Check className="text-success" aria-hidden /> Check your inbox
+            </h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
               If a gallery is linked to <strong>{email}</strong>, you’ll receive
               an email with your links. Check your spam folder too.
@@ -39,10 +41,8 @@ export default function FindMyGalleryPage() {
           </>
         ) : (
           <>
-            <Mail className="text-brand mb-4" />
-            <h2>Find my gallery</h2>
             <form
-              className="space-y-4"
+              className="cp-recover"
               onSubmit={async (e) => {
                 e.preventDefault();
                 setLoading(true);
@@ -104,7 +104,7 @@ export default function FindMyGalleryPage() {
             </p>
           </>
         )}
-      </div>
-    </FormLayout>
+      </section>
+    </CoupleChrome>
   );
 }

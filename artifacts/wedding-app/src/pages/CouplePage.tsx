@@ -1,850 +1,1310 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Link, useLocation, useParams } from "wouter";
 import {
-  SiteHeader,
-  SiteFooter,
-  FormLayout,
-} from "@/components/layout/SiteChrome";
-import { useState, useRef, useEffect } from "react";
-import { useParams, useLocation } from "wouter";
-import {
-  useGetVenue,
   getGetVenueQueryKey,
   useCreateSession,
+  useGetVenue,
   useListGalleryStyles,
-  type VenuePublicResponse,
-  type GalleryStyleSummary,
   type ErrorEnvelope,
   type ErrorType,
+  type GalleryStyleSummary,
+  type VenuePublicResponse,
 } from "@workspace/api-client-react";
-import { useUpload } from "@workspace/object-storage-web";
-import { useToast } from "@/hooks/use-toast";
-import { useSavedSessions } from "@/lib/savedSessions";
+import { ArrowLeft, ArrowRight, Camera, Check, ImagePlus, Loader2, RotateCcw, X } from "lucide-react";
+import { CoupleChrome } from "@/components/layout/CoupleChrome";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { usePublicConfig } from "@/lib/publicConfig";
 import {
-  Loader2,
-  Camera,
-  X,
-  Images,
-  Clock,
-  Check,
-  Home,
-  Mail,
-  ArrowRight,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+  EMPTY_COUPLE_DRAFT,
+  clearCoupleDraft,
+  loadCoupleDraft,
+  resumableStep,
+  saveCoupleDraft,
+  type CoupleDraft,
+} from "@/lib/recovery";
+import {
+  formatWeddingMonth,
+  rememberCreatedGallery,
+  sessionStore,
+  venueMediaUrl,
+  weddingMonthOptions,
+} from "@/lib/shareSession";
+import { initialStyleId, orderStyles, styleSample } from "@/lib/styleSamples";
 
-function venueMediaUrl(
-  objectKey: string | undefined,
-  venueSlug: string,
-): string {
-  if (!objectKey) return "";
-  return `/api/storage${objectKey}?venueSlug=${encodeURIComponent(venueSlug)}`;
-}
+/* ————— Photo rules (mirror lib/referenceImage.ts and routes/storage.ts) ————— */
 
 const MAX_COUPLE_PHOTOS = 3;
-const MIN_COUPLE_PHOTOS = 1;
+const MIN_COUPLE_PHOTOS = 2;
 const MIN_COUPLE_PHOTO_EDGE = 256;
 const MAX_COUPLE_PHOTO_BYTES = 50 * 1024 * 1024;
-const ALLOWED_COUPLE_PHOTO_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
+/** Long edge after client downscale: plenty for likeness, fast on a phone connection. */
+const MAX_UPLOAD_EDGE = 2048;
+const UPLOAD_JPEG_QUALITY = 0.88;
+/** The couple upload token lives 20 minutes; refresh it a little before that. */
+const UPLOAD_TOKEN_REFRESH_MS = 15 * 60 * 1000;
 const COUPLE_REFERENCE_ROLES = ["Together", "Partner A", "Partner B"] as const;
 const COUPLE_REFERENCE_GUIDANCE = [
   "Both faces visible",
   "Face forward, close up",
   "Face forward, close up",
 ] as const;
+const ACCEPTED_PHOTO_TYPES = "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const STEP_LABELS = ["Your venue", "Your photos", "Your look"] as const;
 
-export default function CouplePage() {
-  const { slug } = useParams<{ slug: string }>();
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
+type SlotIndex = 0 | 1 | 2;
 
-  const [step, setStep] = useState(1);
-  const flowRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (step > 1) {
-      flowRef.current?.focus({ preventScroll: true });
-      flowRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
-    }
-  }, [step]);
-  // Successful uploads keyed by File so a retry after a failure never re-uploads them.
-  const uploadedKeysRef = useRef(new Map<File, string>());
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
-  const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
-  const [coupleName, setCoupleName] = useState("");
-  const [coupleEmail, setCoupleEmail] = useState("");
+interface SlotPhoto {
+  id: string;
+  blob: Blob;
+  name: string;
+  previewUrl: string;
+  /** Object key once uploaded; cleared when the server says it is stale. */
+  uploadedKey: string | null;
+  /** 0-100 while uploading, null otherwise. */
+  progress: number | null;
+  error: string | null;
+}
 
-  const venueQuery = useGetVenue(slug!, {
-    query: { enabled: !!slug, queryKey: getGetVenueQueryKey(slug!), retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1 },
-  });
-  const stylesQuery = useListGalleryStyles();
+type Slots = [SlotPhoto | null, SlotPhoto | null, SlotPhoto | null];
+const EMPTY_SLOTS: Slots = [null, null, null];
 
-  const createSession = useCreateSession();
-  const { uploadFile, isUploading } = useUpload({
-    purpose: "couple",
-    venueSlug: slug,
-    uploadToken: venueQuery.data?.uploadToken,
-  });
-  const { save: saveSession } = useSavedSessions(slug);
+/* ————— Photo preparation ————— */
 
-  const validatePhotoDimensions = (file: File): Promise<boolean> =>
-    new Promise((resolve) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        resolve(
-          img.width >= MIN_COUPLE_PHOTO_EDGE &&
-            img.height >= MIN_COUPLE_PHOTO_EDGE,
-        );
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(false);
-      };
-      img.src = url;
-    });
+class PhotoProblem extends Error {}
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    const remainingSlots = MAX_COUPLE_PHOTOS - selectedFiles.length;
-    if (remainingSlots <= 0) {
-      toast({
-        title: "Photo limit reached",
-        description: `Use your best ${MAX_COUPLE_PHOTOS} couple reference photos.`,
-      });
-      e.target.value = "";
-      return;
-    }
+function isHeicFile(file: File): boolean {
+  return /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+}
 
-    const accepted: File[] = [];
-    for (const file of files) {
-      if (accepted.length >= remainingSlots) {
-        toast({
-          title: "Photo limit reached",
-          description: `We kept the first ${remainingSlots} valid photo${remainingSlots === 1 ? "" : "s"} from this selection.`,
-        });
-        break;
-      }
-      if (!ALLOWED_COUPLE_PHOTO_TYPES.has(file.type)) {
-        toast({
-          title: "Unsupported photo type",
-          description: "Upload JPG, PNG, or WebP images.",
-          variant: "destructive",
-        });
-        continue;
-      }
-      if (file.size > MAX_COUPLE_PHOTO_BYTES) {
-        toast({
-          title: "Photo too large",
-          description: "Upload images up to 50MB.",
-          variant: "destructive",
-        });
-        continue;
-      }
-      const ok = await validatePhotoDimensions(file);
-      if (!ok) {
-        toast({
-          title: "Photo too small",
-          description:
-            "Use clear photos at least 256px wide and tall, with both faces visible and well lit.",
-          variant: "destructive",
-        });
-        continue;
-      }
-      accepted.push(file);
-    }
+function isAcceptedFile(file: File): boolean {
+  return /^image\/(jpeg|png|webp)$/i.test(file.type) || isHeicFile(file);
+}
 
-    if (accepted.length > 0) {
-      setSelectedFiles((prev) => {
-        const combined = [...prev, ...accepted];
-        return combined.slice(0, MAX_COUPLE_PHOTOS);
-      });
-      setPreviews((prev) => {
-        const newPreviews = accepted.map((file) => URL.createObjectURL(file));
-        return [...prev, ...newPreviews].slice(0, MAX_COUPLE_PHOTOS);
-      });
-    }
-    e.target.value = "";
-  };
+type Decoded = { source: CanvasImageSource; width: number; height: number; release: () => void };
 
-  const handleRemovePhoto = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-    setPreviews((prev) => {
-      const url = prev[index];
-      if (url) URL.revokeObjectURL(url);
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
-  const handleSubmit = async () => {
-    const email = coupleEmail.trim().toLowerCase();
-    if (selectedFiles.length < MIN_COUPLE_PHOTOS || !selectedStyleId || !email)
-      return;
-    if (!EMAIL_PATTERN.test(email)) {
-      toast({
-        title: "Check your email address",
-        description:
-          "We need a valid email so you can find your gallery again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setStep(4);
+async function decodeImage(file: Blob): Promise<Decoded> {
+  if (typeof createImageBitmap === "function") {
     try {
-      const objectKeys = await Promise.all(
-        selectedFiles.map(async (file) => {
-          const cached = uploadedKeysRef.current.get(file);
-          if (cached) return cached;
-          const result = await uploadFile(file);
-          if (!result) throw new Error("upload-failed");
-          uploadedKeysRef.current.set(file, result.objectPath);
-          return result.objectPath;
-        }),
-      );
-
-      createSession.mutate(
-        {
-          slug: slug!,
-          data: {
-            couplePhotoKeys: objectKeys,
-            styleId: selectedStyleId,
-            coupleName: coupleName.trim() || undefined,
-            coupleEmail: email,
-          },
-        },
-        {
-          onSuccess: (session) => {
-            saveSession(session.shareToken, session.id, slug!);
-            setLocation(`/v/${session.shareToken}`);
-          },
-          onError: (err: ErrorType<ErrorEnvelope>) => {
-            setStep(3);
-            const msg = err.data?.error ?? "We couldn't start your session";
-            toast({
-              title:
-                err.status === 402
-                  ? "This venue is paused"
-                  : "We couldn't begin",
-              description:
-                err.status === 402
-                  ? "This venue is temporarily unavailable for new galleries. Please check with the venue team."
-                  : msg,
-              variant: "destructive",
-            });
-          },
-        },
-      );
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
     } catch {
-      setStep(3);
-      toast({
-        title: "Photos didn't upload",
-        description:
-          "Check your connection and tap Make my gallery again. Everything you entered is still here.",
-        variant: "destructive",
-      });
+      /* fall through to <img>, which is how Safari opens HEIC */
     }
-  };
+  }
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ source: img, width: img.naturalWidth, height: img.naturalHeight, release: () => {} });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("decode"));
+    };
+    img.src = url;
+  });
+}
 
-  if (venueQuery.isLoading) return <CoupleSkeleton />;
+function fitWithin(width: number, height: number, maxEdge: number): { width: number; height: number } {
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
 
-  if (venueQuery.isError || !venueQuery.data)
-    return (
-      <FormLayout
-        label="Venue code"
-        title="We couldn’t find that venue."
-        description="Check the code or link your venue gave you, then try again."
-      >
-        <h2>We couldn’t open this venue</h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Check the code “{slug}” and your connection, then try again.
-        </p>
-        <Button className="mt-6" onClick={() => void venueQuery.refetch()}>
-          Try again
-        </Button>
-        <Button
-          variant="ghost"
-          className="mt-3"
-          onClick={() => setLocation("/couple")}
-          data-testid="venue-notfound-home"
-        >
-          Enter another code
-        </Button>
-      </FormLayout>
+/**
+ * Turns whatever the phone gives us (JPG, PNG, WebP, or HEIC where the
+ * browser can open it) into an upright JPEG no longer than 2048px. Re-encoding
+ * also drops EXIF, so location data never leaves the phone.
+ */
+async function prepareCouplePhoto(file: File): Promise<{ blob: Blob; name: string }> {
+  if (!isAcceptedFile(file)) {
+    throw new PhotoProblem("Choose a JPG, PNG, WebP or HEIC photo.");
+  }
+  if (file.size > MAX_COUPLE_PHOTO_BYTES) {
+    throw new PhotoProblem("That photo is over 50MB. Choose a smaller copy.");
+  }
+  let image: Decoded;
+  try {
+    image = await decodeImage(file);
+  } catch {
+    throw new PhotoProblem(
+      isHeicFile(file)
+        ? "This browser can't open HEIC photos. Choose a JPG, or pick the photo from your phone's photo library."
+        : "We couldn't open that photo. Try another one.",
     );
-  const venue = venueQuery.data;
-  if (!venue.isReady)
-    return (
-      <FormLayout
-        label="Almost ready"
-        title="This venue is still setting up."
-        description={venue.name + " hasn’t finished adding photos yet."}
-      >
-        <h2>This venue isn’t ready yet</h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          The venue team is still adding photos of their spaces. Check back
-          soon.
-        </p>
-        <Button className="mt-6" onClick={() => void venueQuery.refetch()}>
-          Check again
-        </Button>
-        <Button
-          variant="ghost"
-          className="mt-3"
-          onClick={() => setLocation("/couple")}
-          data-testid="venue-not-ready-browse"
-        >
-          Try another venue code
-        </Button>
-      </FormLayout>
+  }
+  try {
+    if (image.width < MIN_COUPLE_PHOTO_EDGE || image.height < MIN_COUPLE_PHOTO_EDGE) {
+      throw new PhotoProblem("That photo is too small. Use one at least 256px wide and tall.");
+    }
+    const size = fitWithin(image.width, image.height, MAX_UPLOAD_EDGE);
+    const canvas = document.createElement("canvas");
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new PhotoProblem("We couldn't prepare that photo. Try another one.");
+    ctx.drawImage(image.source, 0, 0, size.width, size.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", UPLOAD_JPEG_QUALITY),
     );
+    if (!blob) throw new PhotoProblem("We couldn't prepare that photo. Try another one.");
+    const base = file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "photo";
+    return { blob, name: `${base}.jpg` };
+  } finally {
+    image.release();
+  }
+}
+
+/* ————— Upload with real progress ————— */
+
+class UploadProblem extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function uploadCouplePhoto(
+  photo: SlotPhoto,
+  venueSlug: string,
+  uploadToken: string | undefined,
+  onProgress: (percent: number) => void,
+): Promise<string> {
+  onProgress(2);
+  let res: Response;
+  try {
+    res = await fetch("/api/storage/uploads/request-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: photo.name,
+        size: photo.blob.size,
+        contentType: "image/jpeg",
+        purpose: "couple",
+        venueSlug,
+        uploadToken,
+      }),
+    });
+  } catch {
+    throw new UploadProblem("Check your connection and try again.", 0);
+  }
+  const data = (await res.json().catch(() => ({}))) as { uploadURL?: string; objectPath?: string; error?: string };
+  if (!res.ok || !data.uploadURL || !data.objectPath) {
+    throw new UploadProblem(data.error ?? "We couldn't start the upload. Try again.", res.status);
+  }
+  const uploadURL = data.uploadURL;
+  onProgress(5);
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadURL);
+    xhr.setRequestHeader("Content-Type", "image/jpeg");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress(5 + Math.round((event.loaded / event.total) * 94));
+      }
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new UploadProblem("The photo didn't finish uploading. Try again.", xhr.status));
+    xhr.onerror = () => reject(new UploadProblem("Check your connection and try again.", 0));
+    xhr.send(photo.blob);
+  });
+  onProgress(100);
+  return data.objectPath;
+}
+
+/* ————— Turnstile (only when the venue's server enforces it) ————— */
+
+interface TurnstileApi {
+  render(el: HTMLElement, options: Record<string, unknown>): string;
+  reset(id?: string): void;
+  remove(id?: string): void;
+}
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
+let turnstileScript: Promise<TurnstileApi> | null = null;
+
+function loadTurnstile(): Promise<TurnstileApi> {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (!turnstileScript) {
+    turnstileScript = new Promise<TurnstileApi>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error("turnstile")));
+      script.onerror = () => {
+        turnstileScript = null;
+        script.remove();
+        reject(new Error("turnstile"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return turnstileScript;
+}
+
+function TurnstileCheck({
+  siteKey,
+  resetSignal,
+  onToken,
+}: {
+  siteKey: string;
+  resetSignal: number;
+  onToken: (token: string | null) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const widgetId = useRef<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const onTokenRef = useRef(onToken);
+  onTokenRef.current = onToken;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTurnstile()
+      .then((api) => {
+        if (cancelled || !ref.current) return;
+        widgetId.current = api.render(ref.current, {
+          sitekey: siteKey,
+          action: "create_session",
+          theme: "auto",
+          callback: (token: string) => onTokenRef.current(token),
+          "expired-callback": () => onTokenRef.current(null),
+          "error-callback": () => onTokenRef.current(null),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (widgetId.current && window.turnstile) window.turnstile.remove(widgetId.current);
+      widgetId.current = null;
+    };
+  }, [siteKey]);
+
+  useEffect(() => {
+    if (resetSignal > 0 && widgetId.current && window.turnstile) {
+      window.turnstile.reset(widgetId.current);
+      onTokenRef.current(null);
+    }
+  }, [resetSignal]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans relative flex flex-col overflow-x-hidden">
-      <SiteHeader />
-      <main id="main-content" ref={flowRef} tabIndex={-1}>
-        <ol
-          className="creation-progress"
-          aria-label="Gallery creation progress"
-        >
-          {["Your venue", "Your photos", "Style & delivery"].map((label, i) => (
-            <li key={label} aria-current={step === i + 1 ? "step" : undefined}>
-              {i + 1}. {label}
-            </li>
-          ))}
-        </ol>
-        <AnimatePresence mode="wait">
-          {step === 1 && (
-            <VenueShowcase
-              key="step1"
-              venue={venue}
-              onNext={() => setStep(2)}
-            />
-          )}
-          {step === 2 && (
-            <UploadStep
-              key="step2"
-              previews={previews}
-              isUploading={isUploading || createSession.isPending}
-              onFileChange={handleFileChange}
-              onRemovePhoto={handleRemovePhoto}
-              onContinue={() => setStep(3)}
-              onBack={() => setStep(1)}
-            />
-          )}
-          {step === 3 && (
-            <StyleStep
-              key="step3"
-              styles={stylesQuery.data?.styles ?? []}
-              isLoading={stylesQuery.isLoading}
-              hasError={stylesQuery.isError}
-              onRetry={()=>void stylesQuery.refetch()}
-              selectedStyleId={selectedStyleId}
-              onSelect={setSelectedStyleId}
-              coupleName={coupleName}
-              onChangeCoupleName={setCoupleName}
-              coupleEmail={coupleEmail}
-              onChangeCoupleEmail={setCoupleEmail}
-              onSubmit={handleSubmit}
-              onBack={() => setStep(2)}
-              isSubmitting={isUploading || createSession.isPending}
-            />
-          )}
-          {step === 4 && <SubmittingStep key="step4" />}
-        </AnimatePresence>
-      </main>
-      <SiteFooter />
+    <div className="cp-turnstile">
+      <div ref={ref} />
+      {failed ? (
+        <p role="alert" className="cp-field-error">
+          The quick security check didn't load. Check your connection, then refresh this page.
+        </p>
+      ) : null}
     </div>
   );
 }
 
-interface VenueShowcaseProps {
-  venue: VenuePublicResponse;
-  onNext: () => void;
+/* ————— Page ————— */
+
+function errorCode(err: ErrorType<ErrorEnvelope>): string | undefined {
+  return (err.data as { code?: string } | null | undefined)?.code;
 }
 
-function VenueShowcase({ venue, onNext }: VenueShowcaseProps) {
-  const [currentPhoto, setCurrentPhoto] = useState(0);
+function pushStep(step: number) {
+  try {
+    window.history.pushState({ ...(window.history.state ?? {}), coupleStep: step }, "");
+  } catch {
+    /* history unavailable */
+  }
+}
+
+export default function CouplePage() {
+  const { slug = "" } = useParams<{ slug: string }>();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const config = usePublicConfig();
+
+  const venueQuery = useGetVenue(slug, {
+    query: {
+      enabled: !!slug,
+      queryKey: getGetVenueQueryKey(slug),
+      retry: (count, err) => (err as { status?: number }).status !== 404 && count < 2,
+      refetchOnWindowFocus: false,
+    },
+  });
+  const stylesQuery = useListGalleryStyles();
+  const createSession = useCreateSession();
+
+  const [step, setStep] = useState(1);
+  const [slots, setSlots] = useState<Slots>(EMPTY_SLOTS);
+  const slotsRef = useRef<Slots>(EMPTY_SLOTS);
+  slotsRef.current = slots;
+  const [draft, setDraft] = useState<CoupleDraft>(EMPTY_COUPLE_DRAFT);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<"uploading" | "starting">("uploading");
+  const [formError, setFormError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  submittingRef.current = submitting;
+  const mainRef = useRef<HTMLElement>(null);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  const filledCount = slots.filter(Boolean).length;
+  const venue = venueQuery.data;
+
+  /* Restore the in-tab draft once per venue. */
+  useEffect(() => {
+    if (!slug) return;
+    const saved = loadCoupleDraft(sessionStore(), slug, Date.now());
+    const initial = resumableStep(saved, 0, MIN_COUPLE_PHOTOS);
+    if (saved) {
+      setDraft({ ...saved, step: initial });
+      setRestoredDraft(initial >= 2);
+    }
+    setStep(initial);
+    setDraftLoaded(true);
+    try {
+      window.history.replaceState({ ...(window.history.state ?? {}), coupleStep: initial }, "");
+    } catch {
+      /* history unavailable */
+    }
+  }, [slug]);
+
+  /* Persist the draft (never photos, never consent). */
+  useEffect(() => {
+    if (!draftLoaded || !slug || step > 3) return;
+    saveCoupleDraft(sessionStore(), slug, { ...draft, step }, Date.now());
+  }, [draft, step, slug, draftLoaded]);
+
+  /* Preselect the default style once styles load. */
+  const styles = useMemo(() => orderStyles(stylesQuery.data?.styles ?? []), [stylesQuery.data]);
+  useEffect(() => {
+    if (styles.length === 0 || !draftLoaded) return;
+    setDraft((d) => {
+      const id = initialStyleId(styles, d.styleId);
+      return id === d.styleId ? d : { ...d, styleId: id };
+    });
+  }, [styles, draftLoaded]);
+
+  /* One history entry per step so the back gesture moves between steps. */
+  const goToStep = useCallback((next: number) => {
+    setFormError(null);
+    setStep(next);
+    pushStep(next);
+  }, []);
+
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const wanted = (event.state as { coupleStep?: number } | null)?.coupleStep;
+      if (typeof wanted !== "number") return;
+      if (submittingRef.current) {
+        pushStep(4);
+        return;
+      }
+      const filled = slotsRef.current.filter(Boolean).length;
+      setStep(wanted >= 3 && filled < MIN_COUPLE_PHOTOS ? 2 : Math.min(Math.max(wanted, 1), 3));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  useEffect(() => {
+    if (step > 1) {
+      mainRef.current?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0 });
+    }
+  }, [step]);
+
+  /* Release preview URLs when the page goes away. */
+  useEffect(
+    () => () => {
+      for (const photo of slotsRef.current) if (photo) URL.revokeObjectURL(photo.previewUrl);
+    },
+    [],
+  );
+
+  const updateSlot = useCallback((index: number, patch: Partial<SlotPhoto> | null) => {
+    setSlots((prev) => {
+      const next = [...prev] as Slots;
+      const current = next[index];
+      if (patch === null) {
+        if (current) URL.revokeObjectURL(current.previewUrl);
+        next[index] = null;
+      } else if (current) {
+        next[index] = { ...current, ...patch };
+      }
+      return next;
+    });
+  }, []);
+
+  const placePhotos = useCallback(
+    async (files: File[], startAt: number | null) => {
+      if (files.length === 0) return;
+      const current = slotsRef.current;
+      const targets: number[] = startAt !== null ? [startAt] : [];
+      for (let i = 0; i < MAX_COUPLE_PHOTOS && targets.length < files.length; i++) {
+        if (!current[i] && !targets.includes(i)) targets.push(i);
+      }
+      if (targets.length < files.length) {
+        toast({
+          title: "Three photos is the most",
+          description: "We kept the photos that fit. Remove one to swap it.",
+        });
+      }
+      await Promise.all(
+        targets.map(async (slotIndex, i) => {
+          const file = files[i]!;
+          try {
+            const prepared = await prepareCouplePhoto(file);
+            const photo: SlotPhoto = {
+              id: `${Date.now()}-${slotIndex}-${Math.random().toString(36).slice(2, 8)}`,
+              blob: prepared.blob,
+              name: prepared.name,
+              previewUrl: URL.createObjectURL(prepared.blob),
+              uploadedKey: null,
+              progress: null,
+              error: null,
+            };
+            setSlots((prev) => {
+              const next = [...prev] as Slots;
+              const replaced = next[slotIndex];
+              if (replaced) URL.revokeObjectURL(replaced.previewUrl);
+              next[slotIndex] = photo;
+              return next;
+            });
+          } catch (err) {
+            toast({
+              title: `${COUPLE_REFERENCE_ROLES[slotIndex]}: photo not added`,
+              description: err instanceof PhotoProblem ? err.message : "We couldn't open that photo. Try another one.",
+              variant: "destructive",
+            });
+          }
+        }),
+      );
+      setRestoredDraft(false);
+    },
+    [toast],
+  );
+
+  /** A usable upload token: refetch the venue when the one we hold is near expiry. */
+  const freshUploadToken = useCallback(
+    async (force = false): Promise<string | undefined> => {
+      const age = Date.now() - venueQuery.dataUpdatedAt;
+      if (!force && venueQuery.data?.uploadToken && age < UPLOAD_TOKEN_REFRESH_MS) {
+        return venueQuery.data.uploadToken;
+      }
+      const result = await venueQuery.refetch();
+      return result.data?.uploadToken;
+    },
+    [venueQuery],
+  );
+
+  const failBackTo = (target: number, message: string, title = "We couldn't start your gallery") => {
+    setSubmitting(false);
+    setStep(target);
+    setFormError(message);
+    toast({ title, description: message, variant: "destructive" });
+  };
+
+  const handleSubmit = async () => {
+    if (submittingRef.current || !venue) return;
+    const email = draft.coupleEmail.trim().toLowerCase();
+    const filled = slotsRef.current.flatMap((photo, index) => (photo ? [{ photo, index }] : []));
+    if (filled.length < MIN_COUPLE_PHOTOS) {
+      goToStep(2);
+      return;
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      setFormError("Check your email address. We send your gallery link there.");
+      return;
+    }
+    if (!consent) {
+      setFormError("Please confirm you both agree before we make your gallery.");
+      return;
+    }
+    if (venue.turnstileSiteKey && !turnstileToken) {
+      setFormError("Please finish the quick security check.");
+      return;
+    }
+    setFormError(null);
+    setSubmitting(true);
+    setPhase("uploading");
+    setStep(4);
+
+    /* 1. Upload every photo the server does not already hold. */
+    let keys: string[];
+    try {
+      let token = await freshUploadToken();
+      for (const { index } of filled) updateSlot(index, { error: null });
+      keys = await Promise.all(
+        filled.map(async ({ photo, index }) => {
+          if (photo.uploadedKey) return photo.uploadedKey;
+          const onProgress = (percent: number) => updateSlot(index, { progress: percent });
+          let key: string;
+          try {
+            key = await uploadCouplePhoto(photo, venue.slug, token, onProgress);
+          } catch (err) {
+            if (!(err instanceof UploadProblem) || err.status !== 401) throw err;
+            // The token expired mid-flow: fetch a fresh one and retry once.
+            token = await freshUploadToken(true);
+            key = await uploadCouplePhoto(photo, venue.slug, token, onProgress);
+          }
+          updateSlot(index, { uploadedKey: key, progress: 100 });
+          return key;
+        }),
+      );
+    } catch (err) {
+      const message = err instanceof UploadProblem ? err.message : "Check your connection and try again.";
+      setSlots(
+        (prev) => prev.map((p) => (p && !p.uploadedKey ? { ...p, progress: null, error: message } : p)) as Slots,
+      );
+      failBackTo(3, `${message} Everything you entered is still here.`, "Your photos didn't upload");
+      return;
+    }
+
+    /* 2. Start the gallery. */
+    setPhase("starting");
+    try {
+      const session = await createSession.mutateAsync({
+        slug: venue.slug,
+        data: {
+          couplePhotoKeys: keys,
+          styleId: draft.styleId ?? undefined,
+          coupleName: draft.coupleName.trim() || undefined,
+          coupleEmail: email,
+          weddingMonth: draft.weddingMonth || undefined,
+          consent: true,
+          createdVia: "couple_link",
+          turnstileToken: turnstileToken ?? undefined,
+        },
+      });
+      rememberCreatedGallery(sessionStore(), session.shareToken, { venueSlug: venue.slug, email });
+      clearCoupleDraft(sessionStore(), venue.slug);
+      setLocation(`/v/${session.shareToken}`, { replace: true });
+    } catch (raw) {
+      const err = raw as ErrorType<ErrorEnvelope>;
+      const code = errorCode(err);
+      const serverMessage = err.data?.error;
+      if (venue.turnstileSiteKey) setTurnstileReset((n) => n + 1);
+      if (err.status === 402 || code === "venue_not_ready") {
+        failBackTo(
+          3,
+          "This venue is temporarily unavailable for new galleries. Please check with the venue team.",
+          "This venue is paused",
+        );
+        return;
+      }
+      if (code === "stale_upload" || code === "invalid_photos" || code === "photo_count") {
+        // The uploaded copies can't be reused: forget them so the next try re-uploads.
+        setSlots((prev) => prev.map((p) => (p ? { ...p, uploadedKey: null, progress: null } : p)) as Slots);
+        failBackTo(
+          code === "stale_upload" ? 3 : 2,
+          serverMessage ?? "Please add your photos again.",
+          code === "stale_upload" ? "Your photos need to upload again" : "Check your photos",
+        );
+        return;
+      }
+      if (code === "consent_required") setConsent(false);
+      failBackTo(3, serverMessage ?? "Something went wrong on our side. Your details are still here; try again.");
+    }
+  };
+
+  /* ————— Render ————— */
+
+  if (!slug || venueQuery.isLoading) return <CoupleSkeleton />;
+
+  if (venueQuery.isError || !venue) {
+    const notFound = (venueQuery.error as { status?: number } | null)?.status === 404;
+    return (
+      <CoupleChrome venue={null} fallbackName="Venue preview">
+        <section className="cp-message">
+          <p className="eyebrow">{notFound ? "Link not found" : "Connection"}</p>
+          <h1>{notFound ? "We couldn't find this venue." : "We couldn't open this venue just now."}</h1>
+          <p>
+            {notFound
+              ? "Check the link or QR code your venue gave you. If it still doesn't open, ask the venue team for a fresh link."
+              : "Check your connection, then try again."}
+          </p>
+          {!notFound ? (
+            <Button className="cp-message__action" onClick={() => void venueQuery.refetch()}>
+              <RotateCcw /> Try again
+            </Button>
+          ) : null}
+        </section>
+      </CoupleChrome>
+    );
+  }
+
+  if (!venue.isReady) {
+    return (
+      <CoupleChrome venue={venue}>
+        <section className="cp-message">
+          <p className="eyebrow">Almost ready</p>
+          <h1>{venue.name} is still setting up.</h1>
+          <p>The venue team is adding photos of their spaces. Previews open here as soon as they finish.</p>
+          <Button variant="outline" className="cp-message__action" onClick={() => void venueQuery.refetch()}>
+            <RotateCcw /> Check again
+          </Button>
+        </section>
+      </CoupleChrome>
+    );
+  }
+
   return (
-    <section className="venue-welcome page-width">
-      <div>
-        <img
-          src={venueMediaUrl(venue.media[currentPhoto]?.objectKey, venue.slug)}
-          alt={venue.name + " venue photo " + (currentPhoto + 1)}
-        />
-        <div className="photo-selector" aria-label="Venue photographs">
-          {venue.media.map((_, index) => (
-            <button
-              key={index}
-              aria-label={"View venue photo " + (index + 1)}
-              aria-pressed={currentPhoto === index}
-              onClick={() => setCurrentPhoto(index)}
-            >
-              {index + 1}
-            </button>
-          ))}
-        </div>
+    <CoupleChrome
+      venue={venue}
+      mainRef={mainRef}
+      mainClassName="cp-main"
+      footerNote="Images are AI previews made from your photos and the venue's own photos."
+    >
+      {step <= 3 ? <StepProgress step={step} /> : null}
+      <div className="cp-step" key={step}>
+        {step === 1 && (
+          <VenueWelcome venue={venue} retentionDays={config.retentionDays} onNext={() => goToStep(2)} />
+        )}
+        {step === 2 && (
+          <PhotoStep
+            slots={slots}
+            restoredDraft={restoredDraft}
+            onAdd={placePhotos}
+            onRemove={(index) => updateSlot(index, null)}
+            onBack={() => goToStep(1)}
+            onNext={() => goToStep(3)}
+          />
+        )}
+        {step === 3 && (
+          <DetailsStep
+            venue={venue}
+            styles={styles}
+            stylesLoading={stylesQuery.isLoading}
+            stylesError={stylesQuery.isError}
+            onRetryStyles={() => void stylesQuery.refetch()}
+            draft={draft}
+            onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+            consent={consent}
+            onConsent={setConsent}
+            filledCount={filledCount}
+            turnstileReset={turnstileReset}
+            onTurnstileToken={setTurnstileToken}
+            turnstileReady={!venue.turnstileSiteKey || !!turnstileToken}
+            formError={formError}
+            onBack={() => goToStep(2)}
+            onSubmit={() => void handleSubmit()}
+            submitting={submitting}
+          />
+        )}
+        {step === 4 && <UploadingStep slots={slots} phase={phase} venueName={venue.name} />}
       </div>
-      <div>
-        <p className="eyebrow">Your gallery at</p>
+    </CoupleChrome>
+  );
+}
+
+function StepProgress({ step }: { step: number }) {
+  return (
+    <ol className="cp-progress" aria-label="Steps">
+      {STEP_LABELS.map((label, i) => {
+        const n = i + 1;
+        const state = n < step ? "done" : n === step ? "current" : "todo";
+        return (
+          <li key={label} data-state={state} aria-current={state === "current" ? "step" : undefined}>
+            <span className="cp-progress__dot" aria-hidden>
+              {state === "done" ? <Check size={12} /> : n}
+            </span>
+            <span className="cp-progress__label">{label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/* ————— Step 1: the venue ————— */
+
+function VenueWelcome({
+  venue,
+  retentionDays,
+  onNext,
+}: {
+  venue: VenuePublicResponse;
+  retentionDays: number;
+  onNext: () => void;
+}) {
+  const photos = venue.media.slice(0, 6);
+  const [active, setActive] = useState(0);
+  const current = photos[active] ?? photos[0];
+  return (
+    <section className="cp-welcome">
+      <figure className="cp-welcome__media">
+        {current ? (
+          <img
+            src={venueMediaUrl(current.objectKey, venue.slug)}
+            alt={`${venue.name}, photo ${active + 1} of ${photos.length}`}
+            fetchPriority="high"
+          />
+        ) : null}
+        {photos.length > 1 ? (
+          <div className="cp-welcome__dots" role="group" aria-label="Venue photos">
+            {photos.map((photo, i) => (
+              <button
+                key={photo.id}
+                type="button"
+                aria-label={`Show venue photo ${i + 1}`}
+                aria-pressed={i === active}
+                onClick={() => setActive(i)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </figure>
+      <div className="cp-welcome__copy">
+        <p className="eyebrow">A preview of your day</p>
         <h1>
-          Your day at
-          <br />
-          {venue.name}.
+          See the two of you at <span className="cp-nowrap">{venue.name}.</span>
         </h1>
-        <p className="text-muted-foreground">
-          {venue.description ||
-            venue.tagline ||
-            "See the two of you, married here."}
+        <p className="cp-lede">
+          {venue.tagline?.trim() || "Add two or three photos of you, pick a look, and we'll imagine your day here."}
         </p>
-        <p className="text-sm">
-          Add a few photos, pick a style, and get four images and a short reel
-          in a few minutes.
-        </p>
-        <Button onClick={onNext} data-testid="visualize-cta">
-          Start our gallery <ArrowRight />
+        <ul className="cp-welcome__facts">
+          <li>Four images and a short reel, set in this venue's real spaces</li>
+          <li>Usually ready in about five minutes</li>
+          <li>Free for you. {venue.name} covers it.</li>
+        </ul>
+        <Button variant="brand" size="lg" className="cp-primary" onClick={onNext} data-testid="visualize-cta">
+          Start our preview <ArrowRight />
         </Button>
-        <p className="caption">
-          Images are AI-generated from your photos and the venue’s photos.
+        <p className="cp-fineprint">
+          These are AI previews, not photographs. Your photos are used only for this gallery and deleted{" "}
+          {retentionDays} days after it's ready. <Link href="/privacy">How we handle photos</Link>
         </p>
       </div>
     </section>
   );
 }
 
-interface UploadStepProps {
-  previews: string[];
-  isUploading: boolean;
-  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onRemovePhoto: (index: number) => void;
-  onContinue: () => void;
-  onBack: () => void;
-}
+/* ————— Step 2: photos ————— */
 
-function UploadStep({
-  previews,
-  isUploading,
-  onFileChange,
-  onRemovePhoto,
-  onContinue,
+function PhotoStep({
+  slots,
+  restoredDraft,
+  onAdd,
+  onRemove,
   onBack,
-}: UploadStepProps) {
-  const [, setLocation] = useLocation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const hasEnoughReferences = previews.length >= MIN_COUPLE_PHOTOS;
-  const canAddMoreReferences = previews.length < MAX_COUPLE_PHOTOS;
-  const remainingReferences = Math.max(MIN_COUPLE_PHOTOS - previews.length, 0);
-  const uploadStatus = hasEnoughReferences
-    ? `${previews.length}/${MAX_COUPLE_PHOTOS} reference photos added`
-    : `${remainingReferences} more clear photo${remainingReferences === 1 ? "" : "s"} needed`;
+  onNext,
+}: {
+  slots: Slots;
+  restoredDraft: boolean;
+  onAdd: (files: File[], startAt: number | null) => Promise<void>;
+  onRemove: (index: number) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const filled = slots.filter(Boolean).length;
+  const ready = filled >= MIN_COUPLE_PHOTOS;
+  const bulkRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handle = async (e: ChangeEvent<HTMLInputElement>, startAt: number | null) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setBusy(true);
+    try {
+      await onAdd(files, startAt);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const missing = MIN_COUPLE_PHOTOS - filled;
+  const status = ready
+    ? `${filled} of ${MAX_COUPLE_PHOTOS} added. Ready when you are.`
+    : `${missing} more photo${missing === 1 ? "" : "s"} needed`;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="creation-step"
-    >
-      <div className="absolute top-6 left-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocation("/couple")}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent font-medium"
-          data-testid="upload-home"
-        >
-          <Home className="mr-2 h-4 w-4" /> Home
-        </Button>
-      </div>
-
-      <div className="step-heading">
-        <p className="eyebrow text-brand mb-4">Your photos</p>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-4">
-          You and your partner
-        </h1>
-        <p className="text-muted-foreground text-lg max-w-lg mx-auto">
-          Upload clear, well-lit photos in this order: together, Partner A, then
-          Partner B.
+    <section className="cp-panel" aria-labelledby="photos-heading">
+      <header className="cp-panel__head">
+        <p className="eyebrow">Your photos</p>
+        <h1 id="photos-heading">Two or three photos of you</h1>
+        <p className="cp-lede">
+          Clear, well lit, faces forward. One of you together plus one of each of you works best.{" "}
+          <span>Pick distinct angles or expressions.</span>
         </p>
+        {restoredDraft ? (
+          <p className="cp-note" role="status">
+            Your details are saved. Photos aren't kept when a page reloads, so add them again here.
+          </p>
+        ) : null}
+      </header>
+
+      <div className="cp-slots">
+        {COUPLE_REFERENCE_ROLES.map((role, i) => (
+          <PhotoSlot
+            key={role}
+            index={i as SlotIndex}
+            photo={slots[i] ?? null}
+            disabled={busy}
+            onPick={(e) => void handle(e, i)}
+            onRemove={() => onRemove(i)}
+          />
+        ))}
       </div>
 
-      <div className="photo-guidance">
-        {COUPLE_REFERENCE_ROLES.map((role, index) => {
-          const isFilled = previews.length > index;
-          return (
-            <div
-              key={role}
-              className={`rounded-lg border p-6 transition-colors duration-300 ${
-                isFilled ? "border-brand bg-card" : "border-border bg-card/50"
-              }`}
-            >
-              <p
-                className={`eyebrow mb-2 ${isFilled ? "text-brand" : "text-muted-foreground"}`}
-              >
-                0{index + 1} — {role}
-              </p>
-              <p
-                className={` text-sm ${isFilled ? "text-muted-foreground" : "text-muted-foreground"}`}
-              >
-                {COUPLE_REFERENCE_GUIDANCE[index]}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      <button
-        type="button"
-        className="w-full rounded-lg border border-dashed border-border bg-card/50 hover:border-brand/50 hover:bg-card active:border-brand transition-colors cursor-pointer flex flex-col items-center justify-center py-8 md:py-10 px-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-card/50"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={!canAddMoreReferences || isUploading}
-        aria-label="Add photos"
-      >
+      <div className="cp-slots__footer">
+        <p className="cp-status" data-testid="couple-photo-status" data-ready={ready} aria-live="polite">
+          {busy ? "Preparing your photos…" : status}
+        </p>
+        {filled < MAX_COUPLE_PHOTOS ? (
+          <button type="button" className="cp-textbutton" onClick={() => bulkRef.current?.click()} disabled={busy}>
+            <ImagePlus size={16} /> Choose several at once
+          </button>
+        ) : null}
         <input
+          ref={bulkRef}
           type="file"
           multiple
           hidden
-          ref={fileInputRef}
-          onChange={onFileChange}
-          disabled={!canAddMoreReferences || isUploading}
-          accept="image/jpeg,image/png,image/webp"
+          accept={ACCEPTED_PHOTO_TYPES}
+          onChange={(e) => void handle(e, null)}
           data-testid="couple-photo-input"
         />
-        <div className="relative w-16 h-16 rounded-lg bg-card flex items-center justify-center mb-6 border border-border text-brand">
-          <Camera className="h-7 w-7" />
-        </div>
-        <p className="font-display text-xl font-semibold text-foreground mb-3">
-          Add your photos
-        </p>
-        <p className="text-base text-muted-foreground max-w-md mx-auto">
-          One to three JPG, PNG, or WebP photos under 50MB, at least 256px
-          wide. Pick distinct angles or expressions.
-        </p>
-        <p
-          className="eyebrow mt-6 text-brand"
-          data-testid="couple-photo-status"
-        >
-          {uploadStatus}
-        </p>
-      </button>
+      </div>
+      <p className="cp-fineprint">
+        JPG, PNG, WebP or HEIC, up to 50MB each. We resize them on your device before they upload.
+      </p>
 
-      {previews.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-8 w-full">
-          {previews.map((src, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative group aspect-square overflow-hidden rounded-lg border border-border"
-            >
-              <img
-                src={src}
-                className="w-full h-full object-cover"
-                alt={`${COUPLE_REFERENCE_ROLES[i] ?? "Reference"} preview`}
-              />
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-ink/60 via-transparent to-transparent" />
-              <p className="absolute left-4 bottom-4 eyebrow text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                {COUPLE_REFERENCE_ROLES[i] ?? `Reference ${i + 1}`}
-              </p>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemovePhoto(i);
-                }}
-                disabled={isUploading}
-                aria-label={`Remove photo ${i + 1}`}
-                data-testid={`remove-couple-photo-${i}`}
-                className="absolute top-4 right-4 h-11 w-11 rounded-md bg-ink/70 text-ink-foreground flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive backdrop-blur-sm"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-lg mx-auto">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="w-full sm:w-1/3 py-6 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          Back
+      <div className="cp-actions">
+        <Button variant="ghost" onClick={onBack}>
+          <ArrowLeft /> Back
         </Button>
         <Button
           variant="brand"
-          onClick={onContinue}
-          disabled={!hasEnoughReferences || isUploading}
-          className="w-full sm:w-2/3 py-6 text-base font-medium"
+          size="lg"
+          className="cp-primary"
+          onClick={onNext}
+          disabled={!ready || busy}
           data-testid="choose-style-button"
         >
-          Continue to styles
-          <ArrowRight className="ml-2 h-4 w-4" />
+          Choose your look <ArrowRight />
         </Button>
       </div>
-    </motion.div>
+    </section>
   );
 }
 
-interface StyleStepProps {
-  hasError: boolean;
-  onRetry: () => void;
-  styles: GalleryStyleSummary[];
-  isLoading: boolean;
-  selectedStyleId: string | null;
-  onSelect: (id: string) => void;
-  coupleName: string;
-  onChangeCoupleName: (v: string) => void;
-  coupleEmail: string;
-  onChangeCoupleEmail: (v: string) => void;
-  onSubmit: () => void;
-  onBack: () => void;
-  isSubmitting: boolean;
+function PhotoSlot({
+  index,
+  photo,
+  disabled,
+  onPick,
+  onRemove,
+}: {
+  index: SlotIndex;
+  photo: SlotPhoto | null;
+  disabled: boolean;
+  onPick: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
+}) {
+  const role = COUPLE_REFERENCE_ROLES[index];
+  const libraryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const labelId = `slot-${index}-label`;
+  return (
+    <div
+      className="cp-slot"
+      data-filled={!!photo}
+      data-testid={`couple-slot-${index}`}
+      role="group"
+      aria-labelledby={labelId}
+    >
+      <div className="cp-slot__frame">
+        {photo ? (
+          <>
+            <img src={photo.previewUrl} alt={`${role} photo`} />
+            <button
+              type="button"
+              className="cp-slot__remove"
+              onClick={onRemove}
+              disabled={disabled}
+              aria-label={`Remove the ${role} photo`}
+              data-testid={`remove-couple-photo-${index}`}
+            >
+              <X size={16} />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="cp-slot__empty"
+            onClick={() => libraryRef.current?.click()}
+            disabled={disabled}
+            aria-label={`Add the ${role} photo`}
+          >
+            <ImagePlus size={22} aria-hidden />
+            <span>Add photo</span>
+          </button>
+        )}
+      </div>
+      <div className="cp-slot__meta">
+        <p id={labelId} className="cp-slot__role">
+          <span className="cp-slot__index">0{index + 1}</span> {role}
+        </p>
+        <p className="cp-slot__guide">{COUPLE_REFERENCE_GUIDANCE[index]}</p>
+        {photo?.error ? <p className="cp-field-error">{photo.error}</p> : null}
+        <div className="cp-slot__buttons">
+          <button
+            type="button"
+            className="cp-textbutton"
+            onClick={() => libraryRef.current?.click()}
+            disabled={disabled}
+          >
+            <ImagePlus size={15} /> {photo ? "Replace" : "Choose"}
+          </button>
+          <button
+            type="button"
+            className="cp-textbutton cp-touch-only"
+            onClick={() => cameraRef.current?.click()}
+            disabled={disabled}
+          >
+            <Camera size={15} /> Take one
+          </button>
+        </div>
+      </div>
+      <input ref={libraryRef} type="file" hidden accept={ACCEPTED_PHOTO_TYPES} onChange={onPick} />
+      <input ref={cameraRef} type="file" hidden accept="image/*" capture="user" onChange={onPick} />
+    </div>
+  );
 }
 
-function StyleStep({
-  hasError,
-  onRetry,
+/* ————— Step 3: look and details ————— */
+
+function DetailsStep({
+  venue,
   styles,
-  isLoading,
-  selectedStyleId,
-  onSelect,
-  coupleName,
-  onChangeCoupleName,
-  coupleEmail,
-  onChangeCoupleEmail,
-  onSubmit,
+  stylesLoading,
+  stylesError,
+  onRetryStyles,
+  draft,
+  onDraft,
+  consent,
+  onConsent,
+  filledCount,
+  turnstileReset,
+  onTurnstileToken,
+  turnstileReady,
+  formError,
   onBack,
-  isSubmitting,
-}: StyleStepProps) {
-  const [, setLocation] = useLocation();
+  onSubmit,
+  submitting,
+}: {
+  venue: VenuePublicResponse;
+  styles: GalleryStyleSummary[];
+  stylesLoading: boolean;
+  stylesError: boolean;
+  onRetryStyles: () => void;
+  draft: CoupleDraft;
+  onDraft: (patch: Partial<CoupleDraft>) => void;
+  consent: boolean;
+  onConsent: (value: boolean) => void;
+  filledCount: number;
+  turnstileReset: number;
+  onTurnstileToken: (token: string | null) => void;
+  turnstileReady: boolean;
+  formError: string | null;
+  onBack: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}) {
+  const months = useMemo(() => weddingMonthOptions(new Date()), []);
+  const emailValid = EMAIL_PATTERN.test(draft.coupleEmail.trim());
+  const canSubmit =
+    !!draft.styleId && emailValid && consent && turnstileReady && filledCount >= MIN_COUPLE_PHOTOS && !submitting;
+  const monthLabel = formatWeddingMonth(draft.weddingMonth);
+  const blocker =
+    filledCount < MIN_COUPLE_PHOTOS
+      ? "Add at least two photos first."
+      : !draft.styleId
+        ? "Pick a look."
+        : !emailValid
+          ? "Add your email."
+          : !consent
+            ? "Tick the box to confirm you both agree."
+            : "Finish the quick security check.";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="creation-step"
-    >
-      <div className="absolute top-6 left-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocation("/couple")}
-          disabled={isSubmitting}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent font-medium"
-          data-testid="style-home"
-        >
-          <Home className="mr-2 h-4 w-4" /> Home
-        </Button>
-      </div>
+    <section className="cp-panel" aria-labelledby="details-heading">
+      <header className="cp-panel__head">
+        <p className="eyebrow">Your look</p>
+        <h1 id="details-heading">Pick a look, then where to send it</h1>
+      </header>
 
-      <div className="step-heading">
-        <p className="eyebrow text-brand mb-4">Style &amp; delivery</p>
-        <h1 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-4">
-          Pick a style
-        </h1>
-        <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-          Choose the look for your images, then tell us where to send them.
-        </p>
-      </div>
-
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-lg" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
-          {styles.length === 0 && (
-            <div role="status"><p className="text-sm text-muted-foreground">{hasError ? "Styles couldn’t be loaded. Your photos are still here." : "No styles are available at the moment."}</p><Button variant="outline" onClick={onRetry} className="mt-3">Reload styles</Button></div>
-          )}
-          {styles.map((style, index) => {
-            const isSelected = selectedStyleId === style.id;
-            return (
-              <button
-                key={style.id}
-                type="button"
-                onClick={() => onSelect(style.id)}
-                disabled={isSubmitting}
-                data-testid={`style-option-${style.id}`}
-                aria-pressed={isSelected}
-                className={`relative text-left rounded-lg p-6 md:p-8 border transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isSelected
-                    ? "border-brand bg-card"
-                    : "border-border bg-card hover:border-brand/40 hover:bg-accent/40"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={`eyebrow mb-2 ${isSelected ? "text-brand" : "text-muted-foreground"}`}
-                    >
-                      Style {String(index + 1).padStart(2, "0")}
-                    </p>
-                    <h3 className="font-display font-semibold text-xl md:text-2xl mb-2 tracking-tight text-foreground">
+      <fieldset className="cp-styles">
+        <legend className="cp-label">Look</legend>
+        {stylesLoading ? (
+          <div className="cp-styles__grid">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="cp-style-skeleton" />
+            ))}
+          </div>
+        ) : styles.length === 0 ? (
+          <div role="status" className="cp-note">
+            {stylesError ? "Looks couldn't load. Your photos are still here." : "No looks are available right now."}{" "}
+            <button type="button" className="cp-textbutton" onClick={onRetryStyles}>
+              Try again
+            </button>
+          </div>
+        ) : (
+          <div className="cp-styles__grid" role="radiogroup" aria-label="Look">
+            {styles.map((style) => {
+              const sample = styleSample(style.id);
+              const selected = draft.styleId === style.id;
+              return (
+                <button
+                  key={style.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className="cp-style"
+                  data-selected={selected}
+                  onClick={() => onDraft({ styleId: style.id })}
+                  disabled={submitting}
+                  data-testid={`style-option-${style.id}`}
+                >
+                  {sample ? (
+                    <img src={sample.src} width={sample.width} height={sample.height} alt="" loading="lazy" />
+                  ) : (
+                    <span className="cp-style__blank" aria-hidden />
+                  )}
+                  <span className="cp-style__body">
+                    <span className="cp-style__name">
                       {style.name}
-                    </h3>
-                    <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-                      {style.description}
-                    </p>
-                  </div>
-                  <div
-                    aria-hidden
-                    className={`shrink-0 h-6 w-6 rounded-sm border flex items-center justify-center transition-colors mt-1 ${
-                      isSelected
-                        ? "bg-primary border-primary text-primary-foreground"
-                        : "border-border text-transparent"
-                    }`}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                      <span className="cp-style__check" aria-hidden>
+                        <Check size={14} />
+                      </span>
+                    </span>
+                    {sample ? <span className="cp-style__mood">{sample.mood}</span> : null}
+                    <span className="cp-style__desc">{style.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <p className="cp-fineprint">
+          Example looks on one sample image. Yours is made from your photos at {venue.name}.
+        </p>
+      </fieldset>
 
       <form
-        className="w-full flex flex-col items-center"
+        className="cp-form"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit();
         }}
       >
-        <div className="delivery-fields">
-          <div className="delivery-field">
-            <label
-              htmlFor="couple-email"
-              className="eyebrow text-brand flex items-center gap-2 mb-2"
-            >
-              <Mail className="h-4 w-4" /> Your email
-            </label>
-            <p className="text-sm text-muted-foreground mb-4">
-              Required so we can send your gallery link and you can find it
-              again later.
-            </p>
-            <input
-              id="couple-email"
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={coupleEmail}
-              onChange={(e) => onChangeCoupleEmail(e.target.value)}
-              disabled={isSubmitting}
-              autoComplete="email"
-              data-testid="style-couple-email"
-              className="w-full bg-background border border-input rounded-md px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
-            />
-          </div>
+        <div className="cp-field">
+          <label htmlFor="couple-email" className="cp-label">
+            Your email
+          </label>
+          <input
+            id="couple-email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            required
+            placeholder="you@example.com"
+            value={draft.coupleEmail}
+            onChange={(e) => onDraft({ coupleEmail: e.target.value })}
+            disabled={submitting}
+            aria-invalid={draft.coupleEmail.trim() !== "" && !emailValid}
+            aria-describedby="couple-email-help"
+            data-testid="style-couple-email"
+          />
+          <p id="couple-email-help" className="cp-help">
+            Your gallery link comes here so you can find it again. No newsletters.
+          </p>
+        </div>
 
-          <div className="delivery-field">
-            <label
-              htmlFor="couple-name-optional"
-              className="eyebrow text-brand mb-4 block"
-            >
-              Your names (optional)
+        <div className="cp-field-row">
+          <div className="cp-field">
+            <label htmlFor="couple-name" className="cp-label">
+              Your names <span className="cp-optional">optional</span>
             </label>
             <input
-              id="couple-name-optional"
+              id="couple-name"
               type="text"
-              placeholder="Jane & John"
-              value={coupleName}
-              onChange={(e) => onChangeCoupleName(e.target.value)}
-              disabled={isSubmitting}
-              autoComplete="name"
+              autoComplete="off"
               maxLength={80}
+              placeholder="e.g. Ana & Sam"
+              value={draft.coupleName}
+              onChange={(e) => onDraft({ coupleName: e.target.value })}
+              disabled={submitting}
               data-testid="style-couple-name"
-              className="w-full bg-background border border-input rounded-md px-4 py-3 md:py-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand disabled:opacity-50 transition-colors placeholder:text-muted-foreground"
             />
           </div>
-
-          <div className="delivery-summary">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="h-5 w-5 text-brand" />
-              <p className="eyebrow text-brand">What you’ll get</p>
-            </div>
-            <div className="font-display text-xl md:text-2xl font-semibold text-foreground mb-2">
-              Four images and a short reel
-            </div>
-            <div className="text-base text-muted-foreground leading-relaxed">
-              Made at this venue from your photos. Usually ready in a few
-              minutes, right on this page.
-            </div>
+          <div className="cp-field">
+            <label htmlFor="wedding-month" className="cp-label">
+              When are you thinking? <span className="cp-optional">optional</span>
+            </label>
+            <select
+              id="wedding-month"
+              value={draft.weddingMonth}
+              onChange={(e) => onDraft({ weddingMonth: e.target.value })}
+              disabled={submitting}
+              aria-describedby="wedding-month-help"
+              data-testid="wedding-month"
+            >
+              <option value="">Not sure yet</option>
+              {months.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <p id="wedding-month-help" className="cp-help">
+              {monthLabel
+                ? `When you check your date, ${venue.name} sees ${monthLabel}.`
+                : `Shared with ${venue.name} when you check your date.`}
+            </p>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-lg mx-auto">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onBack}
-            disabled={isSubmitting}
-            className="w-full sm:w-1/3 py-6 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-            data-testid="style-back-button"
-          >
-            Back
+        <label className="cp-consent" data-checked={consent}>
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => onConsent(e.target.checked)}
+            disabled={submitting}
+            required
+            data-testid="couple-consent"
+          />
+          <span>
+            <strong>We both agree.</strong> We're both in these photos, and we're both happy for them to be used to
+            make AI preview images of us at {venue.name}. They're used for this gallery only.{" "}
+            <Link href="/privacy">Details</Link>
+          </span>
+        </label>
+
+        {venue.turnstileSiteKey ? (
+          <TurnstileCheck siteKey={venue.turnstileSiteKey} resetSignal={turnstileReset} onToken={onTurnstileToken} />
+        ) : null}
+
+        <div className="cp-summary">
+          <p className="cp-summary__title">What happens next</p>
+          <p>
+            Your photos upload, then the next page shows your gallery as it's made: four AI images and a short reel,
+            usually in about five minutes. Keep that page's link to come back any time.
+          </p>
+        </div>
+
+        {formError ? (
+          <p role="alert" className="cp-field-error">
+            {formError}
+          </p>
+        ) : null}
+
+        {!canSubmit && !submitting ? (
+          <p className="cp-help cp-actions__why" aria-live="polite">
+            {blocker}
+          </p>
+        ) : null}
+        <div className="cp-actions">
+          <Button type="button" variant="ghost" onClick={onBack} disabled={submitting} data-testid="style-back-button">
+            <ArrowLeft /> Back
           </Button>
           <Button
             type="submit"
             variant="brand"
-            disabled={!selectedStyleId || !coupleEmail.trim() || isSubmitting}
-            className="w-full sm:w-2/3 py-6 text-base font-medium"
+            size="lg"
+            className="cp-primary"
+            disabled={!canSubmit}
             data-testid="generate-button"
           >
-            {isSubmitting ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : (
-              <Images className="mr-2 h-5 w-5" />
-            )}
-            Make my gallery
+            {submitting ? <Loader2 className="animate-spin" /> : null}
+            Make our gallery
           </Button>
         </div>
       </form>
-    </motion.div>
+    </section>
   );
 }
 
-function SubmittingStep() {
+/* ————— Step 4: uploading ————— */
+
+function UploadingStep({
+  slots,
+  phase,
+  venueName,
+}: {
+  slots: Slots;
+  phase: "uploading" | "starting";
+  venueName: string;
+}) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto"
-    >
-      <div className="relative w-20 h-20 rounded-lg bg-card border border-border flex items-center justify-center mb-8">
-        <Loader2 className="h-8 w-8 animate-spin text-brand" />
-      </div>
-      <p className="eyebrow text-brand mb-4">Working on it</p>
-      <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-6">
-        Uploading your photos…
-      </h2>
-      <p className="text-lg text-muted-foreground leading-relaxed">
-        Keep this page open. We’re uploading your photos and starting your
-        gallery.
-      </p>
-    </motion.div>
+    <section className="cp-panel cp-uploading" aria-labelledby="uploading-heading" aria-busy="true">
+      <header className="cp-panel__head">
+        <p className="eyebrow">{phase === "uploading" ? "Uploading" : "Starting"}</p>
+        <h1 id="uploading-heading">
+          {phase === "uploading" ? "Sending your photos…" : `Starting your gallery at ${venueName}…`}
+        </h1>
+        <p className="cp-lede">Keep this page open for a moment.</p>
+      </header>
+      <ul className="cp-uploads">
+        {slots.map((photo, i) => {
+          if (!photo) return null;
+          const percent = photo.uploadedKey ? 100 : (photo.progress ?? 0);
+          return (
+            <li key={photo.id} className="cp-upload">
+              <img src={photo.previewUrl} alt="" />
+              <div className="cp-upload__body">
+                <p className="cp-upload__label">
+                  {COUPLE_REFERENCE_ROLES[i]}
+                  <span>{photo.uploadedKey ? "Uploaded" : photo.progress !== null ? `${photo.progress}%` : "Waiting"}</span>
+                </p>
+                <div
+                  className="cp-bar"
+                  role="progressbar"
+                  aria-label={`${COUPLE_REFERENCE_ROLES[i]} upload`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={percent}
+                  data-testid={`upload-progress-${i}`}
+                >
+                  <span style={{ transform: `scaleX(${percent / 100})` }} />
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {phase === "starting" ? (
+        <p className="cp-status" role="status">
+          <Loader2 className="animate-spin" size={16} /> Photos uploaded. Opening your gallery page…
+        </p>
+      ) : null}
+    </section>
   );
 }
 
 function CoupleSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 flex flex-col">
-      <Skeleton className="h-24 w-full mb-12 rounded-lg" />
-      <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full">
-        <Skeleton className="h-12 w-64 mb-6 rounded-md" />
-        <Skeleton className="h-6 w-full max-w-96 mb-16 rounded-md" />
-        <Skeleton className="h-80 w-full rounded-lg" />
+    <div className="cc-page" aria-busy="true">
+      <div className="cp-skeleton">
+        <Skeleton className="cp-skeleton__bar" />
+        <Skeleton className="cp-skeleton__media" />
+        <Skeleton className="cp-skeleton__line" />
+        <Skeleton className="cp-skeleton__line cp-skeleton__line--short" />
       </div>
     </div>
   );

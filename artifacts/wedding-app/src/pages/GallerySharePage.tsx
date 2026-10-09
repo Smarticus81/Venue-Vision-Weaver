@@ -1,597 +1,624 @@
-import {
-  SiteHeader,
-  SiteFooter,
-  FormLayout,
-} from "@/components/layout/SiteChrome";
-import { useState } from "react";
-import { useParams, useLocation } from "wouter";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Link, useLocation, useParams } from "wouter";
 import {
   getGetSessionByTokenQueryKey,
   useGetSessionByToken,
+  useSendSessionEmailByToken,
   type GeneratedAsset,
   type SessionDetailResponse,
+  type VenuePublicResponse,
 } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { copyShareLink, shareSession } from "@/lib/shareSession";
 import {
-  CalendarCheck,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   Download,
-  ExternalLink,
-  Globe,
-  Link,
+  Link2,
   Loader2,
   Mail,
-  Phone,
   RotateCcw,
   Share2,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { CoupleChrome } from "@/components/layout/CoupleChrome";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
+  copyShareLink,
+  createdGalleryRecord,
+  dateCtaFor,
+  formatWeddingMonth,
+  postGalleryEvent,
+  processingPollInterval,
+  realSpaceFor,
+  reelAsset,
+  sceneTitle,
+  sessionStore,
+  shareAssetUrl,
+  shareGallery,
+  sortedStills,
+  venueMediaUrl,
+  type CreatorRecord,
+  type DateCta,
+  type GalleryEventType,
+} from "@/lib/shareSession";
 
-function storageAssetUrl(
-  objectKey: string,
-  shareToken?: string | null,
-): string {
-  const token = shareToken
-    ? `?shareToken=${encodeURIComponent(shareToken)}`
-    : "";
-  return `/api/storage${objectKey}${token}`;
+/** Past this, the processing view says so plainly instead of implying it is nearly done. */
+const SLOW_GALLERY_MS = 10 * 60_000;
+
+function errorStatus(error: unknown): number | undefined {
+  return (error as { status?: number } | null)?.status;
 }
 
-function sortedGalleryStills(session: SessionDetailResponse): GeneratedAsset[] {
-  return [...(session.generatedAssets ?? [])]
-    .filter((asset) => asset.assetType === "image")
-    .sort((a, b) => a.displayOrder - b.displayOrder);
-}
-
-function motionReel(session: SessionDetailResponse): GeneratedAsset | null {
-  return (
-    session.generatedAssets?.find(
-      (asset) => asset.assetType === "video" && asset.displayOrder === 0,
-    ) ?? null
-  );
-}
-
-function venueContactAction(venue: SessionDetailResponse["venue"]): {
-  href: string;
-  label: string;
-  icon: "calendar" | "globe" | "mail" | "phone";
-} | null {
-  if (!venue) return null;
-  if (venue.bookingUrl) {
-    return { href: venue.bookingUrl, label: "Book a tour", icon: "calendar" };
-  }
-  if (venue.websiteUrl) {
-    return { href: venue.websiteUrl, label: "Visit venue site", icon: "globe" };
-  }
-  if (venue.contactEmail) {
-    return {
-      href: `mailto:${venue.contactEmail}?subject=${encodeURIComponent(`Our Dreemer gallery at ${venue.name}`)}`,
-      label: "Contact venue",
-      icon: "mail",
-    };
-  }
-  if (venue.contactPhone) {
-    return {
-      href: `tel:${venue.contactPhone.replace(/[^\d+]/g, "")}`,
-      label: "Call venue",
-      icon: "phone",
-    };
-  }
-  return null;
-}
-
-function VenueContactIcon({
-  icon,
-}: {
-  icon: "calendar" | "globe" | "mail" | "phone";
-}) {
-  if (icon === "calendar") return <CalendarCheck className="h-4 w-4" />;
-  if (icon === "globe") return <Globe className="h-4 w-4" />;
-  if (icon === "phone") return <Phone className="h-4 w-4" />;
-  return <Mail className="h-4 w-4" />;
+function elapsedSince(iso: string | null | undefined, now: number): number {
+  const started = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(started) ? Math.max(0, now - started) : 0;
 }
 
 export default function GallerySharePage() {
-  const { shareToken } = useParams<{ shareToken: string }>();
-  const [, setLocation] = useLocation();
+  const { shareToken = "" } = useParams<{ shareToken: string }>();
+  const creator = useMemo(() => createdGalleryRecord(sessionStore(), shareToken), [shareToken]);
 
-  const tokenQuery = useGetSessionByToken(shareToken || "", {
+  const tokenQuery = useGetSessionByToken(shareToken, {
     query: {
-      queryKey: getGetSessionByTokenQueryKey(shareToken || ""),
+      queryKey: getGetSessionByTokenQueryKey(shareToken),
       enabled: !!shareToken,
-retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1,
-      refetchInterval: (query) => {
+      retry: (count, err) => errorStatus(err) !== 404 && count < 2,
+      refetchOnWindowFocus: (query) => {
         const status = query.state.data?.status;
-        return status === "pending" || status === "processing" ? 3000 : false;
+        return status === "pending" || status === "processing";
+      },
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data || (data.status !== "pending" && data.status !== "processing")) return false;
+        return processingPollInterval(elapsedSince(data.createdAt, Date.now()));
       },
     },
   });
 
   const session = tokenQuery.data;
 
-  if (!shareToken) return <NotAvailable />;
+  if (!shareToken) return <NotFoundView />;
 
   if (tokenQuery.isLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
-        <Loader2 className="h-12 w-12 animate-spin text-brand" />
-        <p className="eyebrow text-muted-foreground">Opening your gallery…</p>
-      </div>
+      <CoupleChrome venue={null}>
+        <section className="cp-message" role="status">
+          <Loader2 className="animate-spin text-brand" />
+          <p className="eyebrow">Opening your gallery…</p>
+        </section>
+      </CoupleChrome>
     );
   }
 
-  if (tokenQuery.isError || !session) return <NotAvailable />;
+  if (!session) {
+    return errorStatus(tokenQuery.error) === 404 ? (
+      <NotFoundView />
+    ) : (
+      <TransientErrorView onRetry={() => void tokenQuery.refetch()} retrying={tokenQuery.isFetching} />
+    );
+  }
 
-  const venueSlug = session.venue?.slug ?? "";
-  const onRestart = () =>
-    setLocation(venueSlug ? `/preview/${venueSlug}` : "/couple");
-  const stills = sortedGalleryStills(session);
-  const reel = motionReel(session);
-
-  const status = session.status as string;
+  const status = session.status;
+  const stills = sortedStills(session.generatedAssets);
 
   if (status === "pending" || status === "processing") {
-    return <ProcessingView session={session} />;
-  }
-
-  if (status === "failed" && stills.length === 0) {
-    return (
-      <FailureView
-        onRestart={onRestart}
-        message={
-          session.errorMessage ??
-          "We couldn't finish this gallery. Please try once more."
-        }
-      />
-    );
+    return <ProcessingView session={session} creator={creator} offline={tokenQuery.isError} />;
   }
 
   if (stills.length > 0) {
-    return (
-      <GalleryVisionView
-        session={session}
-        reel={reel}
-        stills={stills}
-        onRestart={onRestart}
-      />
-    );
+    return <GalleryView session={session} stills={stills} creator={creator} />;
   }
 
-  return <GalleryUnavailable session={session} />;
+  if (status === "failed") {
+    return <FailureView session={session} creator={creator} />;
+  }
+
+  return <UnavailableView session={session} creator={creator} />;
 }
 
-function NotAvailable() {
-  const [, navigate] = useLocation();
+/* ————— Error and edge states ————— */
+
+function NotFoundView() {
   return (
-    <FormLayout
-      label="Gallery link"
-      title="We couldn’t open that gallery."
-      description="The link may be wrong or out of date. You can find your gallery again with the email you used."
-    >
-      <h2>We couldn’t open this gallery</h2>
-      <p className="text-sm text-muted-foreground leading-relaxed">
-        The link may be incorrect or expired. Find your gallery with the email
-        you used to create it.
-      </p>
-      <Button
-        className="mt-6 w-full"
-        onClick={() => navigate("/find-my-gallery")}
-        data-testid="button-find-my-gallery"
-      >
-        Find my gallery
-      </Button>
-      <Button
-        variant="ghost"
-        className="mt-3"
-        onClick={() => navigate("/couple")}
-        data-testid="button-return-home"
-      >
-        Back to couples
-      </Button>
-    </FormLayout>
+    <CoupleChrome venue={null}>
+      <section className="cp-message">
+        <p className="eyebrow">Link not found</p>
+        <h1>We couldn't find that gallery.</h1>
+        <p>
+          The link may be missing a few characters. Copy it again from your email, or have the links sent to you
+          again.
+        </p>
+        <Link href="/find-my-gallery" className="cp-message__link" data-testid="button-find-my-gallery">
+          Find my gallery <ArrowRight size={16} />
+        </Link>
+      </section>
+    </CoupleChrome>
   );
 }
-function GalleryUnavailable({ session }: { session: SessionDetailResponse }) {
-  const [, navigate] = useLocation();
+
+function TransientErrorView({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
   return (
-    <FormLayout
-      label="Gallery"
-      title="Start a new gallery."
-      description="This gallery was made with an older version and can’t be shown any more."
-    >
-      <h2>This gallery needs a fresh start</h2>
-      <p className="text-sm text-muted-foreground leading-relaxed">
-        Return to your venue to create a new gallery with the current
-        experience.
-      </p>
-      {session.venue?.slug && (
-        <Button
-          className="mt-6"
-          onClick={() => navigate("/preview/" + session.venue?.slug)}
-          data-testid="legacy-start-gallery"
-        >
-          Create gallery
+    <CoupleChrome venue={null}>
+      <section className="cp-message">
+        <p className="eyebrow">Connection</p>
+        <h1>We couldn't open your gallery just now.</h1>
+        <p>Your gallery is safe. Check your connection, then try again.</p>
+        <Button className="cp-message__action" onClick={onRetry} disabled={retrying} data-testid="gallery-retry">
+          {retrying ? <Loader2 className="animate-spin" /> : <RotateCcw />} Try again
         </Button>
-      )}
-      <Button
-        variant="ghost"
-        className="mt-3"
-        onClick={() => navigate("/find-my-gallery")}
-        data-testid="legacy-find-gallery"
-      >
-        Find my gallery
-      </Button>
-    </FormLayout>
+      </section>
+    </CoupleChrome>
   );
 }
-function FailureView({
-  message,
-  onRestart,
-}: {
-  message: string;
-  onRestart: () => void;
-}) {
+
+function FailureView({ session, creator }: { session: SessionDetailResponse; creator: CreatorRecord | null }) {
   const [, navigate] = useLocation();
+  const venue = session.venue ?? null;
   return (
-    <FormLayout
-      label="Gallery"
-      title="That one didn’t work out."
-      description="We couldn’t finish your gallery this time. Trying again from your venue’s link usually works."
-    >
-      <h2>We couldn’t finish your gallery</h2>
-      <p role="alert" className="text-sm text-muted-foreground leading-relaxed">
-        {message}
-      </p>
-      <Button
-        className="mt-6"
-        onClick={onRestart}
-        data-testid="failed-try-again"
-      >
-        <RotateCcw />
-        Try again
-      </Button>
-      <Button
-        variant="ghost"
-        className="mt-3"
-        onClick={() => navigate("/couple")}
-        data-testid="failed-home"
-      >
-        Back to couples
-      </Button>
-    </FormLayout>
+    <CoupleChrome venue={venue}>
+      <section className="cp-message">
+        <p className="eyebrow">Gallery</p>
+        <h1>We couldn't finish this gallery.</h1>
+        <p role="alert">{session.errorMessage ?? "Something went wrong while making it. Please try once more."}</p>
+        {creator && venue ? (
+          <Button
+            className="cp-message__action"
+            onClick={() => navigate(`/preview/${venue.slug}`)}
+            data-testid="failed-try-again"
+          >
+            <RotateCcw /> Try again
+          </Button>
+        ) : null}
+      </section>
+    </CoupleChrome>
   );
 }
 
-function ProcessingView({ session }: { session: SessionDetailResponse }) {
+function UnavailableView({ session, creator }: { session: SessionDetailResponse; creator: CreatorRecord | null }) {
+  const [, navigate] = useLocation();
+  const venue = session.venue ?? null;
   return (
-    <div className="site-page">
-      <SiteHeader />
-      <main
-        id="main-content"
-        className="form-layout page-width"
-        data-testid="processing-screen"
-      >
-        <aside>
-          <p className="eyebrow">Making your gallery</p>
-          <h1>A few minutes, then it’s yours.</h1>
-          <p>
-            We’re making your images at {session.venue?.name || "your venue"},
-            then your reel. Keep this link. The page updates on its own.
-          </p>
-        </aside>
-        <section className="form-content" role="status">
-          <Loader2 className="animate-spin text-brand mb-6" />
-          <h2>Creating your gallery</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            This usually takes a few minutes. This page updates automatically
-            when your gallery is ready.
-          </p>
-          <p className="caption">
-            You can close this tab. Keep this link to return to your gallery.
-          </p>
-          <a href="/couple" className="text-link" data-testid="processing-home">
-            Back to couples →
-          </a>
-        </section>
-      </main>
-      <SiteFooter />
-    </div>
+    <CoupleChrome venue={venue}>
+      <section className="cp-message">
+        <p className="eyebrow">Gallery</p>
+        <h1>This gallery can't be shown any more.</h1>
+        <p>It was made with an older version of the preview.</p>
+        {creator && venue ? (
+          <Button
+            className="cp-message__action"
+            onClick={() => navigate(`/preview/${venue.slug}`)}
+            data-testid="legacy-start-gallery"
+          >
+            Start a new one
+          </Button>
+        ) : null}
+      </section>
+    </CoupleChrome>
   );
 }
 
-function ShareActionsToolbar({ session }: { session: SessionDetailResponse }) {
+/* ————— Processing ————— */
+
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function ProcessingView({
+  session,
+  creator,
+  offline,
+}: {
+  session: SessionDetailResponse;
+  creator: CreatorRecord | null;
+  offline: boolean;
+}) {
   const { toast } = useToast();
-  const [emailInput, setEmailInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [showEmail, setShowEmail] = useState(!session.hasCoupleEmail);
-  const emailLocked = session.hasCoupleEmail;
+  const now = useNow(1000);
+  const venue = session.venue ?? null;
+  const venueName = venue?.name ?? "your venue";
+  const elapsed = elapsedSince(session.createdAt, now);
+  const slow = elapsed > SLOW_GALLERY_MS;
+  const photos = (venue?.media ?? []).slice(0, 5);
+  const activePhoto = photos.length > 0 ? Math.floor(now / 4000) % photos.length : 0;
 
-  const handleCopy = async () => {
-    const ok = await copyShareLink(session);
+  const copy = async () => {
+    const ok = session.shareToken ? await copyShareLink(session.shareToken) : false;
     toast({
-      title: ok ? "Link copied" : "Could not copy",
-      description: ok
-        ? "Share link is on your clipboard."
-        : "Try copying the URL from the address bar.",
-      variant: ok ? "default" : "destructive",
+      title: ok ? "Link copied" : "Couldn't copy",
+      description: ok ? "Paste it anywhere to come back to your gallery." : "Copy the address from your browser bar.",
     });
   };
 
-  const handleShare = async () => {
-    const result = await shareSession(session);
-    if (result === "shared") {
-      toast({
-        title: "Shared",
-        description: "Thanks for sharing your gallery.",
-      });
-    } else if (result === "copied") {
-      toast({
-        title: "Link copied",
-        description: "Web Share is not available; link copied instead.",
-      });
-    }
-  };
-
-  const handleSendEmail = async () => {
-    if (!session.shareToken) {
-      toast({
-        title: "Share token missing",
-        description: "Cannot send email for a legacy session.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!emailLocked && !emailInput.trim()) {
-      toast({
-        title: "Enter an email",
-        description: "We need an address to send the link to.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setSending(true);
-    try {
-      const res = await fetch(
-        `/api/sessions/by-token/${encodeURIComponent(session.shareToken)}/send-email`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(emailLocked ? {} : { email: emailInput.trim() }),
-        },
-      );
-      const data = (await res.json().catch(() => ({}))) as {
-        sent?: boolean;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error ?? "Send failed");
-      toast({
-        title: data.sent ? "Email sent" : "Email not sent",
-        description: data.sent
-          ? "Check your inbox for the link to your gallery."
-          : "We couldn't send the email right now. Copy your gallery link to keep it, and try again soon.",
-        variant: data.sent ? "default" : "destructive",
-      });
-      if (data.sent) setShowEmail(false);
-    } catch (err) {
-      toast({
-        title: "Could not send email",
-        description: err instanceof Error ? err.message : "Try again later.",
-        variant: "destructive",
-      });
-    } finally {
-      setSending(false);
-    }
-  };
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="share-toolbar"
-    >
-      <motion.div className="space-y-4">
-        <motion.div className="flex flex-wrap gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopy}
-            data-testid="copy-link-button"
-          >
-            <Link className="h-4 w-4 mr-2 text-muted-foreground" />
-            Copy link
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleShare}
-            data-testid="share-button"
-          >
-            <Share2 className="h-4 w-4 mr-2 text-muted-foreground" />
-            Share
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowEmail((value) => !value)}
-            data-testid="email-toggle-button"
-          >
-            <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
-            {emailLocked ? "Resend to me" : "Email me"}
-          </Button>
-        </motion.div>
-
-        {showEmail && (
-          <form
-            className="space-y-3 pt-2 border-t border-border"
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleSendEmail();
-            }}
-          >
-            {emailLocked ? (
-              <p className="text-sm text-muted-foreground text-center">
-                We will send the link to the email you provided when you created
-                your gallery.
-              </p>
-            ) : (
-              <>
-                <label htmlFor="share-email">Email address</label>
-                <input
-                  id="share-email"
-                  type="email"
-                  required
-                  value={emailInput}
-                  onChange={(event) => setEmailInput(event.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  className="w-full rounded-md bg-soft border border-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-brand transition-colors"
-                  data-testid="email-input"
-                  aria-label="Email address for your gallery"
-                />
-              </>
-            )}
-            <div className="flex justify-center">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={sending || (!emailLocked && !emailInput.trim())}
-                variant="brand"
-                className="w-full sm:w-auto min-w-[120px]"
-                data-testid="send-email-button"
-              >
-                {sending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Send gallery link"
-                )}
-              </Button>
-            </div>
-          </form>
-        )}
-      </motion.div>
-    </motion.div>
+    <CoupleChrome venue={venue} eyebrow="Making your gallery at">
+      <section className="gs-wait" data-testid="processing-screen">
+        <div className="gs-wait__stage" aria-hidden>
+          {photos.map((photo, i) => (
+            <img
+              key={photo.id}
+              src={venueMediaUrl(photo.objectKey, venue!.slug)}
+              alt=""
+              data-active={i === activePhoto}
+              decoding="async"
+            />
+          ))}
+          <span className="gs-wait__badge">
+            <span className="gs-pulse" /> Imagining you here
+          </span>
+        </div>
+        <div className="gs-wait__copy" role="status" aria-live="polite">
+          <p className="eyebrow">Making your gallery</p>
+          <h1>Placing the two of you in {venueName}.</h1>
+          <p className="cp-lede">
+            {slow
+              ? "This one is taking longer than usual. It's still working; leave this page open or come back to this link later."
+              : "Most galleries are ready in about five minutes. This page updates on its own."}
+          </p>
+          <p className="gs-wait__clock">
+            <span>{formatElapsed(elapsed)}</span> so far
+          </p>
+          <ol className="gs-wait__steps">
+            <li>We read your photos.</li>
+            <li>We imagine four scenes in {venueName}'s real spaces.</li>
+            <li>We check every image for likeness and the venue.</li>
+            <li>We cut a short reel.</li>
+          </ol>
+          {offline ? (
+            <p className="cp-note">We lost the connection for a moment. We'll keep checking.</p>
+          ) : null}
+          <div className="gs-wait__keep">
+            <p>
+              {creator?.email
+                ? `Keep this link. When it's ready, the link also comes to ${creator.email}.`
+                : "Keep this link: it's how you come back to the gallery."}
+            </p>
+            <button type="button" className="cp-textbutton" onClick={() => void copy()}>
+              <Link2 size={15} /> Copy link
+            </button>
+          </div>
+        </div>
+      </section>
+    </CoupleChrome>
   );
 }
 
-interface GalleryVisionViewProps {
-  session: SessionDetailResponse;
-  reel: GeneratedAsset | null;
-  stills: GeneratedAsset[];
-  onRestart: () => void;
+/* ————— The gallery ————— */
+
+function DateCtaLink({
+  cta,
+  onClick,
+  compact = false,
+  testId,
+}: {
+  cta: DateCta;
+  onClick: () => void;
+  compact?: boolean;
+  testId: string;
+}) {
+  return (
+    <a
+      href={cta.href}
+      className={compact ? "gs-cta gs-cta--compact" : "gs-cta"}
+      onClick={onClick}
+      target={cta.external ? "_blank" : undefined}
+      rel={cta.external ? "noopener" : undefined}
+      data-testid={testId}
+    >
+      {compact ? cta.shortLabel : cta.label}
+      <ArrowRight size={18} aria-hidden />
+    </a>
+  );
 }
 
-function GalleryVisionView({
+function GalleryView({
   session,
-  reel,
   stills,
-  onRestart,
-}: GalleryVisionViewProps) {
-  const [activeStill, setActiveStill] = useState(0);
-  const activeAsset = stills[activeStill] ?? stills[0]!;
-  const src = storageAssetUrl(activeAsset.objectKey, session.shareToken);
-  const reelSrc = reel
-    ? storageAssetUrl(reel.objectKey, session.shareToken)
-    : null;
-  const contact = venueContactAction(session.venue);
+  creator,
+}: {
+  session: SessionDetailResponse;
+  stills: GeneratedAsset[];
+  creator: CreatorRecord | null;
+}) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const venue: VenuePublicResponse | null = session.venue ?? null;
+  const venueName = venue?.name ?? "your venue";
+  const token = session.shareToken ?? "";
+  const reel = reelAsset(session.generatedAssets);
+  const reelSrc = reel ? shareAssetUrl(reel.objectKey, token) : null;
+  const cta = useMemo(
+    () => dateCtaFor(venue, { weddingMonth: session.weddingMonth, coupleName: session.coupleName }),
+    [venue, session.weddingMonth, session.coupleName],
+  );
+  const monthLabel = formatWeddingMonth(session.weddingMonth);
+  const incentive = venue?.incentiveText?.trim() || null;
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const sendEmail = useSendSessionEmailByToken();
+
+  const track = useCallback((type: GalleryEventType) => void postGalleryEvent(token, type), [token]);
+
+  const onShare = async () => {
+    const result = await shareGallery({ shareToken: token, venueName: venue?.name ?? null, coupleName: session.coupleName ?? null });
+    if (result === "shared" || result === "copied") track("shared");
+    if (result === "copied") toast({ title: "Link copied", description: "Paste it to share your gallery." });
+    if (result === "failed") toast({ title: "Couldn't share", description: "Copy the address from your browser bar." });
+  };
+
+  const onCopy = async () => {
+    const ok = await copyShareLink(token);
+    if (ok) track("shared");
+    toast({
+      title: ok ? "Link copied" : "Couldn't copy",
+      description: ok ? "Anyone with the link can see this gallery." : "Copy the address from your browser bar.",
+    });
+  };
+
+  const onEmailMe = () =>
+    sendEmail.mutate(
+      { shareToken: token, data: {} },
+      {
+        onSuccess: (res) =>
+          toast({
+            title: res.sent ? "On its way" : "Not sent",
+            description: res.sent
+              ? `We emailed the link to ${creator?.email ?? "the address you gave us"}.`
+              : "We couldn't send it just now. Copy the link to keep it safe.",
+          }),
+        onError: (err) =>
+          toast({
+            title: "Not sent",
+            description: (err.data as { error?: string } | null)?.error ?? "Try again in a few minutes.",
+            variant: "destructive",
+          }),
+      },
+    );
+
+  const title = session.coupleName?.trim() ? `${session.coupleName.trim()} at ${venueName}` : `The two of you at ${venueName}`;
+
   return (
-    <div className="site-page" data-testid="gallery-view">
-      <SiteHeader />
-      <main id="main-content" className="gallery-layout page-width">
-        <section aria-label="Your wedding portraits">
-          <img
-            src={src}
-            alt={"Wedding portrait " + (activeStill + 1)}
-            className="gallery-main-image"
-            data-testid="gallery-still-hero"
-          />
-          <div className="gallery-thumbnails">
-            {stills.map((still, i) => (
-              <button
-                key={still.id}
-                onClick={() => setActiveStill(i)}
-                aria-pressed={activeStill === i}
-                aria-label={"View portrait " + (i + 1)}
-                data-testid={"gallery-still-" + i}
-              >
-                <img
-                  src={storageAssetUrl(still.objectKey, session.shareToken)}
-                  alt={"Portrait " + (i + 1)}
-                  loading="lazy"
-                />
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center justify-between mt-4 gap-4">
-            <p className="caption">
-              Image {activeStill + 1} of {stills.length} · AI-generated
-            </p>
-            <a
-              href={src}
-              download
-              className="text-link"
-              data-testid={"gallery-still-download-" + activeStill}
-            >
-              <Download size={16} /> Save image
-            </a>
-          </div>
-        </section>
-        <aside className="gallery-sidebar">
-          <p className="eyebrow">Your gallery</p>
-          <h1>{session.coupleName || "The two of you."}</h1>
-          <p>
-            Four images and a reel of you at{" "}
-            {session.venue?.name || "your venue"}. Save them, share them, and
-            come back any time.
-          </p>
-          <ShareActionsToolbar session={session} />
-          {reelSrc && (
-            <section className="mt-6">
-              <h2 className="text-lg">Your reel</h2>
+    <CoupleChrome
+      venue={venue}
+      eyebrow="Your preview at"
+      action={cta ? <DateCtaLink cta={cta} compact onClick={() => track("cta_click")} testId="venue-cta-header" /> : null}
+      mainClassName="gs-main"
+      footerNote={`Every image here is an AI preview, imagined at ${venueName} from the couple's photos and the venue's own photos.`}
+    >
+      <div className="gs-page" data-testid="gallery-view" data-has-sticky={!!cta}>
+        <section className="gs-hero">
+          <div className="gs-hero__media">
+            {reelSrc ? (
               <video
                 src={reelSrc}
-                controls
+                poster={shareAssetUrl(stills[0]!.objectKey, token)}
+                autoPlay
+                muted
+                loop
                 playsInline
+                controls
                 preload="metadata"
+                aria-label={`Your reel at ${venueName}, AI preview`}
                 data-testid="gallery-reel"
               />
-              <a
-                href={reelSrc}
-                download
-                className="text-link"
-                data-testid="gallery-download-reel"
-              >
-                <Download size={16} /> Save reel
-              </a>
-            </section>
-          )}
-          {contact && (
-            <div className="gallery-contact">
-              <h2 className="text-xl mb-3">Like what you see?</h2>
-              <a
-                href={contact.href}
-                target="_blank"
-                rel="noreferrer"
-                className="action-primary"
-                data-testid="venue-contact-cta"
-              >
-                <VenueContactIcon icon={contact.icon} />
-                {contact.label}
-                <ExternalLink size={16} />
-              </a>
+            ) : (
+              <img src={shareAssetUrl(stills[0]!.objectKey, token)} alt={`AI preview of the two of you at ${venueName}`} />
+            )}
+            <span className="gs-tag">AI preview, imagined at {venueName}</span>
+          </div>
+          <div className="gs-hero__copy">
+            <p className="eyebrow">Your gallery</p>
+            <h1>{title}</h1>
+            <p className="cp-lede">
+              Four images and a short reel, imagined in {venueName}'s real spaces from your photos.
+            </p>
+            {cta ? (
+              <div className="gs-apex">
+                <DateCtaLink cta={cta} onClick={() => track("cta_click")} testId="venue-contact-cta" />
+                {incentive ? <p className="gs-incentive">{incentive}</p> : null}
+                {monthLabel ? <p className="cp-help">We'll pass on {monthLabel} when you ask.</p> : null}
+              </div>
+            ) : null}
+            <div className="gs-toolbar" role="group" aria-label="Share and save">
+              <button type="button" onClick={() => void onShare()} data-testid="share-button">
+                <Share2 size={16} /> Share
+              </button>
+              <button type="button" onClick={() => void onCopy()} data-testid="copy-link-button">
+                <Link2 size={16} /> Copy link
+              </button>
+              {reelSrc ? (
+                <a href={reelSrc} download onClick={() => track("download")} data-testid="gallery-download-reel">
+                  <Download size={16} /> Save reel
+                </a>
+              ) : null}
+              {creator && session.hasCoupleEmail ? (
+                <button type="button" onClick={onEmailMe} disabled={sendEmail.isPending} data-testid="send-email-button">
+                  {sendEmail.isPending ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} Email me the
+                  link
+                </button>
+              ) : null}
             </div>
+          </div>
+        </section>
+
+        <section className="gs-stills" aria-labelledby="stills-heading">
+          <h2 id="stills-heading" className="gs-section-title">
+            Imagined here, beside the real thing
+          </h2>
+          {stills.map((still, i) => {
+            const real = venue ? realSpaceFor(still, venue.media) : null;
+            const name = sceneTitle(still);
+            const src = shareAssetUrl(still.objectKey, token);
+            return (
+              <figure className="gs-pair" key={still.id} data-has-real={!!real}>
+                <button
+                  type="button"
+                  className="gs-pair__ai"
+                  onClick={() => setLightbox(i)}
+                  aria-label={`Open image ${i + 1} of ${stills.length}${name ? `, ${name}` : ""}`}
+                  data-testid={`gallery-still-${i}`}
+                >
+                  <img src={src} alt={`AI preview of the couple at ${venueName}${name ? `: ${name.toLowerCase()}` : ""}`} loading={i === 0 ? "eager" : "lazy"} />
+                  <span className="gs-tag">AI preview, imagined at {venueName}</span>
+                </button>
+                {real && venue ? (
+                  <div className="gs-pair__real">
+                    <img src={venueMediaUrl(real.objectKey, venue.slug)} alt={`${venueName}, the real space`} loading="lazy" />
+                    <span className="gs-tag gs-tag--real">The real space</span>
+                  </div>
+                ) : null}
+                <figcaption>
+                  <span>
+                    {String(i + 1).padStart(2, "0")}
+                    {name ? ` · ${name}` : ""}
+                  </span>
+                  <a href={src} download onClick={() => track("download")} data-testid={`gallery-still-download-${i}`}>
+                    <Download size={15} /> Save
+                  </a>
+                </figcaption>
+              </figure>
+            );
+          })}
+        </section>
+
+        <section className="gs-closing">
+          {cta ? (
+            <>
+              <p className="eyebrow">Like what you see?</p>
+              <h2>Make it real at {venueName}.</h2>
+              {incentive ? <p className="gs-incentive">{incentive}</p> : null}
+              <DateCtaLink cta={cta} onClick={() => track("cta_click")} testId="venue-cta-closing" />
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">Your gallery</p>
+              <h2>Keep this link to come back any time.</h2>
+            </>
           )}
-          <Button
-            variant="ghost"
-            onClick={onRestart}
-            className="mt-6"
-            data-testid="gallery-restart"
-          >
-            <RotateCcw /> Make another gallery
-          </Button>
-        </aside>
-      </main>
-      <SiteFooter />
-    </div>
+          {creator && venue ? (
+            <Button
+              variant="ghost"
+              className="gs-restart"
+              onClick={() => navigate(`/preview/${venue.slug}`)}
+              data-testid="gallery-restart"
+            >
+              <RotateCcw /> Make another gallery
+            </Button>
+          ) : null}
+        </section>
+      </div>
+
+      {cta ? (
+        <div className="gs-sticky" data-testid="gallery-sticky-cta">
+          <span className="gs-sticky__venue">{venueName}</span>
+          <DateCtaLink cta={cta} compact onClick={() => track("cta_click")} testId="venue-cta-sticky" />
+        </div>
+      ) : null}
+
+      <Lightbox
+        stills={stills}
+        index={lightbox}
+        token={token}
+        venueName={venueName}
+        onIndex={setLightbox}
+        onDownload={() => track("download")}
+      />
+    </CoupleChrome>
+  );
+}
+
+/* ————— Lightbox ————— */
+
+function Lightbox({
+  stills,
+  index,
+  token,
+  venueName,
+  onIndex,
+  onDownload,
+}: {
+  stills: GeneratedAsset[];
+  index: number | null;
+  token: string;
+  venueName: string;
+  onIndex: (index: number | null) => void;
+  onDownload: () => void;
+}) {
+  const open = index !== null;
+  const current = index !== null ? stills[index] : undefined;
+  const swipeStart = useRef<number | null>(null);
+  const count = stills.length;
+
+  const step = useCallback(
+    (delta: number) => {
+      if (index === null) return;
+      onIndex((index + delta + count) % count);
+    },
+    [index, count, onIndex],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") step(1);
+      if (e.key === "ArrowLeft") step(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, step]);
+
+  const onPointerDown = (e: ReactPointerEvent) => {
+    swipeStart.current = e.clientX;
+  };
+  const onPointerUp = (e: ReactPointerEvent) => {
+    if (swipeStart.current === null) return;
+    const dx = e.clientX - swipeStart.current;
+    swipeStart.current = null;
+    if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+  };
+
+  const src = current ? shareAssetUrl(current.objectKey, token) : "";
+  const name = current ? sceneTitle(current) : null;
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onIndex(null)}>
+      <DialogContent variant="bare" className="gs-lightbox">
+        <DialogTitle className="sr-only">
+          Image {(index ?? 0) + 1} of {count}
+        </DialogTitle>
+        <DialogDescription className="sr-only">AI preview, imagined at {venueName}. Swipe or use the arrow keys.</DialogDescription>
+        {current ? (
+          <div className="gs-lightbox__stage" onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+            <img src={src} alt={`AI preview of the couple at ${venueName}`} draggable={false} />
+          </div>
+        ) : null}
+        <div className="gs-lightbox__bar">
+          <button type="button" onClick={() => step(-1)} aria-label="Previous image" disabled={count < 2}>
+            <ChevronLeft size={20} />
+          </button>
+          <p>
+            {(index ?? 0) + 1} / {count}
+            {name ? ` · ${name}` : ""} · AI preview, imagined at {venueName}
+          </p>
+          <a href={src} download onClick={onDownload} aria-label="Save this image">
+            <Download size={18} />
+          </a>
+          <button type="button" onClick={() => step(1)} aria-label="Next image" disabled={count < 2}>
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
