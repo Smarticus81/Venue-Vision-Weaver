@@ -36,7 +36,8 @@ interface CliOptions {
   venueDir: string;
   outDir: string;
   styleId: string;
-  coupleName: string | null;
+  /** Venue name for the reel's title card (optional). */
+  venueName: string | null;
   allowNonpassing: boolean;
   consentConfirmed: boolean;
 }
@@ -49,8 +50,13 @@ interface FrameQaReport {
   polishedPath: string;
   attempts: number;
   model: string;
+  fallbackUsed: boolean;
+  /** passed | below_target | unjudged | gate_off (see galleryGeneration.ts). */
+  judgeStatus: string;
   venueReferences: VenueInputEvidence[];
   qualityReport: unknown;
+  /** Every render attempt for this scene, as production records it in render_attempts. */
+  renderAttempts: Array<Record<string, unknown>>;
 }
 
 interface QaSummary {
@@ -85,7 +91,7 @@ function usage(): never {
   console.error(
     [
       "Usage:",
-      "  pnpm run gallery:qa -- --couple ./samples/couple --venue ./samples/venue [--out ./qa-output/live] [--style cinematic-editorial] [--couple-name \"Avery & Morgan\"]",
+      "  pnpm run gallery:qa -- --couple ./samples/couple --venue ./samples/venue [--out ./qa-output/live] [--style cinematic-editorial] [--venue-name \"Willow & Stone\"]",
       "",
       "Required:",
       "  --couple   Folder with 2-3 clear couple reference images.",
@@ -137,7 +143,7 @@ function parseArgs(argv: string[]): CliOptions {
     venueDir: resolveFromRepo(venue),
     outDir: resolveFromRepo(values.get("out") ?? `qa-output/gallery-${stamp}`),
     styleId: values.get("style") ?? "cinematic-editorial",
-    coupleName: values.get("couple-name") ?? null,
+    venueName: values.get("venue-name") ?? null,
     allowNonpassing,
     consentConfirmed,
   };
@@ -272,6 +278,14 @@ function summarizeQa(report: {
   if (minPartnerScore === null) warnings.push("Automated per-partner likeness scores are missing.");
   if (minVenueScore === null) warnings.push("Automated venue scores are missing.");
   if (minCompositionScore === null) warnings.push("Automated composition scores are missing.");
+  for (const frame of report.frames) {
+    if (frame.judgeStatus === "unjudged") {
+      warnings.push(`${frame.sceneId} was not judged (quality judge unavailable); production would hold this gallery for owner review.`);
+    } else if (frame.judgeStatus === "below_target") {
+      warnings.push(`${frame.sceneId} shipped below the strict targets (best of ${frame.attempts} attempts).`);
+    }
+    if (frame.fallbackUsed) warnings.push(`${frame.sceneId} was rendered by fallback model ${frame.model}.`);
+  }
   if (minLikenessScore !== null && minLikenessScore < QA_THRESHOLDS.likeness) {
     warnings.push(`Minimum likeness score ${minLikenessScore.toFixed(2)} is below ${QA_THRESHOLDS.likeness}.`);
   }
@@ -515,7 +529,7 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const [
     { polishGalleryFrame },
-    { renderGalleryFrameWithQuality, userMessageForStillError },
+    { renderGalleryFrameWithQuality, userMessageForStillError, defaultGalleryRenderDeps },
     { planGalleryScenes },
     { buildKenBurnsSlideshow },
     { findGalleryStyle, GALLERY_STYLES },
@@ -602,22 +616,32 @@ async function main(): Promise<void> {
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i]!;
-      const result = await renderGalleryFrameWithQuality({
-        sessionId,
-        scene,
-        style,
-        sceneIndex: i,
-        coupleBuffers: coupleRefs,
-        venueBuffers: venueRefs,
-      });
+      const renderAttempts: Array<Record<string, unknown>> = [];
+      const result = await renderGalleryFrameWithQuality(
+        {
+          sessionId,
+          scene,
+          style,
+          sceneIndex: i,
+          coupleBuffers: coupleRefs,
+          venueBuffers: venueRefs,
+        },
+        {
+          ...defaultGalleryRenderDeps,
+          // QA runs are not sessions: keep the attempt log in the report
+          // instead of render_attempts / the audit trail.
+          recordAttempt: async (attempt) => {
+            const { sessionId: _sessionId, ...rest } = attempt;
+            renderAttempts.push(rest);
+          },
+          recordFallback: async () => {},
+        },
+      );
 
       const baseName = `${String(i + 1).padStart(2, "0")}-${scene.id}`;
       const rawPath = path.join(options.outDir, `${baseName}.raw.jpg`);
       const polishedPath = path.join(options.outDir, `${baseName}.jpg`);
-      const polished = await polishGalleryFrame(result.raw, {
-        coupleName: options.coupleName,
-        sceneIndex: i,
-      });
+      const polished = await polishGalleryFrame(result.raw, { sceneIndex: i });
 
       await writeFile(rawPath, result.raw);
       await writeFile(polishedPath, polished);
@@ -631,6 +655,9 @@ async function main(): Promise<void> {
         polishedPath: rel(polishedPath),
         attempts: result.attempts,
         model: result.model,
+        fallbackUsed: result.fallbackUsed,
+        judgeStatus: result.judgeStatus,
+        renderAttempts,
         venueReferences: result.venueReferenceIndexes.map((index) => ({
           file: rel(venueRefs[index]!.file),
           coverage: venueRefs[index]!.coverage ?? null,
@@ -640,7 +667,7 @@ async function main(): Promise<void> {
       });
     }
 
-    const reel = await buildKenBurnsSlideshow(polishedFrames, 4);
+    const reel = await buildKenBurnsSlideshow(polishedFrames, 4, { venueName: options.venueName });
     const reelPath = path.join(options.outDir, "dreemer-motion-reel.mp4");
     await writeFile(reelPath, reel);
     report.reelPath = rel(reelPath);

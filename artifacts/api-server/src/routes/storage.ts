@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import {
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
@@ -10,7 +10,6 @@ import {
   ObjectNotFoundError,
   assertNormalizedUploadObjectPath,
 } from "../lib/objectStorage";
-import { ObjectPermission } from "../lib/objectAcl";
 import {
   db,
   venuesTable,
@@ -22,24 +21,61 @@ import {
 } from "@workspace/db";
 import { rateLimit, clientKey } from "../lib/rateLimit";
 import { getCallerOrgDbId, requireOrgVenue } from "../lib/orgAuth.js";
-import { verifyCoupleUploadToken } from "../lib/uploadToken";
+import { coupleUploadTokenExpiry, verifyCoupleUploadToken } from "../lib/uploadToken";
 import { canReadVenueMediaReference } from "../lib/objectAccess";
 import { canReadGeneratedAssetWithShareToken } from "../lib/sessionVisibility";
+import {
+  uploadIntentCoupleHourlyCap,
+  uploadIntentVenueDailyCap,
+} from "../lib/sessionCleanupConfig";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-const UPLOAD_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
-
-function storedObjectMatchesPath(storedObjectKey: string, objectPath: string): boolean {
-  return objectStorageService.normalizeObjectEntityPath(storedObjectKey) === objectPath;
-}
+/** Owner uploads from the dashboard: the owner is signed in, a day is plenty. */
+const OWNER_UPLOAD_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Couple uploads live as long as the upload token plus a grace period for
+ * finishing the form, so an abandoned upload is swept within the hour instead
+ * of sitting in the bucket for a day.
+ */
+const COUPLE_UPLOAD_INTENT_GRACE_MS = 15 * 60 * 1000;
 
 function extensionForImageMime(contentType: string): string {
   if (contentType === "image/png") return ".png";
   if (contentType === "image/webp") return ".webp";
   return ".jpg";
+}
+
+async function countVenueIntentsSince(venueId: number, since: Date, purpose?: string): Promise<number> {
+  const conditions = [eq(uploadIntentsTable.venueId, venueId), gte(uploadIntentsTable.createdAt, since)];
+  if (purpose) conditions.push(eq(uploadIntentsTable.purpose, purpose));
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(uploadIntentsTable)
+    .where(and(...conditions));
+  return row?.count ?? 0;
+}
+
+/**
+ * Anyone holding a venue slug (and, for couples, a short-lived token) can ask
+ * for an upload URL, so beyond the per-IP limit each venue has a rolling daily
+ * budget and couple uploads a rolling hourly one. The budgets are far above
+ * honest use (five venue photos, two or three couple photos per tour).
+ */
+async function uploadIntentCapExceeded(
+  venueId: number,
+  purpose: "venue" | "couple",
+  now = Date.now(),
+): Promise<boolean> {
+  const daily = await countVenueIntentsSince(venueId, new Date(now - 24 * 60 * 60 * 1000));
+  if (daily >= uploadIntentVenueDailyCap()) return true;
+  if (purpose === "couple") {
+    const hourly = await countVenueIntentsSince(venueId, new Date(now - 60 * 60 * 1000), "couple");
+    if (hourly >= uploadIntentCoupleHourlyCap()) return true;
+  }
+  return false;
 }
 
 /**
@@ -71,16 +107,19 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       res.status(400).json({ error: "venueSlug is required" });
       return;
     }
+    const now = Date.now();
     let venueId: number;
+    let expiresAt = new Date(now + OWNER_UPLOAD_INTENT_TTL_MS);
     if (purpose === "venue") {
       const venue = await requireOrgVenue(req, res, venueSlug);
       if (!venue) return;
       venueId = venue.id;
     } else if (uploadToken) {
-      if (!verifyCoupleUploadToken(uploadToken, venueSlug)) {
+      if (!verifyCoupleUploadToken(uploadToken, venueSlug, now)) {
         res.status(401).json({ error: "Upload token expired. Refresh the venue page and try again." });
         return;
       }
+      const tokenExpiresAt = coupleUploadTokenExpiry(uploadToken, venueSlug, now) ?? now;
       const [venue] = await db
         .select({ id: venuesTable.id })
         .from(venuesTable)
@@ -90,12 +129,22 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
         return;
       }
       venueId = venue.id;
+      expiresAt = new Date(
+        Math.min(tokenExpiresAt + COUPLE_UPLOAD_INTENT_GRACE_MS, now + OWNER_UPLOAD_INTENT_TTL_MS),
+      );
     } else {
-      // Owner-driven couple upload from the dashboard. requireOwnerVenue
+      // Owner-driven couple upload from the dashboard. requireOrgVenue
       // writes its own error response, so never write a second one here.
       const ownerVenue = await requireOrgVenue(req, res, venueSlug);
       if (!ownerVenue) return;
       venueId = ownerVenue.id;
+    }
+
+    if (await uploadIntentCapExceeded(venueId, purpose === "venue" ? "venue" : "couple", now)) {
+      res.status(429).json({
+        error: "This venue has reached its upload limit for now. Try again in a little while.",
+      });
+      return;
     }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL(
@@ -110,7 +159,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       originalName: name.slice(0, 240),
       contentType,
       sizeBytes: size,
-      expiresAt: new Date(Date.now() + UPLOAD_INTENT_TTL_MS),
+      expiresAt,
     });
 
     res.json(
@@ -168,9 +217,9 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
 /**
  * GET /storage/objects/*
  *
- * Serve object entities from PRIVATE_OBJECT_DIR.
- * These are served from a separate path from /public-objects and can optionally
- * be protected with authentication or ACL checks based on the use case.
+ * Serve private object entities. Access is decided by what the object is in
+ * the database (venue reference photo, generated gallery asset, couple
+ * photo) and who is asking (venue visitor, share-token holder, org member).
  */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   try {
@@ -183,21 +232,6 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
       return;
     }
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-
-    // --- Protected route example (uncomment when adding auth middleware) ---
-    // if (!req.isAuthenticated()) {
-    //   res.status(401).json({ error: "Unauthorized" });
-    //   return;
-    // }
-    // const canAccess = await objectStorageService.canAccessObjectEntity({
-    //   userId: req.user.id,
-    //   objectFile,
-    //   requestedPermission: ObjectPermission.READ,
-    // });
-    // if (!canAccess) {
-    //   res.status(403).json({ error: "Forbidden" });
-    //   return;
-    // }
 
     const response = await objectStorageService.downloadObject(
       objectFile,
@@ -228,17 +262,15 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
 
 export default router;
 
+/**
+ * Object keys are stored in their normalized `/objects/...` form (the upload
+ * route asserts it before inserting an intent, and generated assets are
+ * written that way), so every lookup is a single indexed equality.
+ */
 async function canReadStoredObject(req: Request, objectPath: string): Promise<boolean> {
-  let venueMedia: {
-    id: number;
-    objectKey: string;
-    venueSlug: string;
-    organizationId: number | null;
-  } | undefined;
-  [venueMedia] = await db
+  const [venueMedia] = await db
     .select({
       id: venueMediaTable.id,
-      objectKey: venueMediaTable.objectKey,
       venueSlug: venuesTable.slug,
       organizationId: venuesTable.organizationId,
     })
@@ -249,20 +281,6 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
 
   const callerOrgId = await getCallerOrgDbId(req);
   const publicVenueSlug = typeof req.query.venueSlug === "string" ? req.query.venueSlug : "";
-
-  if (!venueMedia && publicVenueSlug) {
-    const venueMediaCandidates = await db
-      .select({
-        id: venueMediaTable.id,
-        objectKey: venueMediaTable.objectKey,
-        venueSlug: venuesTable.slug,
-        organizationId: venuesTable.organizationId,
-      })
-      .from(venueMediaTable)
-      .innerJoin(venuesTable, eq(venueMediaTable.venueId, venuesTable.id))
-      .where(eq(venuesTable.slug, publicVenueSlug));
-    venueMedia = venueMediaCandidates.find((media) => storedObjectMatchesPath(media.objectKey, objectPath));
-  }
 
   if (venueMedia) {
     return canReadVenueMediaReference({
@@ -275,17 +293,20 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
 
   const shareToken = typeof req.query.shareToken === "string" ? req.query.shareToken : "";
   if (shareToken) {
-    const generatedCandidates = await db
+    const [generated] = await db
       .select({
-        id: generatedAssetsTable.id,
         sessionId: generatedAssetsTable.sessionId,
         status: coupleSessionsTable.status,
-        objectKey: generatedAssetsTable.objectKey,
       })
       .from(generatedAssetsTable)
       .innerJoin(coupleSessionsTable, eq(generatedAssetsTable.sessionId, coupleSessionsTable.id))
-      .where(eq(coupleSessionsTable.shareToken, shareToken));
-    const generated = generatedCandidates.find((asset) => storedObjectMatchesPath(asset.objectKey, objectPath));
+      .where(
+        and(
+          eq(generatedAssetsTable.objectKey, objectPath),
+          eq(coupleSessionsTable.shareToken, shareToken),
+        ),
+      )
+      .limit(1);
     if (generated) {
       const sessionAssets = await db
         .select({
@@ -299,8 +320,8 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
   }
 
   if (callerOrgId == null) return false;
-  const ownedGeneratedCandidates = await db
-    .select({ id: generatedAssetsTable.id, objectKey: generatedAssetsTable.objectKey })
+  const [ownedGenerated] = await db
+    .select({ id: generatedAssetsTable.id })
     .from(generatedAssetsTable)
     .innerJoin(coupleSessionsTable, eq(generatedAssetsTable.sessionId, coupleSessionsTable.id))
     .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
@@ -311,34 +332,14 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
       ),
     )
     .limit(1);
-  let ownedGenerated: { id: number; objectKey: string } | undefined = ownedGeneratedCandidates[0];
-  if (!ownedGenerated) {
-    const generatedCandidates = await db
-      .select({ id: generatedAssetsTable.id, objectKey: generatedAssetsTable.objectKey })
-      .from(generatedAssetsTable)
-      .innerJoin(coupleSessionsTable, eq(generatedAssetsTable.sessionId, coupleSessionsTable.id))
-      .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
-      .where(eq(venuesTable.organizationId, callerOrgId));
-    ownedGenerated = generatedCandidates.find((asset) => storedObjectMatchesPath(asset.objectKey, objectPath));
-  }
   if (ownedGenerated) return true;
 
-  const ownedCoupleCandidates = await db
-    .select({ id: coupleMediaTable.id, objectKey: coupleMediaTable.objectKey })
+  const [ownedCouple] = await db
+    .select({ id: coupleMediaTable.id })
     .from(coupleMediaTable)
     .innerJoin(coupleSessionsTable, eq(coupleMediaTable.sessionId, coupleSessionsTable.id))
     .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
     .where(and(eq(coupleMediaTable.objectKey, objectPath), eq(venuesTable.organizationId, callerOrgId)))
     .limit(1);
-  let ownedCouple: { id: number; objectKey: string } | undefined = ownedCoupleCandidates[0];
-  if (!ownedCouple) {
-    const coupleCandidates = await db
-      .select({ id: coupleMediaTable.id, objectKey: coupleMediaTable.objectKey })
-      .from(coupleMediaTable)
-      .innerJoin(coupleSessionsTable, eq(coupleMediaTable.sessionId, coupleSessionsTable.id))
-      .innerJoin(venuesTable, eq(coupleSessionsTable.venueId, venuesTable.id))
-      .where(eq(venuesTable.organizationId, callerOrgId));
-    ownedCouple = coupleCandidates.find((asset) => storedObjectMatchesPath(asset.objectKey, objectPath));
-  }
-  return !!ownedCouple;
+  return Boolean(ownedCouple);
 }

@@ -11,4 +11,6 @@ export interface ControlActionDecisionBody {
   decision: ControlActionDecisionBodyDecision;
   /** @maxLength 500 */
   note?: string;
+  /** Set by the Outreach studio after the rendered email was on screen. Approving send_outreach_email without it returns 409 with code review_in_outreach. */
+  reviewed?: boolean;
 }

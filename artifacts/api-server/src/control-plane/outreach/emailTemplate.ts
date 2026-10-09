@@ -34,8 +34,20 @@ export interface TemplateInput {
   venueName: string;
   unsubscribeUrl: string;
   postalAddress: string;
+  /**
+   * Why this address is receiving the note (CAN-SPAM commercial notice and
+   * opt-out expectation). Defaults to defaultWhyLine(venueName).
+   */
+  whyLine?: string;
+  /** Optional mailbox listed in List-Unsubscribe next to the https URL. */
+  unsubscribeMailbox?: string | null;
   /** Preview-only: render the dark palette unconditionally. */
   forceScheme?: "light" | "dark";
+}
+
+/** The footer sentence: commercial nature, why this address, and the contact limit. */
+export function defaultWhyLine(venueName: string): string {
+  return `This is a personal note from someone at ${BRAND.name}, sent because ${venueName} publicly lists this address for event inquiries. We write at most three times and stop as soon as you reply or unsubscribe.`;
 }
 
 type Palette = Record<keyof typeof BRAND_COLORS.light, string>;
@@ -124,6 +136,7 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
   const radius = `${10}px`;
   const ctaHref = safeHref(input.ctaUrl);
   const unsubscribeHref = safeHref(input.unsubscribeUrl);
+  const whyLine = input.whyLine?.trim() || defaultWhyLine(input.venueName);
   // The hero should be a landscape frame; a portrait photo leads only when nothing else is available.
   const ordered = input.images.slice(0, 3);
   const landscapeIndex = ordered.findIndex((image) => image.width / image.height >= 1.1);
@@ -239,7 +252,7 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
           </tr>
           <tr>
             <td class="px" style="padding:22px ${gutter}px 8px;">
-              <p class="dm-muted" style="margin:0 0 10px;font-family:${FONT_BODY};font-size:12px;line-height:18px;color:${colors.inkMuted};">You are getting this one note because ${escapeHtml(input.venueName)} hosts weddings and I thought it might be useful. If you would rather not hear from me, <a class="dm-link" href="${escapeHtml(unsubscribeHref)}" style="color:${colors.accent};text-decoration:underline;">unsubscribe</a> and I will not write again.</p>
+              <p class="dm-muted" style="margin:0 0 10px;font-family:${FONT_BODY};font-size:12px;line-height:18px;color:${colors.inkMuted};">${escapeHtml(whyLine)} <a class="dm-link" href="${escapeHtml(unsubscribeHref)}" style="color:${colors.accent};text-decoration:underline;">Unsubscribe here</a> and we will not write again.</p>
               <p class="dm-muted" style="margin:0;font-family:${FONT_BODY};font-size:12px;line-height:18px;color:${colors.inkMuted};">${escapeHtml(input.postalAddress)}<br />${escapeHtml(BRAND.name)} &middot; <a class="dm-link" href="https://${escapeHtml(BRAND.domain)}" style="color:${colors.inkMuted};text-decoration:none;">${escapeHtml(BRAND.domain)}</a></p>
             </td>
           </tr>
@@ -261,11 +274,11 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
     ...input.signOffLines,
     "",
     "—",
-    `You are getting this one note because ${input.venueName} hosts weddings and I thought it might be useful.`,
-    `If you would rather not hear from me, unsubscribe here and I will not write again: ${unsubscribeHref}`,
+    whyLine,
+    `Unsubscribe here and we will not write again: ${unsubscribeHref}`,
     input.postalAddress,
     `${BRAND.name} · ${BRAND.domain}`,
   ].join("\n");
 
-  return { html, text, headers: {} };
+  return { html, text, headers: buildListUnsubscribeHeaders(input.unsubscribeUrl, input.unsubscribeMailbox ?? null) };
 }

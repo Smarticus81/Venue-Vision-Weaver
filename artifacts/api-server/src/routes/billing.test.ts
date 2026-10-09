@@ -801,3 +801,17 @@ test("requireOrgAdmin is true only for org:admin", () => {
   assert.equal(orgAuth.requireOrgAdmin({ orgRole: "org:member" }), false);
   assert.equal(orgAuth.requireOrgAdmin({ orgRole: null }), false);
 });
+
+test("isUniqueViolation recognises the trial-grantee index, including wrapped driver errors", () => {
+  const pgError = Object.assign(new Error("duplicate key"), {
+    code: "23505",
+    constraint: "organizations_trial_grantee_unique",
+  });
+  assert.equal(orgAuth.isUniqueViolation(pgError, "organizations_trial_grantee_unique"), true);
+  assert.equal(
+    orgAuth.isUniqueViolation(new Error("query failed", { cause: pgError }), "organizations_trial_grantee_unique"),
+    true,
+  );
+  assert.equal(orgAuth.isUniqueViolation(pgError, "organizations_clerk_org_id_unique"), false);
+  assert.equal(orgAuth.isUniqueViolation(new Error("boom"), "organizations_trial_grantee_unique"), false);
+});

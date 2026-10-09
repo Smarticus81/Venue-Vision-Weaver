@@ -30,6 +30,7 @@ export function ownerVenueResponse(venue: Venue, org?: Organization | null) {
     incentiveText: venue.incentiveText,
     tourCardDownloadedAt: venue.tourCardDownloadedAt,
     websiteImportedAt: venue.websiteImportedAt,
+    reviewBeforeSend: venue.reviewBeforeSend,
     plan: org ? org.plan : venue.plan,
     creditsBalance: org ? org.creditsBalance : venue.creditsBalance,
     billingPeriodEnd: org ? org.billingPeriodEnd : venue.billingPeriodEnd,
@@ -69,6 +70,51 @@ export function isBookingReady(venue: {
   return Boolean(venue.bookingUrl?.trim() || venue.websiteUrl?.trim() || venue.contactEmail?.trim());
 }
 
+export interface BookingCta {
+  label: string;
+  href: string;
+}
+
+/**
+ * The share-page / gallery-email date CTA (step0-merge-decisions E10):
+ * "Check your date at {venue}" pointing at bookingUrl -> websiteUrl ->
+ * mailto:contactEmail, carrying the couple's wedding month and utm tags.
+ * Never "Book a tour" (the couple already toured). Null when the venue has
+ * nowhere to send the couple yet.
+ */
+export function bookingCtaFor(
+  venue: { name: string; bookingUrl: string | null; websiteUrl: string | null; contactEmail: string | null },
+  options: { weddingMonth?: string | null; coupleName?: string | null; medium?: string } = {},
+): BookingCta | null {
+  const label = `Check your date at ${venue.name}`;
+  const target = venue.bookingUrl?.trim() || venue.websiteUrl?.trim() || "";
+  const month = options.weddingMonth?.trim() || null;
+  if (target) {
+    try {
+      const url = new URL(target);
+      url.searchParams.set("utm_source", "dreemer");
+      url.searchParams.set("utm_medium", options.medium ?? "gallery");
+      url.searchParams.set("utm_campaign", "hold_your_date");
+      if (month) url.searchParams.set("wedding_month", month);
+      return { label, href: url.toString() };
+    } catch {
+      /* fall through to the email fallback */
+    }
+  }
+  const email = venue.contactEmail?.trim();
+  if (!email) return null;
+  const subjectParts = ["Our date at", venue.name];
+  if (month) subjectParts.push(`(${month})`);
+  const bodyLines = [
+    `Hi ${venue.name},`,
+    "",
+    `We just saw our Dreemer gallery and would like to check availability${month ? ` for ${month}` : ""}.`,
+  ];
+  if (options.coupleName?.trim()) bodyLines.push("", options.coupleName.trim());
+  const params = new URLSearchParams({ subject: subjectParts.join(" "), body: bodyLines.join("\n") });
+  return { label, href: `mailto:${email}?${params.toString().replace(/\+/g, "%20")}` };
+}
+
 /** Couple-safe venue payload - no billing fields. */
 export function toPublicVenue(
   venue: {
@@ -82,6 +128,7 @@ export function toPublicVenue(
     websiteUrl: string | null;
     bookingUrl: string | null;
     incentiveText?: string | null;
+    reviewBeforeSend?: boolean | null;
     createdAt: Date;
   },
   media: Array<MediaCoverageRow>,
@@ -97,6 +144,8 @@ export function toPublicVenue(
     websiteUrl: venue.websiteUrl,
     bookingUrl: venue.bookingUrl,
     incentiveText: venue.incentiveText ?? null,
+    // Lets the couple page say truthfully whether the link is emailed on ready.
+    reviewBeforeSend: venue.reviewBeforeSend === true,
     createdAt: venue.createdAt,
     media,
     isReady: isVenueReady(media),

@@ -18,11 +18,25 @@ export async function loadContactPolicy(): Promise<ContactPolicy> {
   };
 }
 
+export type ContactGuardCode = "suppressed" | "status" | "lifetime_cap" | "gap" | "existing_customer";
+
+/** Why a prospect may not be emailed; "gap" is the only one time fixes on its own. */
+export class ContactGuardError extends Error {
+  constructor(
+    public readonly code: ContactGuardCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ContactGuardError";
+  }
+}
+
 /**
  * Pure consent/cadence check shared by every prospect-facing send path.
- * Throws with an operator-readable reason; returns nothing when sending is
- * allowed. The suppression list and the existing-customer check are passed
- * in so this stays testable without a database.
+ * Throws a ContactGuardError with an operator-readable reason; returns
+ * nothing when sending is allowed. The suppression list and the
+ * existing-customer check are passed in so this stays testable without a
+ * database.
  */
 export function assertProspectContactable(
   prospect: Pick<ControlProspect, "id" | "email" | "status" | "contactCount" | "lastContactedAt">,
@@ -31,26 +45,32 @@ export function assertProspectContactable(
   now: Date = new Date(),
 ): void {
   if (flags.suppressed) {
-    throw new Error(`${prospect.email} is on the suppression list (unsubscribed, bounced, or complained) and must not be emailed.`);
+    throw new ContactGuardError(
+      "suppressed",
+      `${prospect.email} is on the suppression list (unsubscribed, bounced, or complained) and must not be emailed.`,
+    );
   }
   if (!CONTACTABLE_PROSPECT_STATUSES.includes(prospect.status as (typeof CONTACTABLE_PROSPECT_STATUSES)[number])) {
-    throw new Error(`Prospect ${prospect.id} is "${prospect.status}" and may not be emailed by the control plane.`);
+    throw new ContactGuardError("status", `Prospect ${prospect.id} is "${prospect.status}" and may not be emailed by the control plane.`);
   }
   if (prospect.contactCount >= policy.maxContacts) {
-    throw new Error(
+    throw new ContactGuardError(
+      "lifetime_cap",
       `Prospect ${prospect.id} already received ${prospect.contactCount}/${policy.maxContacts} emails; no further automated contact allowed.`,
     );
   }
   if (prospect.lastContactedAt) {
     const hoursSince = (now.getTime() - prospect.lastContactedAt.getTime()) / 3_600_000;
     if (hoursSince < policy.minGapHours) {
-      throw new Error(
+      throw new ContactGuardError(
+        "gap",
         `Prospect ${prospect.id} was contacted ${Math.round(hoursSince)}h ago; policy requires a ${policy.minGapHours}h gap.`,
       );
     }
   }
   if (flags.existingCustomerSlug) {
-    throw new Error(
+    throw new ContactGuardError(
+      "existing_customer",
       `Prospect ${prospect.id} (${prospect.email}) already owns venue "${flags.existingCustomerSlug}"; use send_venue_email instead.`,
     );
   }

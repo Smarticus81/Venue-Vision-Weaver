@@ -17,6 +17,21 @@ export const MIN_REFERENCE_EDGE_PX = 256;
  */
 export const NEAR_DUPLICATE_HAMMING = 4;
 
+/**
+ * A reference photo is missing or unusable. The message is written by us (no
+ * provider text), so the couple-facing failure copy may quote it when the
+ * subject is a couple photo.
+ */
+export class ReferenceImageError extends Error {
+  readonly subject: ReferenceProfile;
+
+  constructor(message: string, subject: ReferenceProfile) {
+    super(message);
+    this.name = "ReferenceImageError";
+    this.subject = subject;
+  }
+}
+
 export interface ReferenceImageQuality {
   width: number;
   height: number;
@@ -122,9 +137,7 @@ export async function assertReferenceImageQuality(params: {
   const height = meta.height ?? 0;
 
   if (width < minEdgePx || height < minEdgePx) {
-    throw new Error(
-      `${label} is too small (${width}x${height}). Upload at least ${minEdgePx}px on each side.`,
-    );
+    throw new ReferenceImageError(`${label} is too small (${width}x${height}). Upload at least ${minEdgePx}px on each side.`, profile);
   }
 
   const normalized = image.clone().flatten({ background: "#ffffff" }).greyscale();
@@ -144,16 +157,16 @@ export async function assertReferenceImageQuality(params: {
   const thresholds = PROFILE_THRESHOLDS[profile];
 
   if (brightness < thresholds.minBrightness) {
-    throw new Error(`${label} is too dark for reliable ${profile === "couple" ? "likeness" : "venue"} matching.`);
+    throw new ReferenceImageError(`${label} is too dark for reliable ${profile === "couple" ? "likeness" : "venue"} matching.`, profile);
   }
   if (brightness > thresholds.maxBrightness) {
-    throw new Error(`${label} is too washed out for reliable ${profile === "couple" ? "likeness" : "venue"} matching.`);
+    throw new ReferenceImageError(`${label} is too washed out for reliable ${profile === "couple" ? "likeness" : "venue"} matching.`, profile);
   }
   if (contrast < thresholds.minContrast) {
-    throw new Error(`${label} has too little contrast. Upload a clearer, better-lit image.`);
+    throw new ReferenceImageError(`${label} has too little contrast. Upload a clearer, better-lit image.`, profile);
   }
   if (sharpness < thresholds.minSharpness) {
-    throw new Error(`${label} appears blurry. Upload a sharper image.`);
+    throw new ReferenceImageError(`${label} appears blurry. Upload a sharper image.`, profile);
   }
 
   return {

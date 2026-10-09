@@ -6,9 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ReadinessStatusChecks } from "./readinessStatusChecks";
+import type { ReadinessStatusDetails } from "./readinessStatusDetails";
 import type { ReadinessStatusStatus } from "./readinessStatusStatus";
 
 export interface ReadinessStatus {
   status: ReadinessStatusStatus;
   checks: ReadinessStatusChecks;
+  /** Reasons per check (operators or x-readiness-token only). Keys are check names (env, auth, database, rls); values are human-readable reasons, empty when the check is ok. */
+  details?: ReadinessStatusDetails;
 }

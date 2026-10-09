@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import App from "./App";
 import "./index.css";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
-import { clearLegacySavedSessions } from "./lib/savedSessions";
+import { clearLegacyGalleryStorage } from "./lib/recovery";
 import {
   CLERK_PUBLISHABLE_KEY,
   clerkExpectedDomain,
@@ -11,7 +11,15 @@ import {
   brandAppearance,
 } from "./lib/clerk";
 
-clearLegacySavedSessions();
+function browserStore(kind: "localStorage" | "sessionStorage"): Storage | null {
+  try {
+    return window[kind];
+  } catch {
+    return null;
+  }
+}
+
+clearLegacyGalleryStorage(browserStore("localStorage"), browserStore("sessionStorage"));
 
 const root = createRoot(document.getElementById("root")!);
 

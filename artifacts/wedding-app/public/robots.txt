@@ -1,2 +1,10 @@
 User-agent: *
 Allow: /
+# Couple galleries and the couple flow are private to the people in them.
+Disallow: /v/
+Disallow: /preview/
+# Owner and operator surfaces need a sign-in; nothing to index.
+Disallow: /dashboard
+Disallow: /control
+Disallow: /claim/
+Disallow: /api/

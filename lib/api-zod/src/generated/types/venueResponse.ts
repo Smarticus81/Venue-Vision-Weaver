@@ -27,6 +27,8 @@ export interface VenueResponse {
   incentiveText?: string | null;
   tourCardDownloadedAt?: Date | null;
   websiteImportedAt?: Date | null;
+  /** When true, ready galleries wait in the dashboard for the venue to send them; when false (default) they are emailed to the couple automatically. */
+  reviewBeforeSend: boolean;
   /** Billing organization that owns this venue. */
   organizationId?: number | null;
   /** Organization plan (billing lives on the organization). */

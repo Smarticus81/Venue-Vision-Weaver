@@ -21,4 +21,5 @@ file only restates the three rules that coding agents most often get wrong.
    it in `/control`. Keep the consent, suppression, cap and unsubscribe checks
    in that path intact.
 
-Before finishing: `pnpm run typecheck`, `pnpm run test`, `pnpm run build`.
+Before finishing: `pnpm run typecheck`, `pnpm run test`, `pnpm run smoke:security`,
+`pnpm run build`.

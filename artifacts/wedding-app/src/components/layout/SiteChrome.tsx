@@ -1,9 +1,20 @@
 import { Link, useLocation } from "wouter";
 import { DreemerLogo } from "@/components/brand/DreemerLogo";
+import { usePublicConfig } from "@/lib/publicConfig";
+import { track } from "@/lib/track";
 import type { ReactNode } from "react";
+
+/*
+ * Owner-facing site chrome (funnel-ux.md 3.1). The header is logo + two
+ * in-page anchors + Sign in + one coral Start free; below 480px the anchors
+ * hide so a 360px phone shows logo, Sign in and Start free on one line.
+ * Couple pages get their own chrome (CoupleChrome) so Dreemer's signup is
+ * never the loudest button on a venue's conversion page.
+ */
 
 export function SiteHeader() {
   const [path] = useLocation();
+  const onHome = path === "/";
   return (
     <>
       <a href="#main-content" className="skip-link">
@@ -12,15 +23,12 @@ export function SiteHeader() {
       <header className="site-header page-width">
         <DreemerLogo />
         <nav aria-label="Main navigation">
-          <Link href="/" aria-current={path === "/" ? "page" : undefined}>
-            For venues
-          </Link>
-          <Link
-            href="/couple"
-            aria-current={path === "/couple" ? "page" : undefined}
-          >
-            For couples
-          </Link>
+          <a href={onHome ? "#how-it-works" : "/#how-it-works"} className="nav-anchor">
+            How it works
+          </a>
+          <a href={onHome ? "#pricing" : "/#pricing"} className="nav-anchor">
+            Pricing
+          </a>
           <Link href="/login" data-testid="venue-header-sign-in">
             Sign in
           </Link>
@@ -28,6 +36,7 @@ export function SiteHeader() {
             href="/create-venue"
             className="nav-cta"
             data-testid="venue-header-register"
+            onClick={() => track("cta_click", { placement: "header" })}
           >
             Start free
           </Link>
@@ -38,11 +47,14 @@ export function SiteHeader() {
 }
 
 export function SiteFooter() {
+  const config = usePublicConfig();
   return (
     <footer className="site-footer page-width">
       <DreemerLogo className="text-[1.25rem]" />
       <p>Turn tours into bookings.</p>
-      <Link href="/find-my-gallery">Find my gallery</Link>
+      <Link href="/pricing">Pricing</Link>
+      <Link href="/privacy">Privacy &amp; AI previews</Link>
+      {config.contactEmail ? <a href={`mailto:${config.contactEmail}`}>Email us</a> : null}
       <span>© {new Date().getFullYear()} Dreemer</span>
     </footer>
   );

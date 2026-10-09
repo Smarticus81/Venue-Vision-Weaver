@@ -115,7 +115,11 @@ test("research: picks real venue photos, records sources, skips logos/tiny/dupli
   assert.ok(!deps.downloads.some((url) => /logo|\.svg/.test(url)), "logos and svgs are never downloaded");
   assert.ok(!result.images.some((image) => image.sourceUrl.includes("tiny.jpg")), "small images are dropped");
   assert.ok(!result.images.some((image) => image.sourceUrl.includes("duplicate-of-hero")), "near-duplicates are dropped");
-  assert.equal(result.images[0]!.sourceUrl, `${HOME}images/og-garden.jpg`, "og:image ranks first");
+  // An og:image named like a share card ("og-...") is kept but no longer outranks the hero photo.
+  assert.equal(result.images[0]!.sourceUrl, `${HOME}images/hero-barn.jpg`, "the hero photo ranks first");
+  assert.ok(result.images.some((image) => image.sourceUrl.endsWith("og-garden.jpg")), "the og:image is still a candidate");
+  assert.equal(research.looksLikeShareCard("https://venue.test/img/og-share-card.png"), true);
+  assert.equal(research.looksLikeShareCard("https://venue.test/img/barn-at-dusk.jpg"), false);
   assert.ok(result.images.some((image) => image.sourceUrl.endsWith("terrace-1600.jpg")), "largest srcset entry wins");
 
   assert.equal(result.facts.name, "Willow House");
@@ -204,7 +208,11 @@ test("template: responsive, dark-mode aware, escaped, with plain text and alt te
   assert.ok(!rendered.html.includes('href="javascript:'), "unsafe CTA link is neutralised");
   assert.match(rendered.html, /href="https:\/\/studio\.test\/api\/outreach\/unsubscribe\/tok123"/);
   assert.match(rendered.html, /Dreemer · 1 Main St · Hudson, NY 12534/);
-  assert.match(rendered.text, /unsubscribe here[^\n]*https:\/\/studio\.test\/api\/outreach\/unsubscribe\/tok123/);
+  assert.match(rendered.text, /Unsubscribe here[^\n]*https:\/\/studio\.test\/api\/outreach\/unsubscribe\/tok123/);
+  assert.match(rendered.html, /publicly lists this address for event inquiries/);
+  assert.match(rendered.text, /publicly lists this address for event inquiries/);
+  assert.ok(!/this one note/.test(rendered.text), "the footer no longer claims a single note");
+  assert.equal(rendered.headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click", "headers are built by the renderer");
   assert.match(rendered.text, /Dreemer · 1 Main St/);
   assert.match(rendered.text, /^Hi Dana,/);
 
@@ -274,25 +282,106 @@ test("suppression and consent: suppressed, opted-out, capped, and too-soon prosp
   assert.throws(() => guards.assertProspectContactable(baseProspect, policy, { ...ok, existingCustomerSlug: "willow" }), /already owns venue/);
 });
 
-function fakeSendWorld(overrides: { actionStatus?: string | null; actionId?: number | null; suppressed?: boolean; emailStatus?: string } = {}) {
-  const calls: Record<string, unknown[]> = { deliver: [], markSent: [], markFailed: [], bumpProspect: [] };
+type VettingRow = import("@workspace/db").ControlProspectVetting;
+type FactRow = import("@workspace/db").ControlProspectFact;
+
+const SEND_NOW = new Date("2026-10-03T12:00:00Z");
+
+function vettingRow(overrides: Partial<VettingRow> = {}): VettingRow {
+  return {
+    id: 1,
+    prospectId: 1,
+    status: "passed",
+    score: 82,
+    tier: "A",
+    hardFails: [],
+    checks: [],
+    summary: "Passed 82/100: 9-year-old domain, Workspace mail.",
+    contactDomain: "venue.test",
+    mxProvider: "google_workspace",
+    domainRegisteredAt: null,
+    firstCaptureAt: null,
+    placesPlaceId: null,
+    vettedAt: new Date("2026-10-01T12:00:00Z"),
+    expiresAt: new Date("2026-10-31T12:00:00Z"),
+    vettedBy: "system:vetting",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  } as VettingRow;
+}
+
+function factRow(id: number, kind: string, value: string, status = "verified"): FactRow {
+  return {
+    id,
+    prospectId: 1,
+    kind,
+    value,
+    sourceUrl: "https://willow.test/",
+    sourceKind: "website",
+    excerpt: null,
+    status,
+    verifiedAt: new Date(),
+    createdBy: "system:vetting",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as FactRow;
+}
+
+const WILLOW_FACTS = [factRow(1, "space", "The Barn"), factRow(2, "location", "Hudson, NY"), factRow(3, "space", "Garden Terrace")];
+
+interface SendWorldOverrides {
+  actionStatus?: string | null;
+  actionId?: number | null;
+  suppressed?: boolean;
+  emailStatus?: string;
+  vetting?: VettingRow | null;
+  revet?: VettingRow;
+  facts?: FactRow[];
+  guard?: import("./sendingHealth.js").GuardState;
+  requireReplyTo?: boolean;
+  sendsEnabled?: boolean;
+  config?: Partial<import("./sender.js").SendConfig>;
+  cap?: { cap: number; sentToday: number };
+  subject?: string;
+  body?: string;
+  campaignId?: number | null;
+  campaignStatus?: string | null;
+  lastContactedAt?: Date | null;
+  deliverError?: string;
+}
+
+function fakeSendWorld(overrides: SendWorldOverrides = {}) {
+  const calls: Record<string, unknown[]> = {
+    deliver: [],
+    markSent: [],
+    markFailed: [],
+    markDeferred: [],
+    bumpProspect: [],
+    revet: [],
+    lock: [],
+  };
   const email = {
     id: 42,
     prospectId: 1,
     actionId: overrides.actionId === undefined ? 900 : overrides.actionId,
-    campaignId: null,
+    campaignId: overrides.campaignId ?? null,
     step: null,
+    variantKey: null,
     status: overrides.emailStatus ?? "draft",
     subjectOptions: ["A", "B"],
-    subject: "A preview of weddings at Willow House",
-    body: "Para one.\n\nPara two.",
+    subject: overrides.subject ?? "A preview of weddings at Willow House",
+    body: overrides.body ?? "I came across Willow House while looking at venues in Hudson.\n\nThe Barn looks like a place couples would love.",
     greeting: "Hi Dana,",
     signOff: "Thanks,\nSam at Dreemer",
     ctaLabel: "Ask for a free preview",
-    ctaUrl: "mailto:sam@dreemer.co",
+    ctaUrl: "https://studio.test/claim/claimtoken1234567890?utm_source=dreemer-outreach",
     imageAssetIds: [5],
     draftNotes: null,
+    citedFacts: null,
+    vettingSnapshot: null,
     unsubscribeToken: "tok_abcdefghijklmnop",
+    claimToken: "claimtoken1234567890",
     htmlSnapshot: null,
     textSnapshot: null,
     providerMessageId: null,
@@ -301,6 +390,8 @@ function fakeSendWorld(overrides: { actionStatus?: string | null; actionId?: num
     deliveredAt: null,
     bouncedAt: null,
     bounceReason: null,
+    openedAt: null,
+    clickedAt: null,
     lastError: null,
     createdByAgent: "outreach",
     editedBy: null,
@@ -309,6 +400,7 @@ function fakeSendWorld(overrides: { actionStatus?: string | null; actionId?: num
   } as EmailRow;
   const prospect = {
     ...baseProspect,
+    lastContactedAt: overrides.lastContactedAt ?? null,
     name: "Willow House",
     contactName: "Dana",
     phone: null,
@@ -320,6 +412,9 @@ function fakeSendWorld(overrides: { actionStatus?: string | null; actionId?: num
     campaignId: null,
     campaignStep: 0,
     statusChangedBy: null,
+    vettingStatus: "passed",
+    legitimacyScore: 82,
+    vettedAt: new Date(),
     createdByAgent: "prospecting",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -344,13 +439,31 @@ function fakeSendWorld(overrides: { actionStatus?: string | null; actionId?: num
   const deps: import("./sender.js").OutreachSendDeps = {
     loadEmail: async () => email,
     loadProspect: async () => prospect,
-    loadActionStatus: async () => (overrides.actionStatus === undefined ? "approved" : overrides.actionStatus),
+    loadActionStatus: async () => (overrides.actionStatus === undefined ? "executing" : overrides.actionStatus),
     loadAssets: async () => [asset],
     isSuppressed: async () => overrides.suppressed ?? false,
     existingCustomerSlug: async () => null,
     loadPolicy: async () => policy,
-    dailyCap: async () => ({ cap: 15, sentToday: 0 }),
+    dailyCap: async () => overrides.cap ?? { cap: 15, sentToday: 0 },
+    loadVetting: async () => (overrides.vetting === undefined ? vettingRow() : overrides.vetting),
+    revet: async () => {
+      calls.revet.push(true);
+      if (!overrides.revet) throw new Error("revet unavailable");
+      return overrides.revet;
+    },
+    loadFacts: async () => overrides.facts ?? WILLOW_FACTS,
+    policyFlags: async () => ({
+      guard: overrides.guard ?? { status: "ok", since: null, reason: null, okDays: 0 },
+      requireReplyTo: overrides.requireReplyTo ?? true,
+      sendsEnabled: overrides.sendsEnabled ?? true,
+    }),
+    campaignStatus: async () => (overrides.campaignStatus === undefined ? "active" : overrides.campaignStatus),
+    withSendLock: async (fn) => {
+      calls.lock.push(true);
+      return fn();
+    },
     deliver: async (message) => {
+      if (overrides.deliverError) throw new Error(overrides.deliverError);
       calls.deliver.push(message);
       return { id: "re_123" };
     },
@@ -360,18 +473,29 @@ function fakeSendWorld(overrides: { actionStatus?: string | null; actionId?: num
     markFailed: async (...args) => {
       calls.markFailed.push(args);
     },
+    markDeferred: async (...args) => {
+      calls.markDeferred.push(args);
+    },
     bumpProspect: async (...args) => {
       calls.bumpProspect.push(args);
     },
-    config: () => ({ postalAddress: "Dreemer · 1 Main St", unsubscribeMailbox: null, replyTo: "sam@dreemer.co" }),
+    config: () => ({
+      postalAddress: "Dreemer · 1 Main St",
+      unsubscribeMailbox: null,
+      replyTo: "sam@dreemer.co",
+      postalAddressIsPlaceholder: false,
+      sandboxSender: false,
+      resendConfigured: true,
+      ...overrides.config,
+    }),
     imageUrl: (key) => `https://studio.test/api/storage${key}`,
-    now: () => new Date("2026-10-03T12:00:00Z"),
+    now: () => SEND_NOW,
   };
   return { deps, calls };
 }
 
 test("nothing sends without an approved action", async () => {
-  for (const actionStatus of ["pending", "rejected", "executed", "failed", null]) {
+  for (const actionStatus of ["pending", "rejected", "executed", "failed", "approvedish", null]) {
     const { deps, calls } = fakeSendWorld({ actionStatus });
     await assert.rejects(sender.sendOutreachEmail(42, deps), /not approved|missing/);
     assert.equal(calls.deliver.length, 0, `no delivery when action is ${actionStatus}`);
@@ -405,7 +529,13 @@ test("an approved email sends once with unsubscribe headers, reply-to, images, a
   assert.match(message.headers["List-Unsubscribe"]!, /unsubscribe\/tok_abcdefghijklmnop/);
   assert.match(message.html, /outreach\/1\/a\.jpg/);
   assert.match(message.html, /alt="Willow House barn"/);
-  assert.match(message.text, /Para one\./);
+  assert.match(message.text, /came across Willow House/);
+  assert.match(message.text, /publicly lists this address/);
+  assert.deepEqual(message.tags, [
+    { name: "category", value: "outreach" },
+    { name: "email_id", value: "42" },
+  ]);
+  assert.equal(calls.lock.length, 1, "cap check and delivery run under the send lock");
   assert.equal(calls.markSent.length, 1);
   assert.equal(calls.bumpProspect.length, 1);
   assert.equal(calls.markFailed.length, 0);
@@ -425,6 +555,12 @@ test("the send action is high risk and only reachable through the governed catal
 test("copy: validator rejects hype, stats, length, and ungrounded spaces; fallback always passes", () => {
   const input: import("./copywriter.js").CopyInput = {
     facts: { name: "Willow House", location: "Hudson, NY", spaces: ["The Barn", "Garden Terrace"], style: null, capacity: 180, summary: null },
+    verifiedFacts: [
+      { kind: "owner_name", value: "Dana Reyes", sourceUrl: "https://willow.test/about" },
+      { kind: "space", value: "The Barn", sourceUrl: "https://willow.test/" },
+      { kind: "space", value: "Garden Terrace", sourceUrl: "https://willow.test/" },
+      { kind: "location", value: "Hudson, NY", sourceUrl: "https://willow.test/" },
+    ],
     prospectName: "Willow House",
     contactName: "Dana Reyes",
     ask: "preview",
@@ -464,6 +600,7 @@ test("copy: validator rejects hype, stats, length, and ungrounded spaces; fallba
 test("copy: without XAI_API_KEY the studio uses the fallback and says so", async () => {
   const result = await copywriter.writeCopy({
     facts: { name: "Willow House", location: null, spaces: [], style: null, capacity: null, summary: null },
+    verifiedFacts: [],
     prospectName: "Willow House",
     contactName: null,
     ask: "call",
@@ -481,4 +618,196 @@ test("grok: tolerant JSON parsing for structured completions", () => {
   assert.deepEqual(grok.parseJsonObject('Sure! {"a":{"b":2}} trailing'), { a: { b: 2 } });
   assert.equal(grok.parseJsonObject("[1,2]"), null);
   assert.equal(grok.parseJsonObject("nope"), null);
+});
+
+/* ————— Send gates: deferred (draft kept, action back to pending) vs failed ————— */
+
+const { isDeferredSendError } = await import("./sendErrors.js");
+const studioModule = await import("./studio.js");
+const configModule = await import("./config.js");
+const webhook = await import("./resendWebhook.js");
+const venueEmail = await import("./venueEmail.js");
+
+async function expectSendRefusal(
+  overrides: SendWorldOverrides,
+  message: RegExp,
+  kind: "deferred" | "failed",
+): Promise<ReturnType<typeof fakeSendWorld>> {
+  const world = fakeSendWorld(overrides);
+  let caught: unknown = null;
+  await sender.sendOutreachEmail(42, world.deps).catch((err: unknown) => {
+    caught = err;
+  });
+  assert.ok(caught instanceof Error, `expected a refusal matching ${message}`);
+  assert.match((caught as Error).message, message);
+  assert.equal(world.calls.deliver.length, 0, `${message} must not deliver`);
+  assert.equal(isDeferredSendError(caught), kind === "deferred", `${message} should be ${kind}`);
+  assert.equal(world.calls.markDeferred.length, kind === "deferred" ? 1 : 0);
+  assert.equal(world.calls.markFailed.length, kind === "failed" ? 1 : 0);
+  return world;
+}
+
+test("sender: fixable preconditions keep the draft (deferred)", async () => {
+  await expectSendRefusal({ cap: { cap: 15, sentToday: 15 } }, /Daily prospect email cap reached \(15\/15\)/, "deferred");
+  await expectSendRefusal({ cap: { cap: 0, sentToday: 0 } }, /paused \(daily cap is 0\)/, "deferred");
+  await expectSendRefusal(
+    { guard: { status: "paused", since: null, reason: "1 spam complaint in 14 days", okDays: 0 } },
+    /paused by the deliverability guard \(1 spam complaint/,
+    "deferred",
+  );
+  await expectSendRefusal({ sendsEnabled: false }, /frozen/, "deferred");
+  await expectSendRefusal({ vetting: null }, /has not been vetted/, "deferred");
+  await expectSendRefusal({ vetting: vettingRow({ status: "review", score: 48 }) }, /48\/100/, "deferred");
+  await expectSendRefusal({ vetting: vettingRow({ status: "error" }) }, /could not complete/, "deferred");
+  await expectSendRefusal({ facts: [factRow(1, "space", "The Barn")] }, /cites 1 verified venue fact/, "deferred");
+  await expectSendRefusal({ subject: "Re: your venue" }, /fake a reply/, "deferred");
+  await expectSendRefusal({ config: { postalAddressIsPlaceholder: true } }, /OUTREACH_POSTAL_ADDRESS/, "deferred");
+  await expectSendRefusal({ config: { replyTo: null } }, /OUTREACH_REPLY_TO is not set/, "deferred");
+  await expectSendRefusal({ config: { replyTo: "sam@gmail.com" } }, /free-mail/, "deferred");
+  await expectSendRefusal({ config: { sandboxSender: true } }, /sandbox/, "deferred");
+  await expectSendRefusal({ config: { resendConfigured: false } }, /RESEND_API_KEY/, "deferred");
+  await expectSendRefusal({ lastContactedAt: new Date(SEND_NOW.getTime() - 10 * 3_600_000) }, /72h gap/, "deferred");
+  await expectSendRefusal({ campaignId: 3, campaignStatus: "paused" }, /Campaign 3 is "paused"/, "deferred");
+});
+
+test("sender: blocked recipients and provider rejections fail the email", async () => {
+  await expectSendRefusal({ suppressed: true }, /suppression list/, "failed");
+  await expectSendRefusal({ vetting: vettingRow({ status: "failed", summary: "Failed 12/100: parked domain" }) }, /may not be emailed/, "failed");
+  await expectSendRefusal({ campaignId: 3, campaignStatus: "completed" }, /Campaign 3 is "completed"/, "failed");
+  await expectSendRefusal({ deliverError: "The email provider rejected the send." }, /provider rejected/, "failed");
+});
+
+test("sender: an expired passed verdict re-vets once and sends when it still passes; vetting runs before config checks", async () => {
+  const expired = vettingRow({ expiresAt: new Date(SEND_NOW.getTime() - 3_600_000) });
+  const ok = fakeSendWorld({ vetting: expired, revet: vettingRow() });
+  const result = await sender.sendOutreachEmail(42, ok.deps);
+  assert.equal(result.sent, true);
+  assert.equal(ok.calls.revet.length, 1);
+
+  const stale = await expectSendRefusal(
+    { vetting: expired, revet: vettingRow({ status: "review", score: 50, expiresAt: new Date(SEND_NOW.getTime() + 86_400_000) }) },
+    /needs an operator decision/,
+    "deferred",
+  );
+  assert.equal(stale.calls.revet.length, 1);
+
+  // With delivery unconfigured, the vetting refusal still comes first.
+  await expectSendRefusal({ vetting: vettingRow({ status: "failed" }), config: { resendConfigured: false } }, /may not be emailed/, "failed");
+});
+
+test("sender: the cap message distinguishes a guard pause from a normal cap", () => {
+  assert.match(sender.dailyCapMessage({ cap: 0, sentToday: 0 }), /paused/);
+  assert.match(sender.dailyCapMessage({ cap: 10, sentToday: 10 }), /10\/10/);
+});
+
+test("contact guards: refusal codes separate a waiting gap from permanent blocks", () => {
+  const ok = { suppressed: false, existingCustomerSlug: null };
+  const codeOf = (fn: () => void): string | null => {
+    try {
+      fn();
+      return null;
+    } catch (err) {
+      return (err as InstanceType<typeof guards.ContactGuardError>).code;
+    }
+  };
+  assert.equal(codeOf(() => guards.assertProspectContactable(baseProspect, policy, { ...ok, suppressed: true })), "suppressed");
+  assert.equal(codeOf(() => guards.assertProspectContactable({ ...baseProspect, status: "replied" }, policy, ok)), "status");
+  assert.equal(codeOf(() => guards.assertProspectContactable({ ...baseProspect, contactCount: 3 }, policy, ok)), "lifetime_cap");
+  assert.equal(
+    codeOf(() =>
+      guards.assertProspectContactable({ ...baseProspect, lastContactedAt: new Date(SEND_NOW.getTime() - 3_600_000) }, policy, ok, SEND_NOW),
+    ),
+    "gap",
+  );
+});
+
+/* ————— Studio rules (pure) ————— */
+
+test("studio: campaign touches must be active, enrolled, and in step order", () => {
+  const prospect = { id: 1, campaignId: 3, campaignStep: 1 };
+  const campaign = { id: 3, status: "active", steps: [{ step: 1 }, { step: 2 }, { step: 3 }] };
+  assert.deepEqual(studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect, campaign }), { campaignId: 3, step: 2 });
+  assert.throws(() => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: 3, prospect, campaign }), /due step 2/);
+  assert.throws(
+    () => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect, campaign: { ...campaign, status: "paused" } }),
+    /only active campaigns/,
+  );
+  assert.throws(
+    () => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect: { ...prospect, campaignId: 9 }, campaign }),
+    /not enrolled/,
+  );
+  assert.throws(
+    () => studioModule.resolveCampaignTouch({ requestedCampaignId: 3, requestedStep: null, prospect: { ...prospect, campaignStep: 3 }, campaign }),
+    /completed the sequence/,
+  );
+  // An inherited campaign that is not active simply makes the note a standalone touch.
+  assert.deepEqual(
+    studioModule.resolveCampaignTouch({ requestedCampaignId: null, requestedStep: null, prospect, campaign: { ...campaign, status: "draft" } }),
+    { campaignId: null, step: null },
+  );
+  assert.deepEqual(
+    studioModule.resolveCampaignTouch({ requestedCampaignId: null, requestedStep: null, prospect: { ...prospect, campaignId: null }, campaign: null }),
+    { campaignId: null, step: null },
+  );
+});
+
+test("studio: failed research waits a day before re-crawling; good research lasts two weeks", () => {
+  const now = new Date("2026-10-08T12:00:00Z");
+  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000);
+  assert.equal(studioModule.researchIsFresh({ status: "fetch_failed", fetchedAt: hoursAgo(2) }, now), true);
+  assert.equal(studioModule.researchIsFresh({ status: "fetch_failed", fetchedAt: hoursAgo(25) }, now), false);
+  assert.equal(studioModule.researchIsFresh({ status: "ok", fetchedAt: hoursAgo(24 * 13) }, now), true);
+  assert.equal(studioModule.researchIsFresh({ status: "no_images", fetchedAt: hoursAgo(24 * 15) }, now), false);
+});
+
+test("studio: provider events are monotonic; opens and clicks stamp their first time", () => {
+  const at = new Date("2026-10-08T12:00:00Z");
+  const base = { status: "sent", deliveredAt: null, openedAt: null, clickedAt: null };
+  assert.deepEqual(studioModule.deliveryEventPatch(base, { eventType: "delivered", at }), { deliveredAt: at, status: "delivered" });
+  assert.deepEqual(studioModule.deliveryEventPatch({ ...base, status: "bounced" }, { eventType: "delivered", at }), { deliveredAt: at });
+  assert.deepEqual(studioModule.deliveryEventPatch({ ...base, status: "complained" }, { eventType: "bounced", at }), {});
+  assert.equal(studioModule.deliveryEventPatch({ ...base, status: "delivered" }, { eventType: "complained", at }).status, "complained");
+  assert.deepEqual(studioModule.deliveryEventPatch(base, { eventType: "opened", at }), { openedAt: at });
+  assert.deepEqual(studioModule.deliveryEventPatch({ ...base, openedAt: at }, { eventType: "opened", at: new Date() }), {});
+  assert.deepEqual(studioModule.deliveryEventPatch(base, { eventType: "clicked", at }), { openedAt: at, clickedAt: at });
+  assert.equal(webhook.EVENT_MAP["email.opened"], "opened");
+  assert.equal(webhook.EVENT_MAP["email.clicked"], "clicked");
+});
+
+test("claim links: the default CTA is the tracked claim URL with UTM parameters", () => {
+  delete process.env.OUTREACH_CTA_URL;
+  const url = new URL(configModule.outreachDefaultCtaUrl("Willow House", { token: "claimtoken1234567890", campaignId: 3, variantKey: "v2" }));
+  assert.equal(url.origin, "https://studio.test");
+  assert.equal(url.pathname, "/claim/claimtoken1234567890");
+  assert.equal(url.searchParams.get("utm_source"), "dreemer-outreach");
+  assert.equal(url.searchParams.get("utm_medium"), "email");
+  assert.equal(url.searchParams.get("utm_campaign"), "campaign-3");
+  assert.equal(url.searchParams.get("utm_content"), "v2");
+  const firstTouch = new URL(configModule.claimUrl("tok_abcdefghijklmnop"));
+  assert.equal(firstTouch.searchParams.get("utm_campaign"), "first-touch");
+});
+
+test("webhook: inbound replies are matched by the sender address", () => {
+  assert.equal(webhook.inboundSenderAddress("Dana Whitfield <Dana@WillowHouse.test>"), "dana@willowhouse.test");
+  assert.equal(webhook.inboundSenderAddress([{ email: "owner@venue.test", name: "Owner" }]), "owner@venue.test");
+  assert.equal(webhook.inboundSenderAddress("not an address"), null);
+  assert.equal(webhook.inboundSenderAddress(undefined), null);
+});
+
+test("venue email: operational notes carry a why-line, the postal address and List-Unsubscribe", () => {
+  const rendered = venueEmail.renderVenueEmail({
+    subject: "Your first gallery",
+    paragraphs: ["Hi Dana,", "Your QR card is <ready>."],
+    venueName: "Willow House",
+    postalAddress: "Dreemer · 1 Main St",
+    unsubscribeMailbox: "hello@dreemer.co",
+  });
+  assert.match(rendered.html, /&lt;ready&gt;/);
+  assert.match(rendered.text, /you manage Willow House/);
+  assert.match(rendered.text, /Dreemer · 1 Main St/);
+  assert.equal(rendered.headers["List-Unsubscribe"], "<mailto:hello@dreemer.co?subject=unsubscribe>");
+  assert.deepEqual(
+    venueEmail.renderVenueEmail({ subject: "s", paragraphs: ["x"], venueName: "V", postalAddress: "a", unsubscribeMailbox: null }).headers,
+    {},
+  );
 });

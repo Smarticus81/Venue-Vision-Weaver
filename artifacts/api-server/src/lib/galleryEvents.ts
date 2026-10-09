@@ -6,8 +6,52 @@ import {
   type GalleryEventType,
   type GalleryEventSource,
 } from "@workspace/db";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
+
+/** Event types the public share page may post through POST /sessions/by-token/:token/events. */
+export const SHARE_PAGE_EVENT_TYPES = ["shared", "cta_click", "download"] as const satisfies readonly GalleryEventType[];
+export type SharePageEventType = (typeof SHARE_PAGE_EVENT_TYPES)[number];
+
+export function isSharePageEventType(value: unknown): value is SharePageEventType {
+  return typeof value === "string" && (SHARE_PAGE_EVENT_TYPES as readonly string[]).includes(value);
+}
+
+export interface SessionGalleryStats {
+  /** First "sent" event (gallery emailed to the couple). */
+  emailedAt: Date | null;
+  sharedCount: number;
+}
+
+/**
+ * Per-session aggregates the owner dashboard shows beside each couple:
+ * when the gallery was first emailed and how often it was shared on.
+ * Missing sessions map to zero/null; never throws.
+ */
+export async function galleryStatsForSessions(sessionIds: number[]): Promise<Map<number, SessionGalleryStats>> {
+  const stats = new Map<number, SessionGalleryStats>();
+  if (sessionIds.length === 0) return stats;
+  try {
+    const rows = await db
+      .select({
+        sessionId: galleryEventsTable.sessionId,
+        emailedAt: sql<Date | null>`min(case when ${galleryEventsTable.eventType} = 'sent' then ${galleryEventsTable.createdAt} end)`,
+        sharedCount: sql<number>`count(*) filter (where ${galleryEventsTable.eventType} = 'shared')::int`,
+      })
+      .from(galleryEventsTable)
+      .where(inArray(galleryEventsTable.sessionId, sessionIds))
+      .groupBy(galleryEventsTable.sessionId);
+    for (const row of rows) {
+      stats.set(row.sessionId, {
+        emailedAt: row.emailedAt ? new Date(row.emailedAt) : null,
+        sharedCount: Number(row.sharedCount ?? 0),
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, "gallery stats not loaded");
+  }
+  return stats;
+}
 
 /*
  * The single writer for gallery funnel events (shared-contract D6 / 4.3).

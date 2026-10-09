@@ -16,9 +16,20 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Returns non-secret production readiness checks for deploy monitors.
+ * Returns the coarse ok/degraded map for deploy monitors. The reasons
+behind each degraded check (`details`: missing env keys, tables, hosts)
+are only included for a signed-in control-plane operator or a caller
+presenting READINESS_DETAIL_TOKEN in the x-readiness-token header.
+
  * @summary Readiness check
  */
+export const ReadinessCheckHeader = zod.object({
+  "x-readiness-token": zod
+    .string()
+    .optional()
+    .describe("Matches READINESS_DETAIL_TOKEN to receive `details`."),
+});
+
 export const ReadinessCheckResponse = zod.object({
   status: zod.enum(["ok", "degraded"]),
   checks: zod.object({
@@ -34,6 +45,12 @@ export const ReadinessCheckResponse = zod.object({
     auth: zod.enum(["ok", "degraded"]).optional(),
     rls: zod.enum(["ok", "degraded"]).optional(),
   }),
+  details: zod
+    .record(zod.string(), zod.array(zod.string()))
+    .optional()
+    .describe(
+      "Reasons per check (operators or x-readiness-token only). Keys are check names (env, auth, database, rls); values are human-readable reasons, empty when the check is ok.",
+    ),
 });
 
 /**
@@ -156,6 +173,11 @@ export const GetVenueResponse = zod
       .string()
       .nullish()
       .describe("One line the venue shows under the reel on the share page."),
+    reviewBeforeSend: zod
+      .boolean()
+      .describe(
+        "True when the venue reviews each gallery before it is emailed to the couple; false when galleries are emailed automatically once ready.",
+      ),
     uploadToken: zod
       .string()
       .optional()
@@ -203,6 +225,12 @@ export const UpdateVenueBody = zod
       .describe(
         "One line shown under the reel on the share page. Null clears it.",
       ),
+    reviewBeforeSend: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Hold ready galleries for the venue to review and send instead of emailing couples automatically.",
+      ),
   })
   .describe(
     "All fields optional. Only the provided fields are updated.\nSlug is intentionally not editable to keep public URLs stable.\n",
@@ -237,6 +265,11 @@ export const UpdateVenueResponse = zod.object({
     .describe("One line shown under the reel on the share page."),
   tourCardDownloadedAt: zod.coerce.date().nullish(),
   websiteImportedAt: zod.coerce.date().nullish(),
+  reviewBeforeSend: zod
+    .boolean()
+    .describe(
+      "When true, ready galleries wait in the dashboard for the venue to send them; when false (default) they are emailed to the couple automatically.",
+    ),
   organizationId: zod
     .number()
     .nullish()
@@ -289,6 +322,16 @@ export const GetOrganizationResponse = zod.object({
       .boolean()
       .optional()
       .describe("Whether Stripe billing is configured on this server."),
+    subscriptionStatus: zod
+      .enum(["active", "past_due", "canceled", "paused"])
+      .nullish()
+      .describe("Stripe subscription status; null without a subscription."),
+    cancelAtPeriodEnd: zod
+      .boolean()
+      .optional()
+      .describe(
+        "The subscription is set to end at the close of the current period.",
+      ),
   }),
   venues: zod.array(
     zod.object({
@@ -340,6 +383,16 @@ export const UpdateOrganizationResponse = zod.object({
       .boolean()
       .optional()
       .describe("Whether Stripe billing is configured on this server."),
+    subscriptionStatus: zod
+      .enum(["active", "past_due", "canceled", "paused"])
+      .nullish()
+      .describe("Stripe subscription status; null without a subscription."),
+    cancelAtPeriodEnd: zod
+      .boolean()
+      .optional()
+      .describe(
+        "The subscription is set to end at the close of the current period.",
+      ),
   }),
   venues: zod.array(
     zod.object({
@@ -427,6 +480,11 @@ export const GetVenueDashboardResponse = zod.object({
       .describe("One line shown under the reel on the share page."),
     tourCardDownloadedAt: zod.coerce.date().nullish(),
     websiteImportedAt: zod.coerce.date().nullish(),
+    reviewBeforeSend: zod
+      .boolean()
+      .describe(
+        "When true, ready galleries wait in the dashboard for the venue to send them; when false (default) they are emailed to the couple automatically.",
+      ),
     organizationId: zod
       .number()
       .nullish()
@@ -683,6 +741,11 @@ export const GetSessionResponse = zod
           .describe(
             "One line the venue shows under the reel on the share page.",
           ),
+        reviewBeforeSend: zod
+          .boolean()
+          .describe(
+            "True when the venue reviews each gallery before it is emailed to the couple; false when galleries are emailed automatically once ready.",
+          ),
         uploadToken: zod
           .string()
           .optional()
@@ -887,6 +950,11 @@ export const GetSessionByTokenResponse = zod
           .describe(
             "One line the venue shows under the reel on the share page.",
           ),
+        reviewBeforeSend: zod
+          .boolean()
+          .describe(
+            "True when the venue reviews each gallery before it is emailed to the couple; false when galleries are emailed automatically once ready.",
+          ),
         uploadToken: zod
           .string()
           .optional()
@@ -1078,6 +1146,12 @@ export const RecordGalleryEventResponse = zod.object({
 });
 
 /**
+ * Idempotent: marking an already-booked couple as booked (or an unbooked
+one as unbooked) returns the row unchanged and records no event. A
+change records a `booked`/`unbooked` gallery event and stamps
+couple_sessions.booked_at / booked_by. Any organization member may
+mark a booking.
+
  * @summary Venue marks a couple as booked (or undoes it)
  */
 export const SetSessionBookedParams = zod.object({
@@ -1114,6 +1188,12 @@ export const SetSessionBookedResponse = zod.object({
 });
 
 /**
+ * Organization admins only. Fetches the homepage and up to two venue
+subpages through the SSRF-guarded fetcher, keeps at most five usable,
+distinct photos with suggested coverage roles, and stamps
+websiteImportedAt. A second import within ten minutes answers 429
+(code import_cooldown).
+
  * @summary Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
  */
 export const ImportVenueWebsiteMediaParams = zod.object({
@@ -1147,6 +1227,12 @@ export const ImportVenueWebsiteMediaResponse = zod.object({
 });
 
 /**
+ * Queues a gallery of the demo couple (DEMO_COUPLE_DIR) at this venue.
+No credit is charged; the session is kind = sample, created_via =
+sample, never emailed and never counted in proof or KPIs. One sample
+may be in flight per venue, and a venue gets at most
+MAX_SAMPLES_PER_VENUE samples that did not fail.
+
  * @summary Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
  */
 export const CreateSampleGalleryParams = zod.object({
@@ -1189,6 +1275,11 @@ export const MarkTourCardDownloadedResponse = zod.object({
     .describe("One line shown under the reel on the share page."),
   tourCardDownloadedAt: zod.coerce.date().nullish(),
   websiteImportedAt: zod.coerce.date().nullish(),
+  reviewBeforeSend: zod
+    .boolean()
+    .describe(
+      "When true, ready galleries wait in the dashboard for the venue to send them; when false (default) they are emailed to the couple automatically.",
+    ),
   organizationId: zod
     .number()
     .nullish()
@@ -1640,7 +1731,6 @@ export const GetControlOverviewResponse = zod.object({
         "prospecting",
         "outreach",
         "campaigns",
-        "growth",
         "support",
         "product",
         "finance",
@@ -1661,6 +1751,53 @@ export const GetControlOverviewResponse = zod.object({
     runningExperiments: zod.number(),
     runs24h: zod.number(),
   }),
+  funnel: zod
+    .object({
+      owners: zod.object({
+        signups: zod.number(),
+        signups30d: zod.number(),
+        activated: zod.number(),
+        paid: zod.number(),
+        churned: zod.number(),
+      }),
+      prospects: zod.object({
+        total: zod.number(),
+        vetted: zod.number(),
+        contacted: zod.number(),
+        replied: zod.number(),
+        converted: zod.number(),
+        unsubscribed: zod.number(),
+      }),
+    })
+    .nullish()
+    .describe(
+      "Owner and prospect funnel counts (null when the loader failed).",
+    ),
+  trends: zod
+    .object({
+      windowDays: zod.number(),
+      series: zod.array(
+        zod.object({
+          key: zod.string(),
+          label: zod.string(),
+          unit: zod.enum(["count", "percent", "cents", "rate"]),
+          betterWhen: zod.enum(["higher", "lower"]),
+          points: zod.array(
+            zod.object({
+              at: zod.coerce.date(),
+              value: zod.number(),
+            }),
+          ),
+          current: zod.number().nullable(),
+          previous7d: zod.number().nullable(),
+          delta7d: zod.number().nullable(),
+        }),
+      ),
+    })
+    .nullish()
+    .describe(
+      "KPI series from metrics snapshots (null when the loader failed).",
+    ),
 });
 
 /**
@@ -1689,7 +1826,6 @@ export const SetControlAgentStatusResponse = zod.object({
       "prospecting",
       "outreach",
       "campaigns",
-      "growth",
       "support",
       "product",
       "finance",
@@ -1829,6 +1965,12 @@ export const decideControlActionBodyNoteMax = 500;
 export const DecideControlActionBody = zod.object({
   decision: zod.enum(["approve", "reject"]),
   note: zod.string().max(decideControlActionBodyNoteMax).optional(),
+  reviewed: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Set by the Outreach studio after the rendered email was on screen. Approving send_outreach_email without it returns 409 with code review_in_outreach.",
+    ),
 });
 
 export const DecideControlActionResponse = zod.object({

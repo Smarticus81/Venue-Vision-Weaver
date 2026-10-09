@@ -3,9 +3,12 @@ import { Link, Redirect } from "wouter";
 import { ClerkWidgetFrame, ClerkSetupNotice } from "@/components/auth/OrgGate";
 import { clerkConfigured, brandAppearance } from "@/lib/clerk";
 import { FormLayout } from "@/components/layout/SiteChrome";
+import { usePublicConfig } from "@/lib/publicConfig";
 
 export default function OwnerLoginPage() {
+  const config = usePublicConfig();
   if (!clerkConfigured) return <ClerkSetupNotice />;
+  const trial = config.trial;
   return (
     <FormLayout
       label="Venue sign-in"
@@ -13,7 +16,7 @@ export default function OwnerLoginPage() {
       description="Your galleries, your couple link, and your credits are one sign-in away."
       note={{
         heading: "New venue?",
-        body: "Set up takes your venue photos and a booking link. Your first five galleries are free.",
+        body: `Setup takes your venue photos and a booking link. Your first ${trial.credits} galleries are free for ${trial.days} days, no card needed.`,
       }}
     >
       <ClerkWidgetFrame>

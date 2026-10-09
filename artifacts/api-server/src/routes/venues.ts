@@ -1,5 +1,6 @@
+import crypto from "crypto";
 import { Router, type IRouter } from "express";
-import { eq, and, sql, gte, isNull } from "drizzle-orm";
+import { eq, and, sql, gte, isNull, isNotNull } from "drizzle-orm";
 import {
   db,
   venuesTable,
@@ -8,6 +9,7 @@ import {
   generatedAssetsTable,
   organizationsTable,
   uploadIntentsTable,
+  coupleMediaTable,
 } from "@workspace/db";
 import {
   CreateVenueBody,
@@ -19,6 +21,12 @@ import {
   DeleteVenueMediaParams,
   UpdateVenueParams,
   UpdateVenueBody,
+  SetSessionBookedParams,
+  SetSessionBookedBody,
+  ImportVenueWebsiteMediaParams,
+  ImportVenueWebsiteMediaBody,
+  CreateSampleGalleryParams,
+  MarkTourCardDownloadedParams,
 } from "@workspace/api-zod";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
 import {
@@ -28,7 +36,9 @@ import {
 } from "../lib/objectStorage.js";
 import {
   requireOrg,
+  requireOrgAdmin,
   requireOrgVenue,
+  requireOrgVenueContext,
   requireOwnerMutationOrigin,
 } from "../lib/orgAuth.js";
 import { createCoupleUploadToken } from "../lib/uploadToken.js";
@@ -42,6 +52,24 @@ import { ownerVenueResponse, toPublicVenue } from "../lib/venueResponse.js";
 import { hasCompletePublicGalleryAssets } from "../lib/sessionVisibility.js";
 import { onVenueCreated } from "../control-plane/growth/hooks.js";
 import { logger } from "../lib/logger.js";
+import { galleryStatsForSessions, recordGalleryEvent, type SessionGalleryStats } from "../lib/galleryEvents.js";
+import { recordFunnelEvent } from "../lib/funnelEvents.js";
+import { defaultWebsiteImportDeps, importWebsiteMedia, IMPORT_LIMITS } from "../lib/websiteMediaImport.js";
+import { defaultSamplePhotoDeps, prepareSamplePhotos, SAMPLE_COUPLE_NAME } from "../lib/sampleGallery.js";
+import {
+  appendDisplayOrders,
+  MAX_SAMPLES_PER_VENUE,
+  markTourCardDownloaded,
+  normalizeIncentiveText,
+  ownerActor,
+  planWebsiteImport,
+  setSessionBooked,
+  startSampleGallery,
+  type BookedStore,
+  type SampleCounts,
+  type SampleGalleryDeps,
+  type TourCardStore,
+} from "../lib/venueSetup.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_VENUE_PHOTO_EDGE_PX = MIN_REFERENCE_EDGE_PX;
@@ -181,6 +209,38 @@ async function readyGalleryThumbnailObjectKey(sessionId: number, status: string)
     .orderBy(generatedAssetsTable.displayOrder);
   if (!hasCompletePublicGalleryAssets(assets)) return null;
   return assets.find((asset) => asset.assetType === "image" && asset.displayOrder === 1)?.objectKey ?? null;
+}
+
+/** Columns behind a SessionSummary row (dashboard list and the booked toggle). */
+const sessionSummaryColumns = {
+  id: coupleSessionsTable.id,
+  venueId: coupleSessionsTable.venueId,
+  status: coupleSessionsTable.status,
+  coupleName: coupleSessionsTable.coupleName,
+  coupleEmail: coupleSessionsTable.coupleEmail,
+  shareToken: coupleSessionsTable.shareToken,
+  createdAt: coupleSessionsTable.createdAt,
+  completedAt: coupleSessionsTable.completedAt,
+  kind: coupleSessionsTable.kind,
+  createdVia: coupleSessionsTable.createdVia,
+  weddingMonth: coupleSessionsTable.weddingMonth,
+  firstViewedAt: coupleSessionsTable.firstViewedAt,
+  viewCount: coupleSessionsTable.viewCount,
+  ctaClicks: coupleSessionsTable.ctaClicks,
+  bookedAt: coupleSessionsTable.bookedAt,
+  bookedBy: coupleSessionsTable.bookedBy,
+};
+
+type SessionSummarySource = NonNullable<Awaited<ReturnType<typeof loadSummaryRow>>>;
+
+async function toSessionSummary(session: SessionSummarySource, stats?: SessionGalleryStats) {
+  const { bookedBy: _bookedBy, ...summary } = session;
+  return {
+    ...summary,
+    thumbnailObjectKey: await readyGalleryThumbnailObjectKey(session.id, session.status),
+    emailedAt: stats?.emailedAt ?? null,
+    sharedCount: stats?.sharedCount ?? 0,
+  };
 }
 
 async function uniqueVenueSlug(baseSlug: string): Promise<string> {
@@ -394,6 +454,12 @@ router.patch("/venues/:slug", async (req, res): Promise<void> => {
     }
     updates.ownerEmail = email;
   }
+  if (body.data.incentiveText !== undefined) {
+    updates.incentiveText = normalizeIncentiveText(body.data.incentiveText);
+  }
+  if (body.data.reviewBeforeSend !== undefined) {
+    updates.reviewBeforeSend = body.data.reviewBeforeSend;
+  }
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
@@ -411,8 +477,14 @@ router.patch("/venues/:slug", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(ownerVenueResponse(updated));
+  res.json(ownerVenueResponse(updated, await loadVenueOrg(updated)));
 });
+
+async function loadVenueOrg(venue: { organizationId: number | null }) {
+  if (venue.organizationId == null) return null;
+  const [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, venue.organizationId));
+  return org ?? null;
+}
 
 // GET /venues/:slug/dashboard (organization member)
 router.get("/venues/:slug/dashboard", async (req, res): Promise<void> => {
@@ -426,39 +498,16 @@ router.get("/venues/:slug/dashboard", async (req, res): Promise<void> => {
   if (!venue) return;
 
   const sessions = await db
-    .select({
-      id: coupleSessionsTable.id,
-      venueId: coupleSessionsTable.venueId,
-      status: coupleSessionsTable.status,
-      coupleName: coupleSessionsTable.coupleName,
-      coupleEmail: coupleSessionsTable.coupleEmail,
-      shareToken: coupleSessionsTable.shareToken,
-      createdAt: coupleSessionsTable.createdAt,
-      completedAt: coupleSessionsTable.completedAt,
-      kind: coupleSessionsTable.kind,
-      createdVia: coupleSessionsTable.createdVia,
-      weddingMonth: coupleSessionsTable.weddingMonth,
-      firstViewedAt: coupleSessionsTable.firstViewedAt,
-      viewCount: coupleSessionsTable.viewCount,
-      ctaClicks: coupleSessionsTable.ctaClicks,
-      bookedAt: coupleSessionsTable.bookedAt,
-    })
+    .select(sessionSummaryColumns)
     .from(coupleSessionsTable)
     .where(eq(coupleSessionsTable.venueId, venue.id))
     .orderBy(sql`${coupleSessionsTable.createdAt} desc`);
 
-  // Get thumbnail for each ready session
+  // Thumbnails for ready galleries plus the per-couple gallery_events
+  // aggregates (first "sent", share count).
+  const stats = await galleryStatsForSessions(sessions.map((session) => session.id));
   const sessionsWithThumbnails = await Promise.all(
-    sessions.map(async (session) => {
-      const thumbnailObjectKey = await readyGalleryThumbnailObjectKey(session.id, session.status);
-      return {
-        ...session,
-        thumbnailObjectKey,
-        // Aggregated from gallery_events once the sessions workstream wires it; defaults keep the contract shape.
-        emailedAt: null,
-        sharedCount: 0,
-      };
-    })
+    sessions.map((session) => toSessionSummary(session, stats.get(session.id))),
   );
 
   const [org] = venue.organizationId
@@ -640,6 +689,336 @@ router.delete("/venues/:slug/media/:mediaId", async (req, res): Promise<void> =>
   }
 
   res.sendStatus(204);
+});
+
+/* ————— Venue setup: booked marker, website import, sample, tour card ————— */
+
+async function loadSummaryRow(venueId: number, sessionId: number) {
+  const [row] = await db
+    .select(sessionSummaryColumns)
+    .from(coupleSessionsTable)
+    .where(and(eq(coupleSessionsTable.id, sessionId), eq(coupleSessionsTable.venueId, venueId)))
+    .limit(1);
+  return row ?? null;
+}
+
+const bookedStore: BookedStore<SessionSummarySource> = {
+  loadSession: loadSummaryRow,
+  async writeBooked(sessionId, change) {
+    const [row] = await db
+      .update(coupleSessionsTable)
+      .set({ bookedAt: change.bookedAt, bookedBy: change.bookedBy })
+      .where(
+        and(
+          eq(coupleSessionsTable.id, sessionId),
+          change.bookedAt ? isNull(coupleSessionsTable.bookedAt) : isNotNull(coupleSessionsTable.bookedAt),
+        ),
+      )
+      .returning(sessionSummaryColumns);
+    return row ?? null;
+  },
+  async recordEvent(session, eventType, actor) {
+    await recordGalleryEvent({
+      sessionId: session.id,
+      venueId: session.venueId,
+      eventType,
+      source: "dashboard",
+      meta: { actor, ...(session.weddingMonth ? { weddingMonth: session.weddingMonth } : {}) },
+    });
+  },
+};
+
+// POST /venues/:slug/sessions/:id/booked (organization member; idempotent)
+router.post("/venues/:slug/sessions/:id/booked", async (req, res): Promise<void> => {
+  const params = SetSessionBookedParams.safeParse(req.params);
+  if (!params.success || !Number.isInteger(params.data.id) || params.data.id <= 0) {
+    res.status(400).json({ error: "Invalid venue or session id", code: "invalid_params" });
+    return;
+  }
+  const body = SetSessionBookedBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Send { \"booked\": true } or { \"booked\": false }.", code: "invalid_body" });
+    return;
+  }
+
+  const resolved = await requireOrgVenueContext(req, res, params.data.slug);
+  if (!resolved) return;
+  const { ctx, venue } = resolved;
+
+  const outcome = await setSessionBooked(bookedStore, {
+    venueId: venue.id,
+    sessionId: params.data.id,
+    booked: body.data.booked,
+    actor: ownerActor(ctx.clerkUserId),
+  });
+  if (!outcome.ok) {
+    res.status(outcome.status).json(outcome.code ? { error: outcome.error, code: outcome.code } : { error: outcome.error });
+    return;
+  }
+  const [stats] = (await galleryStatsForSessions([outcome.session.id])).values();
+  res.json(await toSessionSummary(outcome.session, stats));
+});
+
+// POST /venues/:slug/media/import-website (organization admins)
+router.post("/venues/:slug/media/import-website", async (req, res): Promise<void> => {
+  const params = ImportVenueWebsiteMediaParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = ImportVenueWebsiteMediaBody.safeParse(req.body ?? {});
+  if (!body.success) {
+    res.status(400).json({ error: "websiteUrl must be a string.", code: "invalid_body" });
+    return;
+  }
+
+  const resolved = await requireOrgVenueContext(req, res, params.data.slug);
+  if (!resolved) return;
+  const { ctx, venue } = resolved;
+  if (!requireOrgAdmin(ctx)) {
+    res.status(403).json({ error: "Only organization admins can import venue photos.", code: "org_admin_required" });
+    return;
+  }
+
+  const now = new Date();
+  const plan = planWebsiteImport({
+    websiteUrlOverride: body.data.websiteUrl ?? null,
+    venueWebsiteUrl: venue.websiteUrl,
+    websiteImportedAt: venue.websiteImportedAt,
+    now,
+  });
+  if (!plan.ok) {
+    res.status(plan.status).json({ error: plan.error, code: plan.code });
+    return;
+  }
+
+  // Claim the cooldown window atomically so two clicks cannot run two imports.
+  const cooldownStart = new Date(now.getTime() - IMPORT_LIMITS.cooldownMs);
+  const [claimed] = await db
+    .update(venuesTable)
+    .set({ websiteImportedAt: now, ...(plan.override ? { websiteUrl: plan.websiteUrl } : {}) })
+    .where(
+      and(
+        eq(venuesTable.id, venue.id),
+        sql`(${venuesTable.websiteImportedAt} is null or ${venuesTable.websiteImportedAt} < ${cooldownStart})`,
+      ),
+    )
+    .returning({ id: venuesTable.id });
+  if (!claimed) {
+    res.status(429).json({
+      error: "Photos were imported from this website a few minutes ago. Review those first, then try again.",
+      code: "import_cooldown",
+    });
+    return;
+  }
+
+  const existing = await db
+    .select({
+      objectKey: venueMediaTable.objectKey,
+      coverage: venueMediaTable.coverage,
+      perceptualHash: venueMediaTable.perceptualHash,
+      displayOrder: venueMediaTable.displayOrder,
+    })
+    .from(venueMediaTable)
+    .where(eq(venueMediaTable.venueId, venue.id));
+
+  const outcome = await importWebsiteMedia(
+    {
+      venue: { id: venue.id, name: venue.name, websiteUrl: plan.websiteUrl, websiteImportedAt: null },
+      existing,
+      now,
+    },
+    defaultWebsiteImportDeps(objectStorageService),
+  );
+  if (!outcome.ok) {
+    res.status(outcome.status).json({ error: outcome.error, code: outcome.code });
+    return;
+  }
+
+  const orders = appendDisplayOrders(
+    existing.map((row) => row.displayOrder),
+    outcome.media.length,
+  );
+  const imported =
+    outcome.media.length > 0
+      ? await db
+          .insert(venueMediaTable)
+          .values(
+            outcome.media.map((item, index) => ({
+              venueId: venue.id,
+              objectKey: item.objectKey,
+              coverage: item.coverage,
+              displayOrder: orders[index] ?? 0,
+              perceptualHash: item.perceptualHash,
+              width: item.width,
+              height: item.height,
+              contentType: item.contentType,
+            })),
+          )
+          .onConflictDoNothing()
+          .returning({
+            id: venueMediaTable.id,
+            venueId: venueMediaTable.venueId,
+            objectKey: venueMediaTable.objectKey,
+            coverage: venueMediaTable.coverage,
+            displayOrder: venueMediaTable.displayOrder,
+            createdAt: venueMediaTable.createdAt,
+          })
+      : [];
+
+  logger.info(
+    { venueId: venue.id, imported: imported.length, candidates: outcome.candidatesFound },
+    "Website photo import finished",
+  );
+  res.json({ imported, candidatesFound: outcome.candidatesFound, warnings: outcome.warnings });
+});
+
+async function countSampleSessions(venueId: number, executor: Pick<typeof db, "select"> = db): Promise<SampleCounts> {
+  const [row] = await executor
+    .select({
+      inFlight: sql<number>`count(*) filter (where ${coupleSessionsTable.status} in ('pending', 'processing'))::int`,
+      nonFailed: sql<number>`count(*) filter (where ${coupleSessionsTable.status} <> 'failed')::int`,
+    })
+    .from(coupleSessionsTable)
+    .where(and(eq(coupleSessionsTable.venueId, venueId), eq(coupleSessionsTable.kind, "sample")));
+  return { inFlight: Number(row?.inFlight ?? 0), nonFailed: Number(row?.nonFailed ?? 0) };
+}
+
+function sampleGalleryDeps(venue: { id: number; ownerEmail: string }): SampleGalleryDeps<typeof coupleSessionsTable.$inferSelect> {
+  const photoDeps = defaultSamplePhotoDeps(objectStorageService);
+  return {
+    loadMedia: (venueId) =>
+      db.select({ coverage: venueMediaTable.coverage }).from(venueMediaTable).where(eq(venueMediaTable.venueId, venueId)),
+    countSamples: (venueId) => countSampleSessions(venueId),
+    preparePhotos: () => prepareSamplePhotos(photoDeps),
+    insertSession: (venueId, objectKeys) =>
+      db.transaction(async (tx) => {
+        // Serialize sample starts per venue, then re-check under the lock.
+        await tx.select({ id: venuesTable.id }).from(venuesTable).where(eq(venuesTable.id, venueId)).for("update");
+        const counts = await countSampleSessions(venueId, tx);
+        if (counts.inFlight > 0) {
+          return {
+            ok: false as const,
+            status: 409 as const,
+            error: "A sample is already rendering for this venue. It usually takes a few minutes.",
+            code: "sample_in_progress" as const,
+          };
+        }
+        if (counts.nonFailed >= MAX_SAMPLES_PER_VENUE) {
+          return {
+            ok: false as const,
+            status: 409 as const,
+            error: `This venue already has ${MAX_SAMPLES_PER_VENUE} sample galleries. Make a gallery for a real couple next.`,
+            code: "sample_limit" as const,
+          };
+        }
+        const [created] = await tx
+          .insert(coupleSessionsTable)
+          .values({
+            venueId,
+            status: "pending",
+            styleId: DEFAULT_SAMPLE_STYLE_ID,
+            coupleName: SAMPLE_COUPLE_NAME,
+            // The pipeline never emails sample sessions; the column is required.
+            coupleEmail: venue.ownerEmail,
+            shareToken: crypto.randomUUID(),
+            creditsCharged: 0,
+            kind: "sample",
+            createdVia: "sample",
+          })
+          .returning();
+        if (!created) throw new Error("Failed to create sample session.");
+        await tx.insert(coupleMediaTable).values(objectKeys.map((objectKey) => ({ sessionId: created.id, objectKey })));
+        return { ok: true as const, session: created };
+      }),
+    async discardPhotos(objectKeys) {
+      for (const objectKey of objectKeys) {
+        await objectStorageService.deleteObjectEntity(objectKey).catch((err) => {
+          logger.warn({ err, objectKey }, "Could not delete unused sample photo");
+        });
+      }
+    },
+  };
+}
+
+const DEFAULT_SAMPLE_STYLE_ID = "cinematic-editorial";
+/** Sample starts per organization per hour (on top of the per-venue limits). */
+const SAMPLE_ORG_HOURLY_LIMIT = 6;
+
+// POST /venues/:slug/sample-gallery (organization member; no credit charged)
+router.post("/venues/:slug/sample-gallery", async (req, res): Promise<void> => {
+  const params = CreateSampleGalleryParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const resolved = await requireOrgVenueContext(req, res, params.data.slug);
+  if (!resolved) return;
+  const { ctx, venue } = resolved;
+
+  if (!rateLimit(`sample:org:${ctx.org.id}`, SAMPLE_ORG_HOURLY_LIMIT, 60 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many samples started. Try again in an hour.", code: "rate_limited" });
+    return;
+  }
+
+  const outcome = await startSampleGallery(sampleGalleryDeps(venue), venue.id);
+  if (!outcome.ok) {
+    res.status(outcome.status).json({ error: outcome.error, code: outcome.code });
+    return;
+  }
+  const session = outcome.session;
+  res.status(201).json({
+    id: session.id,
+    venueId: session.venueId,
+    status: session.status,
+    shareToken: session.shareToken,
+    createdAt: session.createdAt,
+  });
+});
+
+function tourCardStore(): TourCardStore<typeof venuesTable.$inferSelect> {
+  return {
+    async stampFirstDownload(venueId, now) {
+      const [row] = await db
+        .update(venuesTable)
+        .set({ tourCardDownloadedAt: now })
+        .where(and(eq(venuesTable.id, venueId), isNull(venuesTable.tourCardDownloadedAt)))
+        .returning();
+      return row ?? null;
+    },
+    async reload(venueId) {
+      const [row] = await db.select().from(venuesTable).where(eq(venuesTable.id, venueId));
+      return row ?? null;
+    },
+    async recordFirstDownload(venue) {
+      await recordFunnelEvent({
+        organizationId: venue.organizationId,
+        venueId: venue.id,
+        event: "tour_card_downloaded",
+        source: "server",
+      });
+    },
+  };
+}
+
+// POST /venues/:slug/tour-card-downloaded (organization member)
+router.post("/venues/:slug/tour-card-downloaded", async (req, res): Promise<void> => {
+  const params = MarkTourCardDownloadedParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const venue = await requireOrgVenue(req, res, params.data.slug);
+  if (!venue) return;
+
+  const result = await markTourCardDownloaded(tourCardStore(), venue.id);
+  if (!result) {
+    res.status(404).json({ error: "Venue not found" });
+    return;
+  }
+  res.json(ownerVenueResponse(result.venue, await loadVenueOrg(result.venue)));
 });
 
 export default router;

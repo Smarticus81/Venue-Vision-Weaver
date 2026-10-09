@@ -14,20 +14,25 @@ Growth) or buy credit packs.
 ## How the product works
 
 1. **Venue signup** at `/create-venue`. Members sign in with Clerk; one Clerk
-   Organization is the billing tenant and can own several venues.
+   Organization is the billing tenant and can own several venues. A new
+   organization gets 5 free galleries and 14 days, no card.
 2. **Venue setup** in the owner dashboard (`/dashboard/:slug`): upload photos of
    the ceremony space, reception space and grounds, pick gallery styles, get
    the QR code and link.
-3. **Couple flow** at `/preview/:slug`: the couple uploads a few reference
-   photos of themselves and waits while the pipeline renders.
+3. **Couple flow** at `/preview/:slug`: the couple uploads two or three
+   reference photos of themselves, both agree to the AI preview, and they
+   wait while the pipeline renders. On a tour, the coordinator can start the
+   gallery from their phone in tour-day mode (`/dashboard/tour/:slug`).
 4. **Rendering**: the API server builds four scenes from the venue's own photos
    and the couple's references (OpenAI gpt-image-2.5 first, Gemini as the
    fallback), runs a multimodal quality gate (likeness, venue fidelity,
    composition, hard integrity checks), and assembles the motion reel with
    ffmpeg. One credit is debited per session; failed sessions are refunded.
-5. **Delivery**: the gallery is emailed and reachable at a private share link
-   (`/v/:shareToken`), with the venue's name and booking call-to-action on it.
-   Venues can review galleries before they go out.
+5. **Delivery**: the gallery is emailed to the couple automatically (or after
+   the venue reviews it, if the venue turned that on) and lives at a private
+   share link (`/v/:shareToken`) whose main action is "Check your date at
+   {venue}". The dashboard shows which couples viewed, shared, clicked for a
+   date and booked; the venue marks bookings with one click.
 
 ## Repository layout
 
@@ -72,11 +77,15 @@ pnpm --filter @workspace/api-spec run codegen
 # Push DB schema changes with drizzle-kit
 pnpm --filter @workspace/db run push
 
-# Unit tests (node:test via tsx); individual suites: test:control-plane, test:outreach-studio, ...
+# Every unit test (api-server, web helpers, brand tokens); suites run alone as
+# test:billing, test:sessions, test:web, test:growth, test:vetting, ... (see package.json)
 pnpm run test
 
-# Source-contract security smoke
+# Security smoke: behaviour checks plus source contracts (CI runs it)
 pnpm run smoke:security
+
+# Isolated UI fixture on 127.0.0.1:8082 (no API or Clerk needed)
+pnpm --filter @workspace/wedding-app run dev:ui-fixture
 
 # Verify production env, build artifacts, ffmpeg, and optionally the live /api/readyz
 pnpm run verify:production -- --url https://your-dreemer-host.example
@@ -98,16 +107,18 @@ documents every variable; the groups that matter first:
 - **Storage**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, bucket names.
   Create the buckets with `pnpm run setup:storage`.
 - **Auth**: `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`,
-  `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`. Optional at
-  boot: without them owner routes return 503 and the web app shows a setup
-  notice.
+  `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`. Required in
+  production (the server refuses to boot without them); in development the
+  app starts without them, owner routes return 503 and the web app shows a
+  setup notice.
 - **Billing**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*`,
   and the `PRICING_*` display values.
 - **Rendering**: `OPENAI_API_KEY`, `GOOGLE_AI_API_KEY`, and the
   `IMAGE_MODEL` / `GALLERY_*` settings.
 - **Email**: `RESEND_API_KEY`, `EMAIL_FROM`.
 - **Control plane**: `XAI_API_KEY` (agents idle without it) and
-  `CONTROL_PLANE_OPERATOR_EMAILS`.
+  `CONTROL_PLANE_OPERATOR_EMAILS` (required in production; `/control` fails
+  closed without it).
 - **Outreach**: `OUTREACH_SENDER_NAME`, `OUTREACH_REPLY_TO`,
   `OUTREACH_POSTAL_ADDRESS`, `OUTREACH_UNSUBSCRIBE_MAILBOX`,
   `OUTREACH_CTA_URL`, `RESEND_WEBHOOK_SECRET`.
@@ -122,11 +133,13 @@ dependencies and runs `pnpm run build`; the runtime image carries Node 24,
 ffmpeg, the api-server bundle, its production `node_modules`, and the built
 SPA. It listens on `PORT` (5000) and runs as the unprivileged `node` user.
 
-Readiness is `GET /api/readyz`, which reports env, database schema, storage,
-AI keys, billing, email, quality gate and ffmpeg as `ok` or `degraded`.
+Readiness is `GET /api/readyz`, which reports env, auth, database schema,
+row-level security, storage, AI keys, billing, email, quality gate, image
+model and ffmpeg as `ok` or `degraded` (reasons only for operators or a
+`READINESS_DETAIL_TOKEN` holder).
 Railway's health check uses the same path. Before a launch, run
-`pnpm run verify:production` against the real environment and read
-`docs/production-readiness.md`.
+`pnpm run verify:production` against the real environment and work through
+the after-deploy checklist in `docs/production-readiness.md`.
 
 Without Docker: `pnpm run build` then `node artifacts/api-server/dist/index.mjs`
 (or `pnpm start`). First-time database: `pnpm run setup:db`.
@@ -135,7 +148,7 @@ Without Docker: `pnpm run build` then `node artifacts/api-server/dist/index.mjs`
 
 `artifacts/api-server/src/control-plane/` is an in-process scheduler running a
 set of Grok-backed domain agents (prospecting, outreach, campaigns, support,
-product repair, finance, experiments, activation, governance). They read live
+product repair, finance, growth, activation, governance). They read live
 business data through a restricted tool belt and can only act through a
 governed action catalog. Anything that contacts a real person, launches a
 campaign or grants credits is a high-risk action that waits for an operator to
@@ -145,8 +158,10 @@ reply/unsubscribe locks. State lives in the `control_*` and `agent_*` tables in
 `lib/db`. Without `XAI_API_KEY` the control plane boots and idles.
 
 The outreach email studio (`control-plane/outreach/`) is where prospect emails
-are researched, written, reviewed and sent. Prospects are vetted first (site
-reachable, domain age, archive history, MX/SPF/DMARC, address on the site).
+are researched, written, reviewed and sent. Prospects are vetted first
+(`control-plane/vetting/`: site reachable, domain age, archive history,
+MX/SPF/DMARC, address on the site); nothing is drafted or sent to a prospect
+whose vetting has not passed.
 `venueResearch.ts` pulls facts and the venue's own photos from its public site;
 `copywriter.ts` has Grok write a short personal note checked against
 plain-words rules; `emailTemplate.ts` renders light/dark HTML and plain text.

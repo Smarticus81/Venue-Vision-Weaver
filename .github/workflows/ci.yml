@@ -81,14 +81,11 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
-      - name: Unit tests
+      - name: Unit tests (api, web, brand)
         run: pnpm run test
 
       - name: Security smoke
         run: pnpm run smoke:security
-
-      - name: Brand token tests
-        run: pnpm --filter @workspace/brand run test
 
       - name: Codegen drift (OpenAPI -> generated clients)
         run: |

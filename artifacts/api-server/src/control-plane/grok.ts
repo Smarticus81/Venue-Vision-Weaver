@@ -79,31 +79,148 @@ export interface AgentLoopResult {
 const MAX_ITERATIONS = 10;
 const MAX_TOOL_CALLS = 24;
 const MAX_TOOL_RESULT_CHARS = 24000;
+const MAX_STRING_CHARS = 2000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_RUN_BUDGET_MS = 8 * 60_000;
 
-function truncateForModel(value: unknown): unknown {
-  const json = JSON.stringify(value);
-  if (json.length <= MAX_TOOL_RESULT_CHARS) return value;
-  return {
-    truncated: true,
-    preview: json.slice(0, MAX_TOOL_RESULT_CHARS),
-    originalLength: json.length,
-  };
+/** Per-request wall clock for one xAI call (GROK_TIMEOUT_MS, 5s-10min). */
+export function grokRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.GROK_TIMEOUT_MS?.trim());
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_REQUEST_TIMEOUT_MS;
+  return Math.min(10 * 60_000, Math.max(5_000, Math.floor(raw)));
 }
 
-async function callGrok(apiKey: string, body: Record<string, unknown>): Promise<ResponsesApiResponse> {
-  const res = await fetch(`${XAI_API_BASE()}/responses`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Grok request failed (${res.status}): ${text.slice(0, 600)}`);
+/**
+ * Wall-clock budget for one whole agent run (CONTROL_PLANE_RUN_BUDGET_MS,
+ * 1-30 min, default 8). The scheduler runs agents one after another, so a
+ * single run that keeps calling tools would otherwise hold the queue for
+ * MAX_ITERATIONS × the request timeout plus every tool's own latency.
+ */
+export function agentRunBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.CONTROL_PLANE_RUN_BUDGET_MS?.trim());
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_RUN_BUDGET_MS;
+  return Math.min(30 * 60_000, Math.max(60_000, Math.floor(raw)));
+}
+
+/**
+ * A failed or timed-out xAI request. `status` is the HTTP status (0 for a
+ * timeout or network failure) so the runner can tell quota/outage errors
+ * (429, 5xx) from the agent's own mistakes and avoid advancing its schedule.
+ */
+export class GrokRequestError extends Error {
+  readonly status: number;
+  readonly timedOut: boolean;
+  constructor(message: string, options: { status: number; timedOut?: boolean }) {
+    super(message);
+    this.name = "GrokRequestError";
+    this.status = options.status;
+    this.timedOut = options.timedOut ?? false;
   }
-  const json = JSON.parse(text) as ResponsesApiResponse;
+  /** 429 and 5xx (and timeouts) are the provider's problem, not the agent's. */
+  get transient(): boolean {
+    return this.timedOut || this.status === 429 || this.status >= 500;
+  }
+}
+
+function shrinkValue(value: unknown, budget: { remaining: number }): unknown {
+  if (budget.remaining <= 0) return undefined;
+  if (typeof value === "string") {
+    const cut = Math.min(value.length, MAX_STRING_CHARS, Math.max(budget.remaining, 0));
+    budget.remaining -= cut + 2;
+    return cut < value.length ? `${value.slice(0, cut)}…[${value.length - cut} more chars]` : value;
+  }
+  if (value === null || typeof value !== "object") {
+    budget.remaining -= JSON.stringify(value)?.length ?? 4;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (budget.remaining <= 0) {
+        out.push(`…[${value.length - index} more items]`);
+        break;
+      }
+      out.push(shrinkValue(value[index], budget));
+    }
+    return out;
+  }
+  const out: Record<string, unknown> = {};
+  const entries = Object.entries(value as Record<string, unknown>);
+  for (let index = 0; index < entries.length; index += 1) {
+    const [key, entry] = entries[index];
+    if (budget.remaining <= 0) {
+      out.__truncated = `${entries.length - index} more fields omitted`;
+      break;
+    }
+    budget.remaining -= key.length + 4;
+    out[key] = shrinkValue(entry, budget);
+  }
+  return out;
+}
+
+/**
+ * Keep tool results inside the model budget without slicing JSON mid-string:
+ * long strings are shortened with a marker, arrays and objects are cut at an
+ * element boundary and say how much was dropped, so the model still receives
+ * valid structure it can reason about.
+ */
+export function truncateForModel(value: unknown): unknown {
+  const json = JSON.stringify(value);
+  if (json === undefined || json.length <= MAX_TOOL_RESULT_CHARS) return value;
+  const compact = shrinkValue(value, { remaining: MAX_TOOL_RESULT_CHARS });
+  return { truncated: true, originalLength: json.length, result: compact };
+}
+
+async function callGrok(
+  apiKey: string,
+  body: Record<string, unknown>,
+  options: { deadline?: number } = {},
+): Promise<ResponsesApiResponse> {
+  // One request never outlives the run it belongs to.
+  const remaining = options.deadline === undefined ? Infinity : options.deadline - Date.now();
+  if (remaining <= 0) {
+    throw new GrokRequestError("Agent run budget exhausted before the request was sent", {
+      status: 0,
+      timedOut: true,
+    });
+  }
+  const timeoutMs = Math.max(1_000, Math.min(grokRequestTimeoutMs(), remaining));
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${XAI_API_BASE()}/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    text = await res.text();
+  } catch (err) {
+    const timedOut =
+      err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+    throw new GrokRequestError(
+      timedOut
+        ? `Grok request timed out after ${timeoutMs}ms`
+        : `Grok request failed: ${err instanceof Error ? err.message : String(err)}`,
+      { status: 0, timedOut },
+    );
+  }
+  if (!res.ok) {
+    throw new GrokRequestError(`Grok request failed (${res.status}): ${text.slice(0, 600)}`, {
+      status: res.status,
+    });
+  }
+  let json: ResponsesApiResponse;
+  try {
+    json = JSON.parse(text) as ResponsesApiResponse;
+  } catch {
+    throw new GrokRequestError(`Grok returned a non-JSON body: ${text.slice(0, 200)}`, {
+      status: res.status,
+    });
+  }
   if (json.error) {
     const message = typeof json.error === "string" ? json.error : json.error.message;
     throw new Error(`Grok error: ${message ?? "unknown"}`);
@@ -201,12 +318,17 @@ export async function runAgentLoop(params: {
   tools: ToolDeclaration[];
   executeTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   enableWebSearch?: boolean;
+  /** Overrides CONTROL_PLANE_RUN_BUDGET_MS for this run. */
+  budgetMs?: number;
 }): Promise<AgentLoopResult> {
   const apiKey = process.env.XAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("XAI_API_KEY is required for control-plane agent reasoning.");
   }
   const model = controlPlaneModel();
+  const startedAt = Date.now();
+  const deadline = startedAt + (params.budgetMs ?? agentRunBudgetMs());
+  let budgetExhausted = false;
 
   const toolsPayload: Array<Record<string, unknown>> = params.tools.map((tool) => ({
     type: "function",
@@ -231,12 +353,20 @@ export async function runAgentLoop(params: {
   let previousResponseId: string | undefined;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
-    const response = await callGrok(apiKey, {
-      model,
-      input,
-      tools: toolsPayload,
-      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
-    });
+    if (Date.now() >= deadline) {
+      budgetExhausted = true;
+      break;
+    }
+    const response = await callGrok(
+      apiKey,
+      {
+        model,
+        input,
+        tools: toolsPayload,
+        ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
+      },
+      { deadline },
+    );
 
     promptTokens += response.usage?.input_tokens ?? 0;
     completionTokens += response.usage?.output_tokens ?? 0;
@@ -275,8 +405,17 @@ export async function runAgentLoop(params: {
       toolCallCount += 1;
       transcript.push({ type: "tool_call", name, args });
 
-      if (toolCallCount > MAX_TOOL_CALLS) {
-        const overBudget = { error: "Tool budget exhausted. Summarize your findings and finish." };
+      // Past the wall clock, pending calls are answered with the budget
+      // notice instead of being executed: the model still gets a valid
+      // function_call_output for every call_id, and the run ends on the
+      // next iteration without another tool round.
+      if (toolCallCount > MAX_TOOL_CALLS || Date.now() >= deadline) {
+        const overBudget = {
+          error:
+            Date.now() >= deadline
+              ? "Run time budget exhausted. Summarize your findings and finish."
+              : "Tool budget exhausted. Summarize your findings and finish.",
+        };
         transcript.push({ type: "tool_result", name, result: overBudget });
         outputs.push({
           type: "function_call_output",
@@ -320,12 +459,21 @@ export async function runAgentLoop(params: {
   }
 
   if (!finalText) {
-    finalText =
-      transcript
-        .filter((step): step is Extract<TranscriptStep, { type: "text" }> => step.type === "text")
-        .map((step) => step.text)
-        .join("\n")
-        .trim() || "Run ended without a final summary (iteration budget reached).";
+    const texts = transcript
+      .filter((step): step is Extract<TranscriptStep, { type: "text" }> => step.type === "text")
+      .map((step) => step.text)
+      .join("\n")
+      .trim();
+    const reason = budgetExhausted
+      ? `time budget of ${Math.round((deadline - startedAt) / 1000)}s reached`
+      : "iteration budget reached";
+    finalText = texts || `Run ended without a final summary (${reason}).`;
+    if (budgetExhausted) {
+      logger.warn(
+        { toolCallCount, elapsedMs: Date.now() - startedAt },
+        "Control-plane agent run stopped at its wall-clock budget",
+      );
+    }
   }
 
   return { finalText, transcript, toolCallCount, promptTokens, completionTokens };

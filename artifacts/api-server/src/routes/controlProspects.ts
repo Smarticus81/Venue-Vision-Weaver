@@ -12,25 +12,37 @@ import {
   UpdateControlOutreachEmailBody,
   RegenerateControlOutreachEmailBody,
   DraftControlOutreachEmailBody,
+  VetControlProspectBody,
+  OverrideControlProspectVettingBody,
+  AddControlProspectFactBody,
+  SetControlOutreachSendingBody,
 } from "@workspace/api-zod";
 import { requireOperator } from "../control-plane/operatorAuth.js";
 import { requireOwnerMutationOrigin } from "../lib/orgAuth.js";
 import { controlPlaneAiConfigured } from "../control-plane/grok.js";
 import { recordAuditEvent } from "../control-plane/audit.js";
+import { checkProspectTransition } from "../control-plane/outreach/prospectTransitions.js";
+import { getSendingState, pauseGuard, resetGuard } from "../control-plane/outreach/sendingHealth.js";
 import {
   createDraft,
   getEmailDetail,
   listEmails,
+  loadProspectById,
   regenerateEmail,
   updateEmail,
 } from "../control-plane/outreach/studio.js";
+import { suppressEmail } from "../control-plane/outreach/unsubscribe.js";
+import { buildEvidence } from "../control-plane/vetting/evidence.js";
+import { addOperatorFact, removeFact } from "../control-plane/vetting/facts.js";
+import { ensureVetted, overrideVetting } from "../control-plane/vetting/vet.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * Prospect pipeline and outreach studio routes for /control: prospects,
- * operator-recorded outcomes, studio emails, drafts, plus the vetting,
- * evidence and sending-state operations the OpenAPI spec defines. Step 0
- * moves the existing handlers here and declares the new ones as 501
- * ErrorEnvelope stubs; the vetting workstream fills them (vetting.md 7).
+ * operator-recorded outcomes (status moves follow PROSPECT_TRANSITIONS;
+ * qualifying needs a passed vetting; an unsubscribe suppresses the address),
+ * legitimacy vetting with its evidence, operator overrides and sourced facts,
+ * the deliverability guard, and the studio's emails and drafts.
  */
 
 const router: IRouter = Router();
@@ -61,11 +73,13 @@ function studioError(res: Response, err: unknown, fallback: string): void {
   res.status(status).json({ error: message });
 }
 
-function notImplemented(res: Response, operation: string): void {
-  res.status(501).json({
-    error: `${operation} is not available yet; the vetting workstream has not landed.`,
-    code: "not_implemented",
-  });
+async function sendEvidence(res: Response, prospectId: number, status = 200): Promise<void> {
+  const evidence = await buildEvidence(prospectId);
+  if (!evidence) {
+    res.status(404).json({ error: "Prospect not found" });
+    return;
+  }
+  res.status(status).json(evidence);
 }
 
 async function operatorMutation(req: Request, res: Response): Promise<{ email: string } | null> {
@@ -159,6 +173,16 @@ router.post("/control/prospects/:id/status", async (req, res): Promise<void> => 
     res.status(400).json({ error: `status must be one of ${OPERATOR_PROSPECT_STATUSES.join(", ")}` });
     return;
   }
+  const current = await loadProspectById(id);
+  if (!current) {
+    res.status(404).json({ error: "Prospect not found" });
+    return;
+  }
+  const transition = checkProspectTransition({ from: current.status, to: status, vettingStatus: current.vettingStatus });
+  if (!transition.ok) {
+    res.status(409).json({ error: transition.error });
+    return;
+  }
 
   // Growth attribution bookkeeping (shared-contract D16): replies and
   // conversions keep their first timestamp and the campaign they came from.
@@ -179,14 +203,26 @@ router.post("/control/prospects/:id/status", async (req, res): Promise<void> => 
     patch.convertedCampaignId = sql`coalesce(${controlProspectsTable.convertedCampaignId}, ${controlProspectsTable.campaignId})` as unknown as number;
   }
 
-  const [prospect] = await db
+  const [updated] = await db
     .update(controlProspectsTable)
     .set(patch)
-    .where(eq(controlProspectsTable.id, id))
+    .where(and(eq(controlProspectsTable.id, id), eq(controlProspectsTable.status, current.status)))
     .returning();
-  if (!prospect) {
-    res.status(404).json({ error: "Prospect not found" });
+  if (!updated) {
+    res.status(409).json({ error: "The prospect changed while you were editing it; reload and try again." });
     return;
+  }
+  let prospect = updated;
+  if (status === "unsubscribed") {
+    // Consent is permanent: the address joins the suppression list every send checks.
+    await suppressEmail({
+      email: updated.email,
+      reason: "operator",
+      detail: parsed.data.note ?? "recorded by an operator in /control",
+      prospectId: id,
+      actor: `operator:${operator.email}`,
+    });
+    prospect = (await loadProspectById(id)) ?? updated;
   }
 
   await recordAuditEvent({
@@ -196,6 +232,7 @@ router.post("/control/prospects/:id/status", async (req, res): Promise<void> => 
     subjectType: "prospect",
     subjectId: id,
     detail: {
+      from: current.status,
       status,
       replySentiment: parsed.data.replySentiment ?? null,
       organizationId: parsed.data.organizationId ?? null,
@@ -205,43 +242,103 @@ router.post("/control/prospects/:id/status", async (req, res): Promise<void> => 
   res.json({ prospect });
 });
 
-/* ————— Vetting and evidence (vetting.md 7; 501 until the vetting workstream lands) ————— */
+/* ————— Vetting and evidence (vetting.md 7) ————— */
 
 // GET /control/prospects/{id}/evidence — vetting verdict, checks, facts, research.
 router.get("/control/prospects/:id/evidence", async (req, res): Promise<void> => {
   const operator = await requireOperator(req, res);
   if (!operator) return;
-  if (!parseId(req.params.id, res, "prospect")) return;
-  notImplemented(res, "Prospect evidence");
+  const id = parseId(req.params.id, res, "prospect");
+  if (!id) return;
+  await sendEvidence(res, id);
 });
 
 // POST /control/prospects/{id}/vet — run (or re-run) legitimacy vetting.
+// A venue's own network problems come back as vetting.status "error", never a 5xx.
 router.post("/control/prospects/:id/vet", async (req, res): Promise<void> => {
-  if (!(await operatorMutation(req, res))) return;
-  if (!parseId(req.params.id, res, "prospect")) return;
-  notImplemented(res, "Prospect vetting");
+  const operator = await operatorMutation(req, res);
+  if (!operator) return;
+  const id = parseId(req.params.id, res, "prospect");
+  if (!id) return;
+  const parsed = VetControlProspectBody.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const prospect = await loadProspectById(id);
+  if (!prospect) {
+    res.status(404).json({ error: "Prospect not found" });
+    return;
+  }
+  if (parsed.data.refresh !== false) {
+    try {
+      await ensureVetted(prospect, { force: true, requestedBy: `operator:${operator.email}` });
+    } catch (err) {
+      logger.error({ err, prospectId: id }, "Operator vetting run failed");
+      res.status(500).json({ error: "Vetting could not be saved; try again." });
+      return;
+    }
+  }
+  await sendEvidence(res, id);
 });
 
 // POST /control/prospects/{id}/vetting/override — operator pass/fail decision.
 router.post("/control/prospects/:id/vetting/override", async (req, res): Promise<void> => {
-  if (!(await operatorMutation(req, res))) return;
-  if (!parseId(req.params.id, res, "prospect")) return;
-  notImplemented(res, "Vetting overrides");
+  const operator = await operatorMutation(req, res);
+  if (!operator) return;
+  const id = parseId(req.params.id, res, "prospect");
+  if (!id) return;
+  const parsed = OverrideControlProspectVettingBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  try {
+    await overrideVetting(id, parsed.data.decision, parsed.data.note, operator.email);
+  } catch (err) {
+    studioError(res, err, "Override failed");
+    return;
+  }
+  await sendEvidence(res, id);
 });
 
 // POST /control/prospects/{id}/facts — operator adds a sourced fact.
 router.post("/control/prospects/:id/facts", async (req, res): Promise<void> => {
-  if (!(await operatorMutation(req, res))) return;
-  if (!parseId(req.params.id, res, "prospect")) return;
-  notImplemented(res, "Adding prospect facts");
+  const operator = await operatorMutation(req, res);
+  if (!operator) return;
+  const id = parseId(req.params.id, res, "prospect");
+  if (!id) return;
+  const parsed = AddControlProspectFactBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!(await loadProspectById(id))) {
+    res.status(404).json({ error: "Prospect not found" });
+    return;
+  }
+  try {
+    await addOperatorFact(id, parsed.data, operator.email);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid fact" });
+    return;
+  }
+  await sendEvidence(res, id, 201);
 });
 
 // DELETE /control/prospects/{id}/facts/{factId} — operator removes a fact.
 router.delete("/control/prospects/:id/facts/:factId", async (req, res): Promise<void> => {
-  if (!(await operatorMutation(req, res))) return;
-  if (!parseId(req.params.id, res, "prospect")) return;
-  if (!parseId(req.params.factId, res, "fact")) return;
-  notImplemented(res, "Removing prospect facts");
+  const operator = await operatorMutation(req, res);
+  if (!operator) return;
+  const id = parseId(req.params.id, res, "prospect");
+  if (!id) return;
+  const factId = parseId(req.params.factId, res, "fact");
+  if (!factId) return;
+  if (!(await removeFact(id, factId, operator.email))) {
+    res.status(404).json({ error: "Prospect or fact not found" });
+    return;
+  }
+  await sendEvidence(res, id);
 });
 
 /* ————— Outreach email studio ————— */
@@ -260,7 +357,9 @@ router.get("/control/outreach/emails", async (req, res): Promise<void> => {
   const emails = await listEmails({
     status,
     prospectId: Number.isInteger(prospectId) && prospectId > 0 ? prospectId : null,
+    awaiting: req.query.awaiting === "true" || req.query.awaiting === "1",
     limit,
+    offset: parseOffset(req.query.offset),
   });
   res.json({ emails });
 });
@@ -269,13 +368,21 @@ router.get("/control/outreach/emails", async (req, res): Promise<void> => {
 router.get("/control/outreach/sending", async (req, res): Promise<void> => {
   const operator = await requireOperator(req, res);
   if (!operator) return;
-  notImplemented(res, "The outreach sending state");
+  res.json(await getSendingState());
 });
 
-// POST /control/outreach/sending — pause or reset the deliverability guard.
+// POST /control/outreach/sending — pause or reset the deliverability guard (a reset is always manual).
 router.post("/control/outreach/sending", async (req, res): Promise<void> => {
-  if (!(await operatorMutation(req, res))) return;
-  notImplemented(res, "Pausing or resetting outreach sending");
+  const operator = await operatorMutation(req, res);
+  if (!operator) return;
+  const parsed = SetControlOutreachSendingBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (parsed.data.paused) await pauseGuard(parsed.data.note, `operator:${operator.email}`);
+  else await resetGuard(parsed.data.note, operator.email);
+  res.json(await getSendingState());
 });
 
 // GET /control/outreach/emails/{id} — full review payload with rendered previews.

@@ -110,9 +110,15 @@ follows.
 | Body (`font.body`) | **Figtree** | 400, 500, 600 | Same geometric family feel, better at 13–16px. Everything else. Leading 1.6. |
 | Mono (`font.mono`) | system monospace | — | IDs, links shown as text, operator-console labels. |
 
-Both are open-source via Google Fonts (`fontImportUrl` in `tokens.ts`; the
-same URL is in `index.html` so the display face is requested early). Email
-uses the `font.email` stack and degrades to Helvetica/Arial.
+Both are open-source (SIL OFL). The web app self-hosts latin subsets of the
+two variable faces (`artifacts/wedding-app/public/fonts/outfit-latin-variable.woff2`
+and `figtree-latin-variable.woff2`): `@font-face` lives in
+`artifacts/wedding-app/src/index.css` with `font-display: swap`, and
+`index.html` preloads both, so no page waits on a third-party stylesheet.
+`fontImportUrl` in `tokens.ts` (Google Fonts) is kept only for surfaces that
+cannot use the app's files: the OG card renderer (`scripts/build-og.ts`) and
+the email `<link>`. Email uses the `font.email` stack and degrades to
+Helvetica/Arial when a client blocks web fonts.
 
 Scale (px, 1.25 ratio): 12, 14, 16, 18, 20, 25, 31, 39, 49, 61. Labels
 (`.eyebrow`) are 12px Figtree 600, uppercase, +0.08em tracking, muted ink.

@@ -1,18 +1,26 @@
 import {
   db,
   agentActionsTable,
+  controlCampaignsTable,
   controlOutreachEmailsTable,
   controlProspectAssetsTable,
   controlProspectsTable,
   type ControlOutreachEmail,
   type ControlProspect,
   type ControlProspectAsset,
+  type ControlProspectFact,
+  type ControlProspectVetting,
 } from "@workspace/db";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { sendRawEmail } from "../../lib/emailService.js";
-import { getPolicyNumber } from "../policies.js";
+import { getPolicyBoolean, getPolicyNumber } from "../policies.js";
 import { recordAuditEvent } from "../audit.js";
+import { startOfUtcDay } from "../actionCounts.js";
+import { isFreeMail, splitEmail } from "../vetting/domain.js";
+import { citableFacts, citedFactsIn, loadFacts } from "../vetting/facts.js";
+import { VettingGateError, assertVettingAllowsOutreach, ensureVetted, loadVetting, vettingIsFresh } from "../vetting/vet.js";
 import {
+  ContactGuardError,
   assertProspectContactable,
   existingCustomerSlug,
   loadContactPolicy,
@@ -23,20 +31,34 @@ import {
   outreachPostalAddress,
   outreachReplyTo,
   outreachUnsubscribeMailbox,
+  postalAddressIsPlaceholder,
   publicObjectUrl,
+  senderIsSandbox,
   unsubscribeUrl,
 } from "./config.js";
-import { buildListUnsubscribeHeaders, renderOutreachEmail, splitParagraphs, type TemplateImage } from "./emailTemplate.js";
+import { COPY_RULES } from "./copywriter.js";
+import { renderOutreachEmail, splitParagraphs, type TemplateImage } from "./emailTemplate.js";
+import { DeferredSendError, isDeferredSendError } from "./sendErrors.js";
+import { loadGuard, type GuardState } from "./sendingHealth.js";
 
 /**
  * The only code path that delivers a studio email. It runs inside the
  * governed send_outreach_email action, and re-verifies on its own that the
- * email's action is approved, the prospect is still contactable, the address
- * is not suppressed, and the daily cap holds — so even a direct call cannot
- * bypass the operator gate. Dependencies are injectable for tests.
+ * email's action is approved, the prospect is still contactable and vetted,
+ * the copy still cites two verified facts, compliance configuration is real,
+ * the deliverability guard is not paused, and the daily cap holds (counted
+ * under an advisory lock so concurrent approvals cannot exceed it). Fixable
+ * preconditions keep the reviewed draft (DeferredSendError); blocked
+ * recipients and provider rejections fail it. Dependencies are injectable.
  */
 
 export const OUTREACH_SEND_ACTION_TYPES = ["send_prospect_email", "send_outreach_email"] as const;
+
+/** Action statuses under which the sender may deliver (approved, or claimed by the executor). */
+const SENDABLE_ACTION_STATUSES = new Set(["approved", "executing"]);
+
+/** pg_advisory_xact_lock key serializing the cap check and delivery. */
+const SEND_LOCK_KEY = 7_270_301;
 
 export interface DeliverMessage {
   to: string;
@@ -45,6 +67,25 @@ export interface DeliverMessage {
   text: string;
   headers: Record<string, string>;
   replyTo: string | null;
+  /** Resend tags; webhook events also match on the provider message id. */
+  tags: Array<{ name: string; value: string }>;
+}
+
+export interface SendConfig {
+  postalAddress: string;
+  unsubscribeMailbox: string | null;
+  replyTo: string | null;
+  postalAddressIsPlaceholder: boolean;
+  /** EMAIL_FROM unset or the Resend sandbox sender: delivers only to the account owner. */
+  sandboxSender: boolean;
+  resendConfigured: boolean;
+}
+
+export interface SendPolicyFlags {
+  guard: GuardState;
+  requireReplyTo: boolean;
+  /** Kill switch: policy outreach_sends_enabled. */
+  sendsEnabled: boolean;
 }
 
 export interface OutreachSendDeps {
@@ -56,11 +97,23 @@ export interface OutreachSendDeps {
   existingCustomerSlug(email: string): Promise<string | null>;
   loadPolicy(): Promise<ContactPolicy>;
   dailyCap(): Promise<{ cap: number; sentToday: number }>;
+  loadVetting(prospectId: number): Promise<ControlProspectVetting | null>;
+  /** Re-run vetting (network) when the stored verdict is expired; returns the fresh row. */
+  revet(prospect: ControlProspect): Promise<ControlProspectVetting>;
+  loadFacts(prospectId: number): Promise<ControlProspectFact[]>;
+  /** Deliverability guard, reply-to policy and the sends kill switch, all from control_policies. */
+  policyFlags(): Promise<SendPolicyFlags>;
+  /** Status of the campaign the email belongs to (null when missing). */
+  campaignStatus(campaignId: number): Promise<string | null>;
+  /** Serialize cap check + delivery across concurrent approvals. */
+  withSendLock<T>(fn: () => Promise<T>): Promise<T>;
   deliver(message: DeliverMessage): Promise<{ id: string | null }>;
   markSent(emailId: number, record: { providerId: string | null; html: string; text: string; to: string; at: Date }): Promise<void>;
   markFailed(emailId: number, error: string): Promise<void>;
+  /** Keep the draft (status stays "draft") and record why it could not go out yet. */
+  markDeferred(emailId: number, error: string): Promise<void>;
   bumpProspect(prospect: ControlProspect, step: number | null, at: Date): Promise<void>;
-  config(): { postalAddress: string; unsubscribeMailbox: string | null; replyTo: string | null };
+  config(): SendConfig;
   imageUrl(objectKey: string): string;
   now(): Date;
 }
@@ -84,7 +137,7 @@ export function assetToTemplateImage(asset: ControlProspectAsset, imageUrl: (key
   };
 }
 
-/** Renders the exact message for an email row; shared by send and preview. */
+/** Renders the exact message for an email row (HTML, text, List-Unsubscribe headers); shared by send and preview. */
 export function renderEmailRow(
   email: Pick<ControlOutreachEmail, "subject" | "greeting" | "body" | "signOff" | "ctaLabel" | "ctaUrl" | "imageAssetIds" | "unsubscribeToken">,
   prospect: Pick<ControlProspect, "name">,
@@ -101,8 +154,7 @@ export function renderEmailRow(
     .map((id) => byId.get(id))
     .filter((asset): asset is ControlProspectAsset => Boolean(asset))
     .map((asset) => assetToTemplateImage(asset, options.imageUrl));
-  const unsubscribe = unsubscribeUrl(email.unsubscribeToken);
-  const rendered = renderOutreachEmail({
+  return renderOutreachEmail({
     subject: email.subject,
     greeting: email.greeting,
     paragraphs: splitParagraphs(email.body),
@@ -111,12 +163,22 @@ export function renderEmailRow(
     ctaUrl: email.ctaUrl,
     images,
     venueName: prospect.name,
-    unsubscribeUrl: unsubscribe,
+    unsubscribeUrl: unsubscribeUrl(email.unsubscribeToken),
+    unsubscribeMailbox: options.unsubscribeMailbox,
     postalAddress: options.postalAddress,
     forceScheme: options.forceScheme,
   });
-  rendered.headers = buildListUnsubscribeHeaders(unsubscribe, options.unsubscribeMailbox);
-  return rendered;
+}
+
+/** Pure: the cap message (cap 0 means the deliverability guard paused sending). */
+export function dailyCapMessage(cap: { cap: number; sentToday: number }): string {
+  if (cap.cap <= 0) return "Prospect sending is paused (daily cap is 0); an operator must reset the deliverability guard in /control.";
+  return `Daily prospect email cap reached (${cap.sentToday}/${cap.cap}); the draft is kept and can be approved again tomorrow.`;
+}
+
+function contactGuardFailure(err: unknown): Error {
+  if (err instanceof ContactGuardError && err.code === "gap") return new DeferredSendError(err.message);
+  return err instanceof Error ? err : new Error(String(err));
 }
 
 export async function sendOutreachEmail(
@@ -132,7 +194,7 @@ export async function sendOutreachEmail(
     throw new Error(`Outreach email ${emailId} has no governed action; it must be proposed and approved first.`);
   }
   const actionStatus = await deps.loadActionStatus(email.actionId);
-  if (actionStatus !== "approved") {
+  if (!actionStatus || !SENDABLE_ACTION_STATUSES.has(actionStatus)) {
     throw new Error(
       `Outreach email ${emailId} cannot send: its action #${email.actionId} is "${actionStatus ?? "missing"}", not approved by an operator.`,
     );
@@ -143,74 +205,156 @@ export async function sendOutreachEmail(
 
   const now = deps.now();
   try {
-    const [policy, suppressed, customerSlug, cap] = await Promise.all([
+    const [policy, suppressed, customerSlug] = await Promise.all([
       deps.loadPolicy(),
       deps.isSuppressed(prospect.email),
       deps.existingCustomerSlug(prospect.email),
-      deps.dailyCap(),
     ]);
-    assertProspectContactable(prospect, policy, { suppressed, existingCustomerSlug: customerSlug }, now);
-    if (cap.sentToday >= cap.cap) {
-      throw new Error(`Daily prospect email cap reached (${cap.sentToday}/${cap.cap}).`);
+    try {
+      assertProspectContactable(prospect, policy, { suppressed, existingCustomerSlug: customerSlug }, now);
+    } catch (err) {
+      throw contactGuardFailure(err);
     }
 
-    const assets = await deps.loadAssets(email.imageAssetIds);
-    const config = deps.config();
-    const rendered = renderEmailRow(email, prospect, assets, {
-      postalAddress: config.postalAddress,
-      unsubscribeMailbox: config.unsubscribeMailbox,
-      imageUrl: deps.imageUrl,
-    });
+    return await deps.withSendLock(async () => {
+      const cap = await deps.dailyCap();
+      if (cap.sentToday >= cap.cap) throw new DeferredSendError(dailyCapMessage(cap));
 
-    const delivery = await deps.deliver({
-      to: prospect.email,
-      subject: email.subject,
-      html: rendered.html,
-      text: rendered.text,
-      headers: rendered.headers,
-      replyTo: config.replyTo,
-    });
+      const flags = await deps.policyFlags();
+      if (flags.guard.status === "paused") {
+        throw new DeferredSendError(
+          `Prospect sending is paused by the deliverability guard${flags.guard.reason ? ` (${flags.guard.reason})` : ""}; an operator must reset it in /control before any send.`,
+        );
+      }
+      if (!flags.sendsEnabled) {
+        throw new DeferredSendError("Outbound prospect email is frozen (policy outreach_sends_enabled = false); the draft is kept.");
+      }
 
-    await deps.markSent(emailId, {
-      providerId: delivery.id,
-      html: rendered.html,
-      text: rendered.text,
-      to: prospect.email,
-      at: now,
+      let vetting = await deps.loadVetting(prospect.id);
+      if (vetting && vetting.status === "passed" && !vettingIsFresh(vetting, now)) vetting = await deps.revet(prospect);
+      try {
+        assertVettingAllowsOutreach(vetting, prospect.id, now);
+      } catch (err) {
+        if (err instanceof VettingGateError && err.reason !== "failed") throw new DeferredSendError(err.message);
+        throw err;
+      }
+
+      const cited = citedFactsIn(email, citableFacts(await deps.loadFacts(prospect.id)));
+      if (cited.length < COPY_RULES.minCitedFacts) {
+        throw new DeferredSendError(
+          `Email ${emailId} cites ${cited.length} verified venue fact(s); at least ${COPY_RULES.minCitedFacts} are required. Edit the draft in /control → Outreach.`,
+        );
+      }
+      if (/^\s*(re|fwd?)\s*:/i.test(email.subject)) throw new DeferredSendError("Subject must not fake a reply or forward.");
+
+      const config = deps.config();
+      if (config.postalAddressIsPlaceholder) {
+        throw new DeferredSendError("OUTREACH_POSTAL_ADDRESS is not set; CAN-SPAM requires a real postal address in the footer.");
+      }
+      if (flags.requireReplyTo && !config.replyTo) {
+        throw new DeferredSendError(
+          "OUTREACH_REPLY_TO is not set; outreach must come from a monitored mailbox (policy outreach_require_reply_to).",
+        );
+      }
+      if (config.replyTo && isFreeMail(splitEmail(config.replyTo)?.domain ?? "")) {
+        throw new DeferredSendError(`OUTREACH_REPLY_TO (${config.replyTo}) is a free-mail address; use a mailbox on the sending domain.`);
+      }
+      if (config.sandboxSender) {
+        throw new DeferredSendError(
+          "EMAIL_FROM is unset or the Resend sandbox sender, which only delivers to the Resend account owner; set a sender on a verified domain.",
+        );
+      }
+      if (!config.resendConfigured) {
+        throw new DeferredSendError("RESEND_API_KEY is not set; email delivery is not configured on this server.");
+      }
+      if (email.campaignId != null) {
+        const status = await deps.campaignStatus(email.campaignId);
+        if (status !== "active") {
+          const message = `Campaign ${email.campaignId} is "${status ?? "missing"}"; only active campaigns may send.`;
+          if (status === "paused" || status === "draft") throw new DeferredSendError(message);
+          throw new Error(message);
+        }
+      }
+
+      const assets = await deps.loadAssets(email.imageAssetIds);
+      const rendered = renderEmailRow(email, prospect, assets, {
+        postalAddress: config.postalAddress,
+        unsubscribeMailbox: config.unsubscribeMailbox,
+        imageUrl: deps.imageUrl,
+      });
+
+      const delivery = await deps.deliver({
+        to: prospect.email,
+        subject: email.subject,
+        html: rendered.html,
+        text: rendered.text,
+        headers: rendered.headers,
+        replyTo: config.replyTo,
+        tags: [
+          { name: "category", value: "outreach" },
+          { name: "email_id", value: String(emailId) },
+        ],
+      });
+
+      await deps.markSent(emailId, {
+        providerId: delivery.id,
+        html: rendered.html,
+        text: rendered.text,
+        to: prospect.email,
+        at: now,
+      });
+      await deps.bumpProspect(prospect, email.step, now);
+      return {
+        sent: true as const,
+        emailId,
+        to: prospect.email,
+        providerId: delivery.id,
+        contactCount: prospect.contactCount + 1,
+      };
     });
-    await deps.bumpProspect(prospect, email.step, now);
-    return {
-      sent: true,
-      emailId,
-      to: prospect.email,
-      providerId: delivery.id,
-      contactCount: prospect.contactCount + 1,
-    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await deps.markFailed(emailId, message);
+    if (isDeferredSendError(err)) await deps.markDeferred(emailId, message);
+    else await deps.markFailed(emailId, message);
     throw err;
   }
 }
 
 /* ————— Default (database + Resend) dependencies ————— */
 
-function startOfUtcDay(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-export async function prospectEmailsSentToday(): Promise<number> {
-  const [row] = await db
+/**
+ * Prospect emails delivered today (UTC): studio rows with sentAt today plus
+ * any legacy plain-text sends executed today. Counting delivered rows (not
+ * executed actions) keeps an in-flight send visible to the next cap check.
+ */
+export async function prospectEmailsSentToday(now: Date = new Date()): Promise<number> {
+  const since = startOfUtcDay(now);
+  const [studio] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(controlOutreachEmailsTable)
+    .where(and(isNotNull(controlOutreachEmailsTable.sentAt), gte(controlOutreachEmailsTable.sentAt, since)));
+  const [legacy] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(agentActionsTable)
     .where(
       and(
-        inArray(agentActionsTable.actionType, [...OUTREACH_SEND_ACTION_TYPES]),
+        eq(agentActionsTable.actionType, "send_prospect_email"),
         eq(agentActionsTable.status, "executed"),
-        gte(agentActionsTable.executedAt, startOfUtcDay(new Date())),
+        gte(agentActionsTable.executedAt, since),
       ),
     );
-  return row?.total ?? 0;
+  return (studio?.total ?? 0) + (legacy?.total ?? 0);
+}
+
+export function defaultSendConfig(): SendConfig {
+  return {
+    postalAddress: outreachPostalAddress(),
+    unsubscribeMailbox: outreachUnsubscribeMailbox(),
+    replyTo: outreachReplyTo(),
+    postalAddressIsPlaceholder: postalAddressIsPlaceholder(),
+    sandboxSender: senderIsSandbox(),
+    resendConfigured: Boolean(process.env.RESEND_API_KEY?.trim()),
+  };
 }
 
 export function defaultSendDeps(): OutreachSendDeps {
@@ -243,6 +387,30 @@ export function defaultSendDeps(): OutreachSendDeps {
         sentToday: await prospectEmailsSentToday(),
       };
     },
+    loadVetting,
+    revet: (prospect) => ensureVetted(prospect, { force: true, requestedBy: "system:sender" }).then((result) => result.vetting),
+    loadFacts,
+    async policyFlags() {
+      const [guard, requireReplyTo, sendsEnabled] = await Promise.all([
+        loadGuard(),
+        getPolicyBoolean("outreach_require_reply_to", "enabled", true),
+        getPolicyBoolean("outreach_sends_enabled", "enabled", true),
+      ]);
+      return { guard, requireReplyTo, sendsEnabled };
+    },
+    async campaignStatus(campaignId) {
+      const [row] = await db
+        .select({ status: controlCampaignsTable.status })
+        .from(controlCampaignsTable)
+        .where(eq(controlCampaignsTable.id, campaignId));
+      return row?.status ?? null;
+    },
+    async withSendLock(fn) {
+      return db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(${SEND_LOCK_KEY})`);
+        return fn();
+      });
+    },
     async deliver(message) {
       const result = await sendRawEmail({
         to: message.to,
@@ -251,6 +419,7 @@ export function defaultSendDeps(): OutreachSendDeps {
         text: message.text,
         headers: message.headers,
         replyTo: message.replyTo,
+        tags: message.tags,
       });
       if (!result.sent) throw new Error(result.reason);
       return { id: result.id };
@@ -284,6 +453,12 @@ export function defaultSendDeps(): OutreachSendDeps {
         .set({ status: "failed", lastError: error.slice(0, 1000), updatedAt: new Date() })
         .where(eq(controlOutreachEmailsTable.id, emailId));
     },
+    async markDeferred(emailId, error) {
+      await db
+        .update(controlOutreachEmailsTable)
+        .set({ lastError: error.slice(0, 1000), updatedAt: new Date() })
+        .where(and(eq(controlOutreachEmailsTable.id, emailId), eq(controlOutreachEmailsTable.status, "draft")));
+    },
     async bumpProspect(prospect, step, at) {
       await db
         .update(controlProspectsTable)
@@ -296,11 +471,7 @@ export function defaultSendDeps(): OutreachSendDeps {
         })
         .where(eq(controlProspectsTable.id, prospect.id));
     },
-    config: () => ({
-      postalAddress: outreachPostalAddress(),
-      unsubscribeMailbox: outreachUnsubscribeMailbox(),
-      replyTo: outreachReplyTo(),
-    }),
+    config: defaultSendConfig,
     imageUrl: publicObjectUrl,
     now: () => new Date(),
   };

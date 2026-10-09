@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { z } from "zod";
 import { logger } from "./logger.js";
 import type { WeddingScene } from "./scenePlan.js";
 import {
@@ -9,10 +10,8 @@ import {
 
 type ImageRef = { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null };
 
-const GEMINI_API_BASE =
-  process.env.GEMINI_API_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const QUALITY_MODEL = process.env.GEMINI_QUALITY_MODEL ?? "gemini-2.5-pro";
-const QUALITY_ENABLED = process.env.GALLERY_QUALITY_GATE !== "off";
 const MIN_LIKENESS_SCORE = Number(process.env.GALLERY_MIN_LIKENESS_SCORE ?? "0.82");
 const MIN_PARTNER_LIKENESS_SCORE = Number(process.env.GALLERY_MIN_PARTNER_LIKENESS_SCORE ?? "0.78");
 const MIN_VENUE_SCORE = Number(process.env.GALLERY_MIN_VENUE_SCORE ?? "0.8");
@@ -20,14 +19,33 @@ const MIN_COMPOSITION_SCORE = Number(process.env.GALLERY_MIN_COMPOSITION_SCORE ?
 // Acceptance floors: when no attempt reaches the strict targets above, the
 // best-scoring attempt is still delivered if it clears these floors and every
 // hard integrity check (two distinct real partners, faces visible, no extra
-// people or text). The venue owner reviews galleries before sending, so
-// near-target frames reach a human judge instead of failing the whole session.
+// people or text). Such frames are flagged "below target" on the owner's
+// dashboard (generated_assets.quality_report + render_attempts) so imperfect
+// input photos degrade the gallery gracefully instead of failing the session.
 const FLOOR_LIKENESS_SCORE = Number(process.env.GALLERY_FLOOR_LIKENESS_SCORE ?? "0.7");
 const FLOOR_PARTNER_LIKENESS_SCORE = Number(process.env.GALLERY_FLOOR_PARTNER_LIKENESS_SCORE ?? "0.66");
 const FLOOR_VENUE_SCORE = Number(process.env.GALLERY_FLOOR_VENUE_SCORE ?? "0.68");
 const FLOOR_COMPOSITION_SCORE = Number(process.env.GALLERY_FLOOR_COMPOSITION_SCORE ?? "0.6");
 const MAX_TOTAL_JUDGE_IMAGES = 14;
 const MAX_COUPLE_JUDGE_REFERENCES = 3;
+const DEFAULT_JUDGE_TIMEOUT_MS = 90_000;
+/** Judge calls per frame (first try + retries). Judge outages never trigger a new paid render. */
+const JUDGE_ATTEMPTS = 3;
+const DEFAULT_JUDGE_RETRY_DELAYS_MS = [1_500, 4_000];
+
+function geminiApiBase(): string {
+  return (process.env.GEMINI_API_BASE_URL ?? DEFAULT_GEMINI_API_BASE).replace(/\/$/, "");
+}
+
+function judgeTimeoutMs(): number {
+  const parsed = Number(process.env.GALLERY_JUDGE_TIMEOUT_MS ?? DEFAULT_JUDGE_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_JUDGE_TIMEOUT_MS;
+}
+
+/** The quality gate runs unless GALLERY_QUALITY_GATE=off (local plumbing only). */
+export function qualityGateEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.GALLERY_QUALITY_GATE !== "off";
+}
 
 interface GeminiQualityResponse {
   candidates?: {
@@ -68,6 +86,21 @@ export class GalleryQualityError extends Error {
 }
 
 /**
+ * The judge could not produce a verdict (outage, rate limit, malformed JSON,
+ * missing key) even after retries. This says nothing about the frame, so it
+ * must never be treated as a bad render.
+ */
+export class GalleryJudgeUnavailableError extends Error {
+  constructor(
+    message: string,
+    public readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = "GalleryJudgeUnavailableError";
+  }
+}
+
+/**
  * Aggregate score used to rank below-target attempts so the best one can be
  * kept. The weakest partner likeness dominates: a gallery that loses one
  * partner's identity is worse than one that is slightly soft everywhere.
@@ -88,7 +121,7 @@ export function frameQualityScore(report: GalleryQualityReport): number {
 /**
  * Hard requirements for delivering a frame that missed the strict targets.
  * Integrity checks are never negotiable; scores may sit between the floor and
- * the target because the venue owner reviews the gallery before sending it.
+ * the target, in which case the frame ships flagged "below target".
  */
 export function acceptanceFloorFailures(report: GalleryQualityReport): string[] {
   const failures: string[] = [];
@@ -171,11 +204,16 @@ export function qualityRetryGuidanceForError(err: unknown): string | null {
   ].join("\n");
 }
 
-async function normalizeForJudge(image: ImageRef): Promise<Buffer> {
-  // Mirror the generation-side reference cleanup (contrast stretch + mild
-  // sharpen) so the judge compares the generated frame against the same
-  // enhanced references the generator saw.
-  return sharp(image.buffer)
+/*
+ * Judge-side normalization mirrors the generation-side reference cleanup
+ * (contrast stretch + mild sharpen) so the judge compares the generated frame
+ * against the same enhanced references the generator saw. References are
+ * normalized once per buffer and reused for every scene and attempt.
+ */
+const judgeReferenceCache = new WeakMap<Buffer, Promise<Buffer>>();
+
+function normalizeForJudgeUncached(buffer: Buffer): Promise<Buffer> {
+  return sharp(buffer)
     .rotate()
     .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
     .normalize({ lower: 1, upper: 99 })
@@ -184,14 +222,57 @@ async function normalizeForJudge(image: ImageRef): Promise<Buffer> {
     .toBuffer();
 }
 
+function normalizeReferenceForJudge(image: ImageRef): Promise<Buffer> {
+  const cached = judgeReferenceCache.get(image.buffer);
+  if (cached) return cached;
+  const pending = normalizeForJudgeUncached(image.buffer);
+  judgeReferenceCache.set(image.buffer, pending);
+  pending.catch(() => judgeReferenceCache.delete(image.buffer));
+  return pending;
+}
+
 function venueCoverageLabel(coverage: unknown): string | null {
   return isVenueMediaCoverage(coverage) ? VENUE_MEDIA_COVERAGE_LABELS[coverage] : null;
 }
 
-function numberInRange(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(1, n));
+const score = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() !== "" ? Number(value) : value),
+  z.number().finite().transform((n) => Math.max(0, Math.min(1, n))),
+);
+
+/**
+ * The judge's verdict, validated. Every score and integrity flag is required:
+ * a response that drops a field is a judge format error (retried), never a
+ * silent `false` that fails a good frame.
+ */
+const judgeReportSchema = z.object({
+  likenessScore: score,
+  partnerOneLikenessScore: score,
+  partnerTwoLikenessScore: score,
+  partnerIdentitySeparation: z.boolean(),
+  venueScore: score,
+  compositionScore: score,
+  exactlyTwoPartners: z.boolean(),
+  facesVisible: z.boolean(),
+  extraPeople: z.boolean(),
+  textArtifacts: z.boolean(),
+  pass: z.boolean(),
+  reasons: z
+    .array(z.unknown())
+    .optional()
+    .transform((items) =>
+      (items ?? [])
+        .filter((reason): reason is string => typeof reason === "string")
+        .map((reason) => reason.slice(0, 180)),
+    ),
+});
+
+/** Thrown for a judge answer that is not a complete, well-formed verdict. */
+export class JudgeFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JudgeFormatError";
+  }
 }
 
 function parseJsonObject(text: string): Record<string, unknown> {
@@ -200,9 +281,23 @@ function parseJsonObject(text: string): Record<string, unknown> {
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start < 0 || end <= start) {
-    throw new Error(`Quality judge returned no JSON object: ${text.slice(0, 240)}`);
+    throw new JudgeFormatError(`Quality judge returned no JSON object: ${text.slice(0, 240)}`);
   }
-  return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+  try {
+    return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    throw new JudgeFormatError(`Quality judge returned malformed JSON: ${text.slice(0, 240)}`);
+  }
+}
+
+/** Parse the judge's text answer into a validated report (throws JudgeFormatError). */
+export function parseJudgeReport(text: string): GalleryQualityReport {
+  const parsed = judgeReportSchema.safeParse(parseJsonObject(text));
+  if (!parsed.success) {
+    const fields = parsed.error.issues.map((issue) => issue.path.join(".") || "(root)").join(", ");
+    throw new JudgeFormatError(`Quality judge report is missing or has invalid fields: ${fields}`);
+  }
+  return parsed.data;
 }
 
 function extractText(json: GeminiQualityResponse): string {
@@ -210,27 +305,7 @@ function extractText(json: GeminiQualityResponse): string {
   return parts.map((part) => part.text ?? "").join("\n").trim();
 }
 
-function normalizeReport(raw: Record<string, unknown>): GalleryQualityReport {
-  const reasonsRaw = Array.isArray(raw.reasons) ? raw.reasons : [];
-  return {
-    likenessScore: numberInRange(raw.likenessScore),
-    partnerOneLikenessScore: numberInRange(raw.partnerOneLikenessScore),
-    partnerTwoLikenessScore: numberInRange(raw.partnerTwoLikenessScore),
-    partnerIdentitySeparation: raw.partnerIdentitySeparation === true,
-    venueScore: numberInRange(raw.venueScore),
-    compositionScore: numberInRange(raw.compositionScore),
-    exactlyTwoPartners: raw.exactlyTwoPartners === true,
-    facesVisible: raw.facesVisible === true,
-    extraPeople: raw.extraPeople === true,
-    textArtifacts: raw.textArtifacts === true,
-    pass: raw.pass === true,
-    reasons: reasonsRaw
-      .filter((reason): reason is string => typeof reason === "string")
-      .map((reason) => reason.slice(0, 180)),
-  };
-}
-
-function thresholdFailures(report: GalleryQualityReport): string[] {
+export function thresholdFailures(report: GalleryQualityReport): string[] {
   const failures: string[] = [];
   if (report.likenessScore < MIN_LIKENESS_SCORE) {
     failures.push(`likeness ${report.likenessScore.toFixed(2)} < ${MIN_LIKENESS_SCORE}`);
@@ -263,27 +338,44 @@ function thresholdFailures(report: GalleryQualityReport): string[] {
   return failures;
 }
 
-export async function assertGalleryFrameQuality(params: {
+export interface JudgeFrameParams {
   sessionId: number;
   scene: WeddingScene;
   generated: ImageRef;
   generatedModel?: string;
   coupleReferences: ImageRef[];
   venueReferences: ImageRef[];
-}): Promise<GalleryQualityReport | null> {
-  if (!QUALITY_ENABLED) return null;
+  /** Aborts the in-flight judge call (session deadline). */
+  signal?: AbortSignal;
+}
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Gemini API key is required for gallery quality evaluation.");
-  }
+export interface JudgeOptions {
+  /** Delays between judge attempts; defaults to 1.5s then 4s. Tests pass zeros. */
+  retryDelaysMs?: number[];
+}
 
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
+
+async function buildJudgeRequest(params: JudgeFrameParams): Promise<string> {
   const coupleRefs = params.coupleReferences.slice(0, MAX_COUPLE_JUDGE_REFERENCES);
   const maxVenueRefs = Math.max(1, MAX_TOTAL_JUDGE_IMAGES - 1 - coupleRefs.length);
   const venueRefs = params.venueReferences.slice(0, maxVenueRefs);
-  const generated = await normalizeForJudge(params.generated);
-  const normalizedCoupleRefs = await Promise.all(coupleRefs.map((ref) => normalizeForJudge(ref)));
-  const normalizedVenueRefs = await Promise.all(venueRefs.map((ref) => normalizeForJudge(ref)));
+  const generated = await normalizeForJudgeUncached(params.generated.buffer);
+  const normalizedCoupleRefs = await Promise.all(coupleRefs.map((ref) => normalizeReferenceForJudge(ref)));
+  const normalizedVenueRefs = await Promise.all(venueRefs.map((ref) => normalizeReferenceForJudge(ref)));
   const venueCoverageSummary = venueRefs
     .map((ref, index) => {
       const label = venueCoverageLabel(ref.coverage);
@@ -337,31 +429,119 @@ export async function assertGalleryFrameQuality(params: {
     );
   });
 
-  const body = {
+  return JSON.stringify({
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0,
     },
-  };
-
-  const url = `${GEMINI_API_BASE}/models/${QUALITY_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
-  const text = await res.text();
+}
+
+/** One judge call. Throws GalleryJudgeUnavailableError (retryable or not) or JudgeFormatError. */
+async function callJudgeOnce(apiKey: string, body: string, signal?: AbortSignal): Promise<GalleryQualityReport> {
+  const timeout = AbortSignal.timeout(judgeTimeoutMs());
+  const combined = signal ? AbortSignal.any([timeout, signal]) : timeout;
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${geminiApiBase()}/models/${QUALITY_MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body,
+      signal: combined,
+    });
+    text = await res.text();
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    throw new GalleryJudgeUnavailableError(
+      `Gallery quality judge request failed: ${err instanceof Error ? err.message : String(err)}`,
+      true,
+    );
+  }
   if (!res.ok) {
-    throw new Error(`Gallery quality judge failed (${res.status}): ${text.slice(0, 800)}`);
+    // 408/429/5xx are outages worth retrying; other 4xx (bad key, bad request)
+    // will not fix themselves within a session.
+    const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
+    throw new GalleryJudgeUnavailableError(
+      `Gallery quality judge failed (${res.status}): ${text.slice(0, 600)}`,
+      retryable,
+    );
   }
-
-  const json = JSON.parse(text) as GeminiQualityResponse;
+  let json: GeminiQualityResponse;
+  try {
+    json = JSON.parse(text) as GeminiQualityResponse;
+  } catch {
+    throw new JudgeFormatError(`Gallery quality judge returned non-JSON body: ${text.slice(0, 240)}`);
+  }
   if (json.error) {
-    throw new Error(`Gallery quality judge error: ${json.error.message ?? "unknown"}`);
+    throw new GalleryJudgeUnavailableError(
+      `Gallery quality judge error: ${json.error.message ?? "unknown"}`,
+      true,
+    );
   }
+  return parseJudgeReport(extractText(json));
+}
 
-  const report = normalizeReport(parseJsonObject(extractText(json)));
+/**
+ * Ask the judge for a verdict on one generated frame, retrying judge outages
+ * and malformed answers on the SAME frame (up to JUDGE_ATTEMPTS calls with
+ * backoff). Never re-renders. Throws GalleryJudgeUnavailableError when no
+ * verdict could be obtained.
+ */
+export async function judgeGalleryFrame(
+  params: JudgeFrameParams,
+  options: JudgeOptions = {},
+): Promise<GalleryQualityReport> {
+  const apiKey = (process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY)?.trim();
+  if (!apiKey) {
+    throw new GalleryJudgeUnavailableError(
+      "Gemini API key (GOOGLE_AI_API_KEY) is required for gallery quality evaluation.",
+      false,
+    );
+  }
+  const body = await buildJudgeRequest(params);
+  const delays = options.retryDelaysMs ?? DEFAULT_JUDGE_RETRY_DELAYS_MS;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= JUDGE_ATTEMPTS; attempt++) {
+    params.signal?.throwIfAborted();
+    try {
+      return await callJudgeOnce(apiKey, body, params.signal);
+    } catch (err) {
+      if (params.signal?.aborted) throw err;
+      lastErr = err;
+      const retryable =
+        err instanceof JudgeFormatError ||
+        (err instanceof GalleryJudgeUnavailableError && err.retryable);
+      logger.warn(
+        { err, sessionId: params.sessionId, sceneId: params.scene.id, attempt, retryable },
+        "Gallery quality judge attempt failed",
+      );
+      if (!retryable || attempt === JUDGE_ATTEMPTS) break;
+      await sleep(delays[Math.min(attempt - 1, delays.length - 1)] ?? 0, params.signal);
+    }
+  }
+  if (lastErr instanceof GalleryJudgeUnavailableError) throw lastErr;
+  throw new GalleryJudgeUnavailableError(
+    `Gallery quality judge gave no usable verdict after ${JUDGE_ATTEMPTS} attempts: ${
+      lastErr instanceof Error ? lastErr.message : String(lastErr)
+    }`,
+    true,
+  );
+}
+
+/**
+ * Judge a frame and enforce the strict targets. Returns the report on pass,
+ * null when the gate is disabled; throws GalleryQualityError when the frame
+ * missed a target and GalleryJudgeUnavailableError when no verdict exists.
+ */
+export async function assertGalleryFrameQuality(
+  params: JudgeFrameParams,
+  options: JudgeOptions = {},
+): Promise<GalleryQualityReport | null> {
+  if (!qualityGateEnabled()) return null;
+
+  const report = await judgeGalleryFrame(params, options);
   const failures = thresholdFailures(report);
   logger.info(
     {

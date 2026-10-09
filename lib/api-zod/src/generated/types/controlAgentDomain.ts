@@ -13,7 +13,6 @@ export const ControlAgentDomain = {
   prospecting: "prospecting",
   outreach: "outreach",
   campaigns: "campaigns",
-  growth: "growth",
   support: "support",
   product: "product",
   finance: "finance",

@@ -10,10 +10,15 @@ import { desc, eq, sql } from "drizzle-orm";
  * rejects as ambiguous once the outer table shares a column name — the
  * production error the finance agent hit. Only outer-table columns are
  * interpolated here, so the fragments stay unambiguous.
+ *
+ * The outer column is written fully qualified ("organizations"."id",
+ * "venues"."id") on purpose: a single-table Drizzle select renders its own
+ * columns bare ("id"), and inside `from venues v` a bare "id" would resolve to
+ * v.id, silently comparing a venue with itself.
  */
 export function listOrganizationsQuery(limit: number) {
-  const venueCount = sql<number>`(select count(*)::int from venues v where v.organization_id = ${organizationsTable.id})`;
-  const lastSession = sql<string | null>`(select max(cs.created_at)::text from couple_sessions cs join venues v on v.id = cs.venue_id where v.organization_id = ${organizationsTable.id})`;
+  const venueCount = sql<number>`(select count(*)::int from venues v where v.organization_id = "organizations"."id")`;
+  const lastSession = sql<string | null>`(select max(cs.created_at)::text from couple_sessions cs join venues v on v.id = cs.venue_id where v.organization_id = "organizations"."id")`;
   return db
     .select({
       id: organizationsTable.id,
@@ -36,8 +41,8 @@ export function listOrganizationsQuery(limit: number) {
 export type VenueListSort = "newest" | "least_active";
 
 export function listVenuesQuery(limit: number, sort: VenueListSort) {
-  const mediaCount = sql<number>`(select count(*)::int from venue_media vm where vm.venue_id = ${venuesTable.id})`;
-  const sessionCount = sql<number>`(select count(*)::int from couple_sessions cs where cs.venue_id = ${venuesTable.id})`;
+  const mediaCount = sql<number>`(select count(*)::int from venue_media vm where vm.venue_id = "venues"."id")`;
+  const sessionCount = sql<number>`(select count(*)::int from couple_sessions cs where cs.venue_id = "venues"."id")`;
   return db
     .select({
       id: venuesTable.id,
@@ -55,7 +60,7 @@ export function listVenuesQuery(limit: number, sort: VenueListSort) {
     .leftJoin(organizationsTable, eq(venuesTable.organizationId, organizationsTable.id))
     .orderBy(
       sort === "least_active"
-        ? sql`(select count(*) from couple_sessions cs2 where cs2.venue_id = ${venuesTable.id}) asc, ${venuesTable.createdAt} desc`
+        ? sql`(select count(*) from couple_sessions cs2 where cs2.venue_id = "venues"."id") asc, ${venuesTable.createdAt} desc`
         : desc(venuesTable.createdAt),
     )
     .limit(limit);

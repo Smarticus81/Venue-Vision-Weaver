@@ -5,8 +5,10 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+// Three at once so per-photo validation messages do not overwrite each other.
+const TOAST_LIMIT = 3
+// Time a dismissed toast stays mounted for its exit animation.
+const TOAST_REMOVE_DELAY = 1000
 
 type ToasterToast = ToastProps & {
   id: string

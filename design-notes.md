@@ -3,6 +3,187 @@
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 
+## 2026-10-08 (twentieth pass) — Couple flow and shared gallery (`/preview/:slug`, `/v/:shareToken`)
+
+**Conversion spine:** the couple page exists to get a touring couple from
+"scanned the card" to "gallery on its way" in under two minutes, and the
+gallery exists to send them back to the venue with a date: "Check your date
+at {venue}" is the apex action, never "Book a tour" (they already toured).
+
+**Direction (one line):** the venue's own stationery. Ivory canvas, ink type,
+the venue's photographs carry the colour, coral appears once per view (the
+couple's next step in the flow; the date CTA on the gallery). Styles live in
+`src/styles/couple.css` with `cc-` (chrome), `cp-` (flow) and `gs-` (gallery)
+prefixes; nothing couple-only goes into `index.css`.
+
+**Decisions:**
+
+- **CoupleChrome** replaces the site header on couple routes: the venue's
+  photo and name ("Your preview at The Willow House") on the left, the date
+  CTA on the right of the gallery header. No Dreemer navigation, no owner or
+  billing words anywhere a couple can reach.
+- **Slot-based upload** (Together, Partner A, Partner B) with progress,
+  in-browser downscale, camera capture on phones and a sessionStorage draft so
+  a reload keeps entered data. HEIC converts where the browser can decode it;
+  elsewhere the slot asks for a JPG in plain words.
+- **Consent is two people.** One checkbox that names both partners, the AI
+  preview label and the retention window from public config; the server
+  refuses a couple session without it.
+- **Turnstile only when the venue payload carries a site key.** If the widget
+  cannot load, the page says so instead of failing silently.
+- **Processing view shows the venue's real photos** and backs off its polling;
+  past the expected time it says it is taking longer rather than implying it
+  is nearly done. Delivery copy follows `venue.reviewBeforeSend`: "We'll email
+  it to X as soon as it's ready" or "the venue takes a quick look and sends
+  it" (`processingDeliveryNote` in `lib/shareSession.ts`).
+- **Reel first, then stills in a lightbox.** Every image carries "AI preview,
+  imagined at {venue}", and "Imagined here, beside the real thing" pairs each
+  still with the real space it was made from (coverage-matched).
+- **Date CTA**: bookingUrl, then websiteUrl, then mailto, carrying the wedding
+  month and utm parameters; the venue's incentive line sits under it; a
+  sticky bar repeats it on mobile. View, share, CTA click and download post
+  to the gallery-event endpoint, which is what the dashboard's viewed /
+  clicked / booked columns read.
+- **404 vs transient error** are different screens; only the not-found page
+  and the gallery error state link to `/find-my-gallery`. The site footer link
+  ("Couples: find your gallery") was removed at integration for the same
+  reason. "Make another gallery" is shown only to the browser that created it.
+
+**Kills:** the saved-sessions hook, the CouplePage Home buttons and the
+`index.css` rules that hid them, the old couple-flow and gallery-layout rules
+in `index.css` (creation steps, photo selector, delivery fields, gallery
+thumbnails/sidebar, share toolbar).
+
+**Not done / next:** a hosted "Ask about your date" inquiry form (mailto ships
+as decided); a real HEIC decoder; the couple-facing line is still "we'll
+email it" when a gallery is held for an unjudged frame even with
+review-before-send off (rare).
+
+## 2026-10-08 (nineteenth pass) — Owner dashboard, signup and tour-day mode
+
+Merged from `docs/design-notes-dashboard.md` (WS-E2).
+
+### Conversion spine
+
+The dashboard exists to get a venue from "signed up" to "first couple gallery sent" in one sitting, then to make the renewal decision obvious: every gallery shows what the couple did with it (sent, viewed, clicked for a date, booked). Booked dates are the unit a venue renews on, so "Mark as booked" is one click on every ready gallery and the count sits in the overview header.
+
+### Signature moment
+
+**Tour-day mode** (`/dashboard/tour/:slug`). The coordinator's phone at the end of a tour: take two photos of the couple, type their email, pick their wedding month, tick that both agreed, and one thumb-reach button starts their gallery before they reach the car park. It is the only screen in the product built for one hand. Sessions are created with `createdVia: "tour_day"`, so the gallery list (and the growth loop) can tell tour-day galleries from link galleries.
+
+### Layout
+
+- Shell: a 232px ivory rail (sections, short count badges, tour-day link) and a content column capped at 1180px. Below 760px the rail becomes a section select at the top; nothing scrolls sideways at 390px (checked with a fixture at 1440 and 390).
+- Every section opens with the overview header: venue name and readiness, credits (the one coral number), plan with the trial clock bar, galleries, booked dates.
+- One nudge at a time under the header: the booking link while it is missing (it is where "Check your date" lands), else the trial clock in its last three days.
+- Home is "Couple galleries": the activation checklist (five photos, booking link, tour card, first gallery, plan) until it is done, the proof strip (galleries, sent, viewed, clicked for a date, booked), the gallery rows, then the couple link with its QR.
+
+### Decisions
+
+- **One coral action per view.** The checklist's next step owns coral on the home tab, so the empty-state "Create a gallery" is outlined. Billing gives coral to the recommended plan only.
+- **Prices are never constants.** Plan cards, the upgrade panel and the pack button ("Add 10 credits") read the public config (meta tag, then `GET /public/config`, then launch defaults). Per-gallery cost shows cents ($5.16), not rounded tenths.
+- **Plan changes go through the Stripe portal.** A subscribed org sees "Switch plan"; the checkout endpoint's 409 `subscription_exists` url is followed, so no org ever holds two subscriptions.
+- **Honest return from Stripe.** Before leaving for checkout we keep a snapshot of plan, credits and period end in sessionStorage. On `?billing=success` the dashboard compares, polls `GET /org` every 3s for 30s, and says "Payment confirmed" only when something changed; otherwise it says Stripe has not confirmed yet.
+- **Out of credits is a sale, not an error.** Create a gallery and tour-day mode check spend locally (trial expired, then balance) and show the upgrade panel in place with checkout one click away; a server 402 swaps in the same panel. A Starter org that runs dry is offered a pack and the step up to Growth, never its own plan.
+- **Venue photos are five labelled views.** Multi-file drops are spread over the missing views; each queued file has a view picker; uploaded photos can be retagged, replaced and deleted (with confirmation). "Import from website" uses the venue's site; signup passes `?import=1` when a website was given.
+- **Failure explains itself.** Failed rows open their detail by default with the owner-only `failureDetail` and the refund note; ready rows show the quality flag when the pipeline marked one below target.
+- **Admin-only controls mirror the server** (`orgRole === "org:admin"`): checkout, portal, gallery delete, add venue, organization settings. Members see the reason under a disabled control.
+- **Consent on the couple's behalf** is a sentence the coordinator can read aloud: an AI preview of their wedding at {venue}, made from these photos, photos deleted {retentionDays} days after delivery.
+- **HEIC is not offered.** The upload API accepts JPG, PNG and WebP; leaving HEIC out of the file input makes iOS hand over a JPEG.
+
+### Copy rules applied
+
+Sentence case; buttons say what happens ("Mark as booked", "Make their gallery", "Add 10 credits", "Switch plan"); "booked dates" not "conversions"; no statistics the venue did not produce; "Recommended" rather than claims about what most venues pick.
+
+### Resolved at integration
+
+The gaps this pass shipped around are closed: Mark as booked, Import from
+website (org admins only), Render a sample and the tour-card download now
+call mounted routes; `PATCH /venues/{slug}` saves `incentiveText` and
+`reviewBeforeSend`; Settings has a "Sending galleries" card with the
+review-before-send toggle; the "not switched on for this server" fallbacks
+and the incentive-mismatch note are gone. Render a sample hides itself with a
+note when the server has no demo couple photos (`409 demo_not_configured`).
+
+## 2026-10-08 (eighteenth pass) — Owner acquisition funnel: `/`, `/pricing`, `/privacy`, `/claim/:token`
+
+**Conversion spine:** this page exists to get a wedding-venue owner or sales
+manager to create a venue account and run their first gallery this week,
+because a couple who sees themselves married at the venue before they tour
+the next one is more likely to book, and the venue can finally see which
+toured couples opened, shared, clicked for a date, and booked.
+
+**Signature moment:** *the room, then the couple in the room.* The hero is
+one diptych (`/brand/hero-{800,1200,1400}.webp`, 74 KB at 800w): the empty
+orangery on the left, the couple in it on the right. It ships **static**. The
+spec's reveal handle (one composition, `clip-path` driven by a range input)
+needs a same-angle before/after pair, and none exists among the committed
+assets; decision E11 forbids external generation this session, so the reveal
+slipped. Fallback per spec 3.2: single hero figure, and the two halves of the
+diptych as a 2-up in the compare section with no handle. The reveal stays
+the required deliverable for the next pass that has a paired asset. The ROI
+readout ("Do the math for your venue") is the page's only live element: three
+inputs the venue already knows, bookings and money out, defaults labelled as
+placeholders, the +3-point lift labelled as an assumption.
+
+**Layout (one sentence):** an editorial two-column page where the left column
+argues in short declarative sentences and the right column shows the product,
+collapsing to one column at 760px with the product frame first; prices and
+proof sit above the plan cards.
+
+**Narrative order:** hero → value strip (your rooms, their faces, your date
+link, you see who booked) → proof (partner mode: "Numbers, not adjectives"
+plus the founding-venue offer from config, the four sample frames labelled
+"Example gallery, AI preview") → how it works (ink band, tour-day first) →
+ROI → pricing cards from the public config with the "Launch prices" pill →
+compare (2-up + a plain table, no competitor names) → FAQ (native
+`details`) → final ask.
+
+**Prices, proof and copy are data, not strings:** every figure comes from
+`<meta name="dreemer-public-config">` (server-injected) → `GET /api/public/config`
+→ defaults (`lib/publicConfig.ts`). Proof flips to three real figures when the
+server reports `proof.mode = "aggregate"`. Nothing on the page states a number
+we did not get from config or from the visitor's own inputs.
+
+**Coral budget:** one coral button per viewport. The header's Start free is
+now **ink**, so the hero button is the single coral action above the fold;
+Growth is the only coral card button; the final ask is coral. Eyebrows and the
+hero `em` stay `coral.700`.
+
+**Performance:** the landing route is in the main chunk (no "Opening Dreemer"
+fallback); framer-motion's `MotionConfig` moved behind the lazy product
+routes, which took 41 KB gzipped off the landing path. Fonts are self-hosted
+latin subsets of the Outfit and Figtree variable faces (`public/fonts`,
+preloaded, `font-display: swap`), replacing the render-blocking Google Fonts
+stylesheet. The hero `<img>` carries srcset/sizes, width/height and
+`fetchpriority="high"`; the box takes the image's own ratio so the diptych is
+never cropped. Still in the critical path and not this pass's file:
+`@clerk/clerk-react` from `main.tsx` (~100 KB gz) — flagged for WS-F/WS-I.
+
+**Responsive:** screenshotted the built pages at 360, 768 and 1440 with
+headless Chromium; no horizontal overflow on any of the four routes. Below
+480px the two header anchors hide (logo, Sign in, Start free on one line), the
+compare table stacks into per-row blocks that name their column, the hero
+`<br>` drops. Reduced motion: no JS motion on these routes; the global rule
+now keeps `.animate-spin` turning slowly instead of freezing it (the text
+half of that fix, a `role=status` line, belongs to the dashboard pass).
+
+**Tracking:** `lib/track.ts` posts funnel events to `POST /api/events` with
+the browser's first touch (claim token > utm > ref > referrer > direct) so a
+signup can be attributed to an outreach email. `landing_view` once per tab
+per page; `cta_click` with a placement on every Start free.
+
+**Kills:** the dashed "reserved for proof" placeholder slots; the hard-coded
+plan cards without prices; the Google Fonts link; the `For couples` nav link
+and the footer "Find my gallery" (briefly kept as "Couples: find your gallery",
+removed in the twentieth pass); the pricing "prices lock for twelve
+months" sentence (a policy no decision has confirmed; see open questions).
+
+**Not done / next:** the paired reveal asset; a measured LCP on a deployed
+URL (the server-side preload for `/` must point at `/brand/hero-800.webp`
+with the srcset, not the spec's `hero-couple.webp`); the venue's own name in
+the value strip's date-link copy once a personalised landing exists.
+
 ## 2026-10-03 (seventeenth pass) — Dreemer rebrand
 
 Full rebrand from the old name to **Dreemer** (dreemer.co). Brief: coral

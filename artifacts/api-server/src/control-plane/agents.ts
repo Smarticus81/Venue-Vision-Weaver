@@ -291,7 +291,7 @@ You are the GROWTH agent (revenue operations). You own the question "is the busi
       "create_task",
       "propose_action",
     ],
-    actions: ["pause_agent", "resume_agent", "update_policy"],
+    actions: ["pause_agent", "update_policy"],
     mission: `${SHARED_CONSTITUTION}
 
 You are the GOVERNANCE agent. You audit the control plane itself, with outreach compliance as your first duty:

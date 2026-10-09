@@ -1,4 +1,5 @@
-import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, serial, timestamp, integer, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { TRIAL_CREDITS } from "./plans";
 
 /** "payg" = pay as you go: bought a credit pack, no live subscription. */
@@ -49,7 +50,13 @@ export const organizationsTable = pgTable("organizations", {
   /** Venue opted in to anonymised aggregate proof on the public site. */
   shareAggregates: boolean("share_aggregates").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}).enableRLS();
+}, (table) => ({
+  // Trial once per person: two organizations provisioned concurrently for the
+  // same Clerk user cannot both win the trial claim.
+  trialGranteeUnique: uniqueIndex("organizations_trial_grantee_unique")
+    .on(table.trialGrantedByClerkUserId)
+    .where(sql`${table.trialGrantedByClerkUserId} IS NOT NULL`),
+})).enableRLS();
 
 export type Organization = typeof organizationsTable.$inferSelect;
 export type InsertOrganization = typeof organizationsTable.$inferInsert;

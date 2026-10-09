@@ -39,9 +39,16 @@ export type ReadinessStatusChecks = {
   rls?: ReadinessCheckState;
 };
 
+/**
+ * Reasons per check (operators or x-readiness-token only). Keys are check names (env, auth, database, rls); values are human-readable reasons, empty when the check is ok.
+ */
+export type ReadinessStatusDetails = { [key: string]: string[] };
+
 export interface ReadinessStatus {
   status: ReadinessStatusStatus;
   checks: ReadinessStatusChecks;
+  /** Reasons per check (operators or x-readiness-token only). Keys are check names (env, auth, database, rls); values are human-readable reasons, empty when the check is ok. */
+  details?: ReadinessStatusDetails;
 }
 
 export interface ErrorEnvelope {
@@ -106,6 +113,8 @@ export interface VenueResponse {
   incentiveText?: string | null;
   tourCardDownloadedAt?: string | null;
   websiteImportedAt?: string | null;
+  /** When true, ready galleries wait in the dashboard for the venue to send them; when false (default) they are emailed to the couple automatically. */
+  reviewBeforeSend: boolean;
   /** Billing organization that owns this venue. */
   organizationId?: number | null;
   /** Organization plan (billing lives on the organization). */
@@ -130,6 +139,20 @@ export interface BillingCheckoutBody {
 }
 
 export interface BillingCheckoutResponse {
+  url: string;
+}
+
+export type BillingCheckoutConflictResponseCode =
+  (typeof BillingCheckoutConflictResponseCode)[keyof typeof BillingCheckoutConflictResponseCode];
+
+export const BillingCheckoutConflictResponseCode = {
+  subscription_exists: "subscription_exists",
+} as const;
+
+export interface BillingCheckoutConflictResponse {
+  error: string;
+  code: BillingCheckoutConflictResponseCode;
+  /** Stripe portal session (flow subscription_update) where the plan can be changed. */
   url: string;
 }
 
@@ -158,6 +181,8 @@ export interface UpdateVenueBody {
    * @maxLength 160
    */
   incentiveText?: string | null;
+  /** Hold ready galleries for the venue to review and send instead of emailing couples automatically. */
+  reviewBeforeSend?: boolean;
 }
 
 export type OrganizationResponseOrganizationPlan =
@@ -169,6 +194,20 @@ export const OrganizationResponseOrganizationPlan = {
   growth: "growth",
   payg: "payg",
   none: "none",
+} as const;
+
+/**
+ * Stripe subscription status; null without a subscription.
+ */
+export type OrganizationResponseOrganizationSubscriptionStatus =
+  | (typeof OrganizationResponseOrganizationSubscriptionStatus)[keyof typeof OrganizationResponseOrganizationSubscriptionStatus]
+  | null;
+
+export const OrganizationResponseOrganizationSubscriptionStatus = {
+  active: "active",
+  past_due: "past_due",
+  canceled: "canceled",
+  paused: "paused",
 } as const;
 
 export interface TrialState {
@@ -196,6 +235,10 @@ export type OrganizationResponseOrganization = {
   role?: string | null;
   /** Whether Stripe billing is configured on this server. */
   billingConfigured?: boolean;
+  /** Stripe subscription status; null without a subscription. */
+  subscriptionStatus?: OrganizationResponseOrganizationSubscriptionStatus;
+  /** The subscription is set to end at the close of the current period. */
+  cancelAtPeriodEnd?: boolean;
 };
 
 export type OrganizationResponseVenuesItem = {
@@ -276,6 +319,8 @@ export interface VenuePublicResponse {
   missingCoverages: VenueMediaCoverage[];
   /** One line the venue shows under the reel on the share page. */
   incentiveText?: string | null;
+  /** True when the venue reviews each gallery before it is emailed to the couple; false when galleries are emailed automatically once ready. */
+  reviewBeforeSend: boolean;
   /** Short-lived venue-scoped token required for couple photo upload URL requests. */
   uploadToken?: string;
 }
@@ -955,7 +1000,6 @@ export const ControlAgentDomain = {
   prospecting: "prospecting",
   outreach: "outreach",
   campaigns: "campaigns",
-  growth: "growth",
   support: "support",
   product: "product",
   finance: "finance",
@@ -990,6 +1034,67 @@ export type ControlOverviewResponseCounts = {
   runs24h: number;
 };
 
+export type ControlOverviewFunnelOwners = {
+  signups: number;
+  signups30d: number;
+  activated: number;
+  paid: number;
+  churned: number;
+};
+
+export type ControlOverviewFunnelProspects = {
+  total: number;
+  vetted: number;
+  contacted: number;
+  replied: number;
+  converted: number;
+  unsubscribed: number;
+};
+
+export interface ControlOverviewFunnel {
+  owners: ControlOverviewFunnelOwners;
+  prospects: ControlOverviewFunnelProspects;
+}
+
+export type ControlTrendSeriesUnit =
+  (typeof ControlTrendSeriesUnit)[keyof typeof ControlTrendSeriesUnit];
+
+export const ControlTrendSeriesUnit = {
+  count: "count",
+  percent: "percent",
+  cents: "cents",
+  rate: "rate",
+} as const;
+
+export type ControlTrendSeriesBetterWhen =
+  (typeof ControlTrendSeriesBetterWhen)[keyof typeof ControlTrendSeriesBetterWhen];
+
+export const ControlTrendSeriesBetterWhen = {
+  higher: "higher",
+  lower: "lower",
+} as const;
+
+export type ControlTrendSeriesPointsItem = {
+  at: string;
+  value: number;
+};
+
+export interface ControlTrendSeries {
+  key: string;
+  label: string;
+  unit: ControlTrendSeriesUnit;
+  betterWhen: ControlTrendSeriesBetterWhen;
+  points: ControlTrendSeriesPointsItem[];
+  current: number | null;
+  previous7d: number | null;
+  delta7d: number | null;
+}
+
+export interface ControlOverviewTrends {
+  windowDays: number;
+  series: ControlTrendSeries[];
+}
+
 export interface ControlOverviewResponse {
   operatorEmail: string;
   aiConfigured: boolean;
@@ -997,6 +1102,10 @@ export interface ControlOverviewResponse {
   metrics: BusinessMetrics;
   agents: ControlAgent[];
   counts: ControlOverviewResponseCounts;
+  /** Owner and prospect funnel counts (null when the loader failed). */
+  funnel?: ControlOverviewFunnel | null;
+  /** KPI series from metrics snapshots (null when the loader failed). */
+  trends?: ControlOverviewTrends | null;
 }
 
 export type ControlAgentStatusBodyStatus =
@@ -1126,6 +1235,8 @@ export interface ControlActionDecisionBody {
   decision: ControlActionDecisionBodyDecision;
   /** @maxLength 500 */
   note?: string;
+  /** Set by the Outreach studio after the rendered email was on screen. Approving send_outreach_email without it returns 409 with code review_in_outreach. */
+  reviewed?: boolean;
 }
 
 export interface ControlActionResponse {
