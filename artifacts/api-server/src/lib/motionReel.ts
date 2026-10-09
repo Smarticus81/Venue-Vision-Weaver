@@ -109,7 +109,7 @@ const STROKE_GLYPHS: Record<string, StrokeGlyph> = {
   "(": { w: 20, d: "M20 0 C4 24 4 76 20 100" },
   ")": { w: 20, d: "M0 0 C16 24 16 76 0 100" },
 };
-const SPACE_UNITS = 38;
+const SPACE_UNITS = 72;
 const TRACKING_UNITS = 22;
 
 /** Uppercase, accent-free text limited to the stroke alphabet (unsupported characters dropped). */
