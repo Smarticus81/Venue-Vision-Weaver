@@ -112,6 +112,15 @@ test("Turnstile failure is 400, an unreachable verifier is 503", async () => {
   assert.equal(!unavailable.ok && unavailable.body.code, "turnstile_unavailable");
 });
 
+test("a signed-in member of the venue's organization (dashboard, tour day) is not asked for a Turnstile token", async () => {
+  const deps = passingDeps({ verifyTurnstile: async () => ({ ok: false, reason: "missing_token", errorCodes: [] }) });
+  const owner = await sessions.runSessionCreateGuards({ ...INPUT, callerIsVenueMember: true }, deps);
+  assert.equal(owner.ok, true);
+  assert.ok(!deps.calls.includes("turnstile"));
+  const couple = await sessions.runSessionCreateGuards(INPUT, passingDeps({ verifyTurnstile: async () => ({ ok: false, reason: "missing_token", errorCodes: [] }) }));
+  assert.equal(!couple.ok && couple.body.code, "turnstile_failed", "anonymous couples still pass the check");
+});
+
 test("photo validation errors surface the couple-facing message as 400 invalid_photos", async () => {
   const result = await sessions.runSessionCreateGuards(
     INPUT,

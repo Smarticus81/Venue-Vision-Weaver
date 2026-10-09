@@ -352,6 +352,12 @@ export default function CouplePage() {
   const [consent, setConsent] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileReset, setTurnstileReset] = useState(0);
+  // The widget lives on the details step: once it unmounts its token is
+  // stale (spent, or it will expire unseen), so the next visit waits for a
+  // fresh one before the submit button enables.
+  useEffect(() => {
+    if (step !== 3) setTurnstileToken(null);
+  }, [step]);
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<"uploading" | "starting">("uploading");
   const [formError, setFormError] = useState<string | null>(null);
@@ -596,7 +602,11 @@ export default function CouplePage() {
       const err = raw as ErrorType<ErrorEnvelope>;
       const code = errorCode(err);
       const serverMessage = err.data?.error;
-      if (venue.turnstileSiteKey) setTurnstileReset((n) => n + 1);
+      if (venue.turnstileSiteKey) {
+        // The token was spent on this request; never resubmit it.
+        setTurnstileToken(null);
+        setTurnstileReset((n) => n + 1);
+      }
       if (err.status === 402 || code === "venue_not_ready") {
         failBackTo(
           3,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanedSearch, parseDashboardLocation, tabFromHash } from "./dashboardRoute.ts";
+import { cleanedSearch, dashboardPathForVenue, parseDashboardLocation, tabFromHash } from "./dashboardRoute.ts";
 
 test("tabFromHash accepts tab ids and the upgrade aliases", () => {
   assert.equal(tabFromHash("#billing"), "billing");
@@ -12,7 +12,7 @@ test("tabFromHash accepts tab ids and the upgrade aliases", () => {
 
 test("parseDashboardLocation reads the signup and Stripe hand-offs", () => {
   const fresh = parseDashboardLocation("?welcome=1&import=1", "");
-  assert.deepEqual(fresh, { tab: "photos", welcome: true, importRequested: true, billing: null });
+  assert.deepEqual(fresh, { tab: "photos", welcome: true, importRequested: true, billing: null, venue: null });
   const paid = parseDashboardLocation("?billing=success", "");
   assert.equal(paid.tab, "billing");
   assert.equal(paid.billing, "success");
@@ -25,6 +25,15 @@ test("parseDashboardLocation reads the signup and Stripe hand-offs", () => {
 
 test("cleanedSearch drops only the one-shot flags", () => {
   assert.equal(cleanedSearch("?billing=success&welcome=1&import=1"), "");
-  assert.equal(cleanedSearch("?billing=success&venue=willow"), "?venue=willow");
+  assert.equal(cleanedSearch("?billing=success&venue=willow"), "", "the venue hand-off is one-shot too (the choice is stored)");
+  assert.equal(cleanedSearch("?billing=success&ref=mail"), "?ref=mail");
   assert.equal(cleanedSearch(""), "");
+});
+
+test("owner email links to /dashboard/<slug> open that venue", () => {
+  assert.equal(dashboardPathForVenue("willow-house"), "/dashboard?venue=willow-house");
+  assert.equal(dashboardPathForVenue("../evil"), "/dashboard");
+  assert.equal(dashboardPathForVenue(undefined), "/dashboard");
+  assert.equal(parseDashboardLocation("?venue=Willow-House", "").venue, "willow-house");
+  assert.equal(parseDashboardLocation("?venue=%3Cscript%3E", "").venue, null);
 });

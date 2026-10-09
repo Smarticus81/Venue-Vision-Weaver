@@ -65,11 +65,13 @@ export function ActivationChecklist({ ctx }: { ctx: DashboardContext }) {
               : `${activation.total - activation.doneCount} ${activation.total - activation.doneCount === 1 ? "step" : "steps"} to go`}
           </h2>
         </div>
-        <div className="checklist-progress" aria-hidden={collapsed ? undefined : true}>
-          <div className="checklist-progress-bar">
+        <div className="checklist-progress">
+          {/* Decorative while the list is open (the steps say the same); the
+              toggle button stays outside the hidden part so it is announced. */}
+          <div className="checklist-progress-bar" aria-hidden="true">
             <span style={{ width: `${pct}%` }} />
           </div>
-          <span>
+          <span aria-hidden={collapsed ? undefined : true}>
             {activation.doneCount} of {activation.total}
           </span>
           {coupleGalleries > 0 ? (

@@ -10,6 +10,7 @@ import {
 import { useLocation } from "wouter";
 import { FormLayout } from "@/components/layout/SiteChrome";
 import { clerkConfigured, clerkExpectedDomain, clerkStatus } from "@/lib/clerk";
+import { orgGateDecision } from "@/lib/orgGate";
 
 export function ClerkSetupNotice() {
   const mismatch = clerkStatus === "domain-mismatch";
@@ -174,14 +175,23 @@ export function OrgGate({
   }, [listLoaded, organization, setActive, userMemberships?.data]);
 
   const hasMembership = (userMemberships?.data?.length ?? 0) > 0;
+  // Clerk reports the list as loaded while the memberships fetch is still in
+  // flight (data is [] until it lands): never treat that as "no organization".
+  const membershipsPending = Boolean(userMemberships?.isLoading || userMemberships?.isFetching);
+  const decision = orgGateDecision({
+    userLoaded,
+    orgLoaded,
+    listLoaded,
+    isSignedIn: Boolean(isSignedIn),
+    hasOrganization: Boolean(organization),
+    hasMembership,
+    membershipsPending,
+    requireOrganization,
+  });
 
   useEffect(() => {
-    if (!requireOrganization) return;
-    if (!userLoaded || !orgLoaded || !listLoaded || !isSignedIn) return;
-    if (!organization && !hasMembership) {
-      setLocation("/create-venue");
-    }
-  }, [requireOrganization, userLoaded, orgLoaded, listLoaded, isSignedIn, organization, hasMembership, setLocation]);
+    if (decision === "create_venue") setLocation("/create-venue");
+  }, [decision, setLocation]);
 
   if (!clerkConfigured) return <ClerkSetupNotice />;
   if (!userLoaded || !orgLoaded || !listLoaded) {
@@ -213,6 +223,13 @@ export function OrgGate({
     );
   }
 
+  if (decision === "wait_for_memberships") {
+    return (
+      <GateFrame layout={layout}>
+        <Pending label={pendingLabel} />
+      </GateFrame>
+    );
+  }
   if (!organization) {
     if (hasMembership) {
       return (

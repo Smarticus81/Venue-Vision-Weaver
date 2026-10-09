@@ -133,8 +133,8 @@ export function RoiCalculator({ pricing }: { pricing: PricingConfig }) {
         </output>
       </div>
       <p className="caption">
-        Assumption: +{LIFT_POINTS} points of tour-to-booking. Typical venues book 30–40% of tours; we
-        will replace the assumption with opted-in venue data when we have it.
+        Assumption: +{LIFT_POINTS} points of tour-to-booking. The other numbers are yours; we will
+        replace the assumption with opted-in venue data when we have it.
       </p>
     </section>
   );

@@ -43,6 +43,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
 import {
+  getCallerOrgDbId,
   requireOrg,
   requireOrgAdmin,
   requireOwnerMutationOrigin,
@@ -274,6 +275,12 @@ export interface SessionCreateGuardInput {
   couplePhotoKeys: string[];
   turnstileToken: string | null | undefined;
   neededCredits: number;
+  /**
+   * The caller is a signed-in member of the venue's own organization (owner
+   * "Create a gallery" and tour-day mode). Clerk already proved a person, and
+   * those screens render no Turnstile widget, so the bot check is skipped.
+   */
+  callerIsVenueMember?: boolean;
 }
 
 export interface SessionCreateGuardDeps {
@@ -346,7 +353,10 @@ export async function runSessionCreateGuards(
   }
 
   // Optional bot check (only enforced when TURNSTILE_SECRET_KEY is set).
-  const turnstile = await deps.verifyTurnstile(input.turnstileToken, input.clientIp);
+  // Signed-in members of the venue's organization are already verified.
+  const turnstile = input.callerIsVenueMember
+    ? { ok: true as const }
+    : await deps.verifyTurnstile(input.turnstileToken, input.clientIp);
   if (!turnstile.ok) {
     if (turnstile.reason === "verify_failed") {
       return {
@@ -595,6 +605,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
 
   const neededCredits = creditsForSession();
   const coupleName = body.data.coupleName?.trim() || null;
+  const callerOrgId = venue.organizationId != null ? await getCallerOrgDbId(req).catch(() => null) : null;
 
   const guard = await runSessionCreateGuards(
     {
@@ -603,6 +614,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
       couplePhotoKeys: body.data.couplePhotoKeys,
       turnstileToken: body.data.turnstileToken,
       neededCredits,
+      callerIsVenueMember: callerOrgId != null && callerOrgId === venue.organizationId,
     },
     liveGuardDeps(),
   );
