@@ -17,7 +17,7 @@ import { logStripeMissing } from "./lib/stripe.js";
 import { clerkEnabled, clerkPublishableKey } from "./lib/orgAuth.js";
 import { corsOptions, securityHeaders } from "./lib/httpSecurity.js";
 import { forwardedForIgnored, trustProxySetting } from "./lib/trustProxy.js";
-import { hasCompletePublicGalleryAssets } from "./lib/sessionVisibility.js";
+import { canExposeGeneratedAssetsToSharePage, hasCompletePublicGalleryAssets } from "./lib/sessionVisibility.js";
 import { absoluteUrl, getAppBaseUrl } from "./lib/appUrl.js";
 import { buildPublicConfig, publicConfigMetaTag } from "./lib/publicConfig.js";
 import {
@@ -271,7 +271,8 @@ async function galleryMetaTags(shareToken: string): Promise<string | null> {
       .orderBy(generatedAssetsTable.displayOrder);
 
     const publicGeneratedAssets =
-      session.status === "ready" && hasCompletePublicGalleryAssets(generatedAssets)
+      canExposeGeneratedAssetsToSharePage(session.status, session.deliveryHoldReason) &&
+      hasCompletePublicGalleryAssets(generatedAssets)
         ? generatedAssets
         : [];
     const thumbnailAsset = publicGeneratedAssets.find(

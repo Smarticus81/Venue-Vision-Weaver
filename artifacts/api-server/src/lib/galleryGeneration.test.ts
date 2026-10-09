@@ -284,6 +284,7 @@ test("the render semaphore caps concurrency and serves waiters in order", async 
 function memoryStore(initial: Array<{ objectKey: string; assetType: string; displayOrder: number }> = []) {
   const rows = [...initial];
   let readyCalls = 0;
+  const holds: Array<string | null | undefined> = [];
   const store: GalleryStore = {
     listAssets: async () => rows.map((row) => ({ ...row })),
     insertAsset: async (row) => {
@@ -294,12 +295,13 @@ function memoryStore(initial: Array<{ objectKey: string; assetType: string; disp
       if (index < 0) return null;
       return rows.splice(index, 1)[0]!.objectKey;
     },
-    markReady: async (sessionId) => {
+    markReady: async (sessionId, options) => {
       readyCalls += 1;
+      holds.push(options?.deliveryHoldReason);
       return { id: sessionId, status: "ready" } as CoupleSession;
     },
   };
-  return { store, rows, readyCalls: () => readyCalls };
+  return { store, rows, holds, readyCalls: () => readyCalls };
 }
 
 function runDeps(store: GalleryStore, overrides: Partial<GalleryRunDeps> = {}) {
@@ -356,7 +358,7 @@ test("a failing scene keeps the other accepted frames stored and fails with the 
 });
 
 test("a retry renders only the missing scene, replaces any stale reel and marks the session ready", async () => {
-  const { store, rows } = memoryStore([
+  const { store, rows, holds } = memoryStore([
     { objectKey: "/objects/uploads/a.jpg", assetType: "image", displayOrder: 1 },
     { objectKey: "/objects/uploads/b.jpg", assetType: "image", displayOrder: 2 },
     { objectKey: "/objects/uploads/d.jpg", assetType: "image", displayOrder: 4 },
@@ -395,10 +397,28 @@ test("a retry renders only the missing scene, replaces any stale reel and marks 
   assert.deepEqual(rendered, ["16:9"], "only scene 3 (grand-venue) renders again");
   assert.ok(result.readySession);
   assert.equal(result.needsReview, true, "an unjudged frame holds the gallery for owner review");
+  assert.deepEqual(holds, ["unjudged_frames"], "the hold is written with the ready transition, not after it");
   assert.deepEqual(deleted, ["/objects/uploads/old-reel.mp4"]);
   assert.equal(rows.filter((row) => row.assetType === "video").length, 1);
   assert.equal(reelInputs[0]![0]!.toString(), "kept-1", "the reel keeps scene order");
   assert.equal(reelInputs[0]!.length, 4);
+});
+
+test("a held gallery is never served through its share link until the owner releases it", async () => {
+  const visibility = await import("./sessionVisibility.js");
+  assert.equal(visibility.persistedDeliveryHold({ kind: "couple", reviewBeforeSend: true, needsReview: false }), "review_before_send");
+  assert.equal(visibility.persistedDeliveryHold({ kind: "couple", reviewBeforeSend: false, needsReview: true }), "unjudged_frames");
+  assert.equal(visibility.persistedDeliveryHold({ kind: "couple", reviewBeforeSend: false, needsReview: false }), null);
+  assert.equal(visibility.persistedDeliveryHold({ kind: "sample", reviewBeforeSend: true, needsReview: true }), null);
+
+  const complete = [
+    { assetType: "video", displayOrder: 0 },
+    ...[1, 2, 3, 4].map((displayOrder) => ({ assetType: "image", displayOrder })),
+  ];
+  assert.equal(visibility.canReadGeneratedAssetWithShareToken("ready", complete, null), true);
+  assert.equal(visibility.canReadGeneratedAssetWithShareToken("ready", complete, "review_before_send"), false);
+  assert.equal(visibility.canExposeGeneratedAssetsToSharePage("ready", "unjudged_frames"), false);
+  assert.equal(visibility.canExposeGeneratedAssetsToSharePage("ready"), true);
 });
 
 /* ----------------------------------------------------------- deadline */

@@ -528,6 +528,7 @@ export async function processSession(sessionId: number, options: ProcessSessionO
       venueBuffers,
       venueName: venue.name,
       existingFrames,
+      reviewBeforeSend: venue.reviewBeforeSend,
       signal,
       uploadBuffer: uploadBufferToStorage,
       deleteObject: (objectKey) => storage().deleteObjectEntity(objectKey),

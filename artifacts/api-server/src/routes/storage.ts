@@ -297,6 +297,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
       .select({
         sessionId: generatedAssetsTable.sessionId,
         status: coupleSessionsTable.status,
+        deliveryHoldReason: coupleSessionsTable.deliveryHoldReason,
       })
       .from(generatedAssetsTable)
       .innerJoin(coupleSessionsTable, eq(generatedAssetsTable.sessionId, coupleSessionsTable.id))
@@ -315,7 +316,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
         })
         .from(generatedAssetsTable)
         .where(eq(generatedAssetsTable.sessionId, generated.sessionId));
-      if (canReadGeneratedAssetWithShareToken(generated.status, sessionAssets)) return true;
+      if (canReadGeneratedAssetWithShareToken(generated.status, sessionAssets, generated.deliveryHoldReason)) return true;
     }
   }
 

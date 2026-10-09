@@ -30,7 +30,7 @@ import {
   type GalleryQualityReport,
   type JudgeFrameParams,
 } from "./galleryQuality.js";
-import { hasCompletePublicGalleryAssets } from "./sessionVisibility.js";
+import { hasCompletePublicGalleryAssets, persistedDeliveryHold } from "./sessionVisibility.js";
 import { logger } from "./logger.js";
 import {
   StillImageBlockedError,
@@ -479,8 +479,12 @@ export interface GalleryStore {
   }): Promise<void>;
   /** Remove an asset row; returns its object key so the caller can delete the object. */
   deleteAsset(sessionId: number, assetType: string, displayOrder: number): Promise<string | null>;
-  /** processing -> ready, only while the session is still processing (the deadline may have failed it). */
-  markReady(sessionId: number): Promise<CoupleSession | null>;
+  /**
+   * processing -> ready, only while the session is still processing (the
+   * deadline may have failed it). The owner hold is written in the same
+   * update, so the share link never sees a held gallery as deliverable.
+   */
+  markReady(sessionId: number, options?: { deliveryHoldReason?: string | null }): Promise<CoupleSession | null>;
 }
 
 export interface GalleryGenerationContext {
@@ -497,6 +501,8 @@ export interface GalleryGenerationContext {
    * order (1-4). Those scenes are not rendered again.
    */
   existingFrames?: Map<number, Buffer>;
+  /** The venue reviews every gallery before the couple gets it (persisted as a delivery hold). */
+  reviewBeforeSend?: boolean | null;
   signal?: AbortSignal;
 }
 
@@ -645,8 +651,15 @@ export async function processGallerySession(
     );
   }
 
-  const readySession = await deps.store.markReady(sessionId);
   const rendered = outcomes.filter((outcome) => outcome.status === "rendered");
+  const needsReview = rendered.some((outcome) => outcome.judgeStatus === "unjudged");
+  const readySession = await deps.store.markReady(sessionId, {
+    deliveryHoldReason: persistedDeliveryHold({
+      kind: ctx.session.kind,
+      reviewBeforeSend: ctx.reviewBeforeSend,
+      needsReview,
+    }),
+  });
   logger.info(
     {
       sessionId,
@@ -659,7 +672,7 @@ export async function processGallerySession(
   return {
     readySession,
     scenes: outcomes,
-    needsReview: rendered.some((outcome) => outcome.judgeStatus === "unjudged"),
+    needsReview,
     belowTargetFrames: rendered.filter((outcome) => outcome.judgeStatus === "below_target").length,
     fallbackUsed: rendered.some((outcome) => outcome.fallbackUsed),
   };
@@ -701,10 +714,16 @@ export const dbGalleryStore: GalleryStore = {
       .returning({ objectKey: generatedAssetsTable.objectKey });
     return deleted?.objectKey ?? null;
   },
-  async markReady(sessionId) {
+  async markReady(sessionId, options = {}) {
     const [updated] = await db
       .update(coupleSessionsTable)
-      .set({ status: "ready", completedAt: new Date(), errorMessage: null, failureDetail: null })
+      .set({
+        status: "ready",
+        completedAt: new Date(),
+        errorMessage: null,
+        failureDetail: null,
+        deliveryHoldReason: options.deliveryHoldReason ?? null,
+      })
       .where(and(eq(coupleSessionsTable.id, sessionId), eq(coupleSessionsTable.status, "processing")))
       .returning();
     return updated ?? null;

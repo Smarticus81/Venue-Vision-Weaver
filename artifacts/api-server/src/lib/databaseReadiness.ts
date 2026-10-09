@@ -80,6 +80,7 @@ export const REQUIRED_DATABASE_COLUMNS = {
     "couple_email",
     "share_token",
     "credits_charged",
+    "delivery_hold_reason",
     "created_at",
     "completed_at",
   ],

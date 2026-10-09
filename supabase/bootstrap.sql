@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS couple_sessions (
   booked_at TIMESTAMP,
   booked_by TEXT,
   source_photos_deleted_at TIMESTAMP,
+  delivery_hold_reason TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMP
 );
@@ -177,7 +178,8 @@ ALTER TABLE couple_sessions
   ADD COLUMN IF NOT EXISTS consent_at TIMESTAMP,
   ADD COLUMN IF NOT EXISTS booked_at TIMESTAMP,
   ADD COLUMN IF NOT EXISTS booked_by TEXT,
-  ADD COLUMN IF NOT EXISTS source_photos_deleted_at TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS source_photos_deleted_at TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS delivery_hold_reason TEXT;
 
 ALTER TABLE couple_sessions
   ALTER COLUMN couple_email SET NOT NULL,

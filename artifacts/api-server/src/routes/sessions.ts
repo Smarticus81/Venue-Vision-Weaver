@@ -133,6 +133,7 @@ function buildSessionDetailPayload(
     completedAt: session.completedAt,
     venue: venue ? toPublicVenue(venue, venueMedia) : null,
     generatedAssets,
+    deliveryHeld: session.status === "ready" && Boolean(session.deliveryHoldReason),
   };
   if (options.includeEmail) {
     return {
@@ -841,7 +842,7 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
   // "viewed" has one writer (lib/galleryEvents.ts): a ready couple gallery
   // opened through its share link, deduped per viewer per UTC day. Owner
   // previews through the public URL count too; sample sessions never do.
-  if (session.status === "ready" && session.kind === "couple") {
+  if (session.status === "ready" && !session.deliveryHoldReason && session.kind === "couple") {
     void recordGalleryEvent({
       sessionId: session.id,
       venueId: session.venueId,
@@ -864,7 +865,7 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
         .orderBy(venueMediaTable.displayOrder)
     : [];
 
-  const generatedAssets = canExposeGeneratedAssetsToSharePage(session.status)
+  const generatedAssets = canExposeGeneratedAssetsToSharePage(session.status, session.deliveryHoldReason)
     ? await db
         .select()
         .from(generatedAssetsTable)
@@ -1035,6 +1036,13 @@ router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
     res.status(502).json({ error: `Email not sent: ${result.reason}` });
     return;
   }
+  if (session.deliveryHoldReason) {
+    // The owner reviewed and sent it: the share link may show it now.
+    await db
+      .update(coupleSessionsTable)
+      .set({ deliveryHoldReason: null })
+      .where(eq(coupleSessionsTable.id, session.id));
+  }
   if (session.kind === "couple") {
     void recordGalleryEvent({ sessionId: session.id, venueId: session.venueId, eventType: "sent", source: "dashboard" });
   }
@@ -1060,6 +1068,11 @@ router.post("/sessions/by-token/:shareToken/send-email", async (req, res): Promi
 
   if (session.status !== "ready" || !(await hasReadyEmailGalleryBundle(session.id))) {
     res.status(409).json({ error: "This gallery is not ready to email yet." });
+    return;
+  }
+  if (session.deliveryHoldReason) {
+    // The venue reviews it first; only the owner's send releases it.
+    res.status(409).json({ error: "The venue is taking a quick look first. It will be sent to you soon.", code: "delivery_held" });
     return;
   }
 
