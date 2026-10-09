@@ -287,6 +287,54 @@ test("approval helper and catalog seam", () => {
   }
 });
 
+test("autonomous mode executes everything except guardrail edits", () => {
+  // Autonomous: low, medium and high risk all execute, policy overrides ignored.
+  assert.equal(computeRequiresApproval({ riskLevel: "high" }, true, false, true), false);
+  assert.equal(computeRequiresApproval({ riskLevel: "medium" }, false, true, true), false);
+  assert.equal(computeRequiresApproval({ riskLevel: "low" }, false, true, true), false);
+  // Guardrail edits always wait, in either mode.
+  assert.equal(computeRequiresApproval({ riskLevel: "high", alwaysRequiresApproval: true }, true, false, true), true);
+  assert.equal(computeRequiresApproval({ riskLevel: "high", alwaysRequiresApproval: true }, true, false, false), true);
+  assert.equal(ACTION_CATALOG.update_policy?.alwaysRequiresApproval, true, "agents cannot change their own guardrails unattended");
+  const alwaysGated = Object.values(ACTION_CATALOG).filter((a) => a.alwaysRequiresApproval).map((a) => a.type);
+  assert.deepEqual(alwaysGated, ["update_policy"]);
+  // The mode is an operator-editable boolean policy, on by default.
+  const autonomy = POLICY_DEFAULTS.find((p) => p.key === "autonomous_mode");
+  assert.deepEqual(autonomy?.value, { enabled: true });
+  assert.equal(validatePolicyUpdate("autonomous_mode", { enabled: false }).ok, true);
+  assert.equal(validatePolicyUpdate("autonomous_mode", { enabled: "yes" }).ok, false);
+});
+
+test("autonomous deferrals retry until they expire", async () => {
+  const { deferralOutcome, DEFERRED_EXPIRY_HOURS } = await import("./actions.js");
+  const now = new Date("2026-10-09T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+  assert.equal(deferralOutcome(hoursAgo(1), now), "retry");
+  assert.equal(deferralOutcome(hoursAgo(DEFERRED_EXPIRY_HOURS - 0.1), now), "retry");
+  assert.equal(deferralOutcome(hoursAgo(DEFERRED_EXPIRY_HOURS), now), "expire");
+});
+
+test("the drain waits two minutes for fresh approvals and the retry interval for deferred ones", async () => {
+  const { drainableActionsWhere } = await import("./scheduler.js");
+  const { DEFERRED_RETRY_MINUTES } = await import("./actions.js");
+  const { PgDialect } = await import("drizzle-orm/pg-core");
+  const now = new Date("2026-10-09T12:00:00Z");
+  const query = new PgDialect().sqlToQuery(drainableActionsWhere(now)!);
+  assert.match(query.sql, /"error" is null/);
+  assert.match(query.sql, /"error" is not null/);
+  const times = query.params.filter((p): p is string => typeof p === "string" && /^\d{4}-/.test(p)).map((p) => Date.parse(p));
+  assert.ok(times.includes(now.getTime() - 2 * 60_000), "fresh approvals wait two minutes");
+  assert.ok(times.includes(now.getTime() - DEFERRED_RETRY_MINUTES * 60_000), "deferred sends wait the retry interval");
+});
+
+test("the run briefing states the autonomy mode", async () => {
+  const runner = await import("./runner.js");
+  const base = { definition: { key: "outreach", name: "Outreach" }, now: new Date(), metrics: {} as never, recentRuns: [], openTasks: [], pendingActions: 0, guidanceBlock: null };
+  assert.match(runner.composeBriefing({ ...base, autonomous: true }), /MODE: autonomous/);
+  assert.match(runner.composeBriefing(base), /MODE: autonomous/, "autonomous is the default");
+  assert.match(runner.composeBriefing({ ...base, autonomous: false }), /MODE: supervised/);
+});
+
 test("policy edits are validated per key with bounds", () => {
   const keys = POLICY_DEFAULTS.map((policy) => policy.key);
   for (const key of [

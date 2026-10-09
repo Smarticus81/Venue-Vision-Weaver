@@ -88,6 +88,7 @@ import type {
   ListControlTasksParams,
   ListGalleryStylesResponse,
   ListVenueMediaResponse,
+  OperatorAccessResponse,
   OrgCreditHistoryResponse,
   OrganizationResponse,
   OutreachClaimResponse,
@@ -2003,6 +2004,82 @@ export function useGetPublicConfig<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPublicConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Never 401/403: answers operator=false for anonymous callers, non-operators, and when Clerk is not configured, so the web app can decide whether to show the Control link. The console routes themselves still gate every request.
+ * @summary Whether the signed-in user may open the operator console
+ */
+export const getGetOperatorAccessUrl = () => {
+  return `/api/operator/access`;
+};
+
+export const getOperatorAccess = async (
+  options?: RequestInit,
+): Promise<OperatorAccessResponse> => {
+  return customFetch<OperatorAccessResponse>(getGetOperatorAccessUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetOperatorAccessQueryKey = () => {
+  return [`/api/operator/access`] as const;
+};
+
+export const getGetOperatorAccessQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOperatorAccess>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getOperatorAccess>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetOperatorAccessQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getOperatorAccess>>
+  > = ({ signal }) => getOperatorAccess({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getOperatorAccess>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetOperatorAccessQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOperatorAccess>>
+>;
+export type GetOperatorAccessQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Whether the signed-in user may open the operator console
+ */
+
+export function useGetOperatorAccess<
+  TData = Awaited<ReturnType<typeof getOperatorAccess>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getOperatorAccess>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOperatorAccessQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

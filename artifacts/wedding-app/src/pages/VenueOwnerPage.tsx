@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useClerk } from "@clerk/clerk-react";
-import { LogOut, Plus, Smartphone } from "lucide-react";
+import { Gauge, LogOut, Plus, Smartphone } from "lucide-react";
 import {
   getGetOrganizationQueryKey,
   getGetVenueDashboardQueryKey,
@@ -14,6 +14,7 @@ import { ClerkSetupNotice, OrgGate, Pending } from "@/components/auth/OrgGate";
 import { DreemerLogo } from "@/components/brand/DreemerLogo";
 import { Button } from "@/components/ui/button";
 import { clerkConfigured } from "@/lib/clerk";
+import { useIsOperator } from "@/lib/operatorAccess";
 import { usePublicConfig } from "@/lib/publicConfig";
 import { track } from "@/lib/track";
 import { activationMilestones, localSpendCheck, venueReadiness, type VenueReadiness } from "./dashboard/activation";
@@ -65,6 +66,7 @@ function DashboardShell() {
   const [, setLocation] = useLocation();
   const { signOut } = useClerk();
   const publicConfig = usePublicConfig();
+  const isOperator = useIsOperator();
 
   // One-shot flags (?welcome=1&import=1 from signup, ?billing=success from
   // Stripe) are read once, then stripped so a reload does not replay them.
@@ -264,6 +266,11 @@ function DashboardShell() {
                   </option>
                 ))}
               </select>
+            ) : null}
+            {isOperator ? (
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/control")} data-testid="dash-control-link">
+                <Gauge className="h-4 w-4" /> Control
+              </Button>
             ) : null}
             {billing.isAdmin ? (
               <Button variant="ghost" size="sm" onClick={() => setLocation("/create-venue")} data-testid="dash-add-venue">

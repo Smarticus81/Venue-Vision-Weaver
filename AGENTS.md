@@ -14,12 +14,14 @@ file only restates the three rules that coding agents most often get wrong.
    magic-link or cookie-session flows, and use `requireOrg` /
    `requireOrgVenue` (`artifacts/api-server/src/lib/orgAuth.ts`) for
    org-scoped routes.
-3. **Every email to a real person is operator-approved.** Control-plane agents
-   draft; they never send. Outreach goes through the studio
-   (`artifacts/api-server/src/control-plane/outreach/`), is proposed as a
-   high-risk action, and leaves only via `sender.ts` after an operator approves
-   it in `/control`. Keep the consent, suppression, cap and unsubscribe checks
-   in that path intact.
+3. **Every email to a real person goes through the guarded send path.** The
+   control plane is autonomous by default (`autonomous_mode` policy): outreach
+   is drafted in the studio (`artifacts/api-server/src/control-plane/outreach/`),
+   proposed as a high-risk action, and leaves only via `sender.ts`, which
+   re-checks vetting, consent, suppression, caps and unsubscribe at send time.
+   Those checks are the only gate in autonomous mode, so keep them intact.
+   `update_policy` must keep `alwaysRequiresApproval` so agents cannot loosen
+   their own guardrails.
 
 Before finishing: `pnpm run typecheck`, `pnpm run test`, `pnpm run smoke:security`,
 `pnpm run build`.

@@ -19,10 +19,10 @@ import { resolveLifecycleRecipient } from "./lifecycleRecipient.js";
  * All three are low risk because no model writes their text and the
  * recipients are either an existing customer's own contact address (trial
  * lifecycle) or the internal operator list (digest, nudge). They are still
- * governed actions with an audit row each; the lifecycle email additionally
- * waits for per-email operator approval until the lifecycle_email_auto_send
- * policy is deliberately flipped, and the internal emails honour the
- * auto_execute_low_risk switch. Daily counters come from ../actionCounts.js
+ * governed actions with an audit row each. In supervised mode the lifecycle
+ * email waits for per-email operator approval until lifecycle_email_auto_send
+ * is flipped, and the internal emails honour auto_execute_low_risk; in
+ * autonomous mode all three execute. Daily counters come from ../actionCounts.js
  * (never ../actions.js) to avoid an import cycle.
  */
 
@@ -190,7 +190,7 @@ export const growthActions: Record<string, ActionDefinition> = {
     type: "send_lifecycle_email",
     riskLevel: "low",
     description:
-      "Fixed-template trial lifecycle email (gallery 3, day 10, credits out, trial ended) to an existing customer's own contact address. No model-written text; one send per template per organization; daily cap max_lifecycle_emails_per_day. Waits for operator approval until policy lifecycle_email_auto_send.enabled is true.",
+      "Fixed-template trial lifecycle email (gallery 3, day 10, credits out, trial ended) to an existing customer's own contact address. No model-written text; one send per template per organization; daily cap max_lifecycle_emails_per_day. Executes in autonomous mode; in supervised mode waits for operator approval until policy lifecycle_email_auto_send.enabled is true.",
     paramsSchema: sendLifecycleEmailSchema as z.ZodType<Record<string, unknown>>,
     requiresApproval: async () => !(await getPolicyBoolean("lifecycle_email_auto_send", "enabled", false)),
     async execute(raw) {

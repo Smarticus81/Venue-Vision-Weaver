@@ -807,7 +807,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "draft_outreach_email",
       description:
-        "Produce a studio outreach email for one prospect and queue it for operator approval. Requires vettingStatus=passed and at least two verified venue facts. Researches the venue's own website (facts + real photos), writes a short personal note in plain words that cites at least two verified facts and makes one ask, adds a tracked claim link, and proposes the governed send_outreach_email action. Nothing is sent until an operator approves it in /control. Fails for prospects who replied, converted, unsubscribed, bounced, are disqualified, are not vetted, already have a pending email, or are inside the contact gap.",
+        "Produce a studio outreach email for one prospect and queue its send. Requires vettingStatus=passed and at least two verified venue facts. Researches the venue's own website (facts + real photos), writes a short personal note in plain words that cites at least two verified facts and makes one ask, adds a tracked claim link, and proposes the governed send_outreach_email action. In autonomous mode it sends after a two-minute hold (operators can cancel it in /control); in supervised mode nothing is sent until an operator approves it. Fails for prospects who replied, converted, unsubscribed, bounced, are disqualified, are not vetted, already have a pending email, or are inside the contact gap.",
       parameters: {
         type: "object",
         properties: {
@@ -848,7 +848,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
         copy: result.copy,
         warnings: result.warnings,
         citedFacts: result.email.citedFacts,
-        note: "Queued for operator review in /control → Outreach. send_prospect_email is retired; never propose it.",
+        note: "Queued: sends after a short hold in autonomous mode, or after operator review in /control → Outreach in supervised mode. send_prospect_email is retired; never propose it.",
       };
     },
   },
@@ -927,7 +927,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "propose_action",
       description:
-        `Propose a governed side effect. Low-risk actions may auto-execute; medium/high risk actions enter the operator approval queue. Each agent may only propose the action types its definition allows. Action types: ${Object.values(
+        `Propose a governed side effect. In autonomous mode it executes immediately (update_policy always waits for an operator); in supervised mode medium/high risk actions enter the operator approval queue. Each agent may only propose the action types its definition allows. Action types: ${Object.values(
           ACTION_CATALOG,
         )
           .filter((a) => !a.retired)
@@ -1020,7 +1020,7 @@ export function toolDeclarations(names: string[], agentKey?: string): ToolDeclar
         .join(" | ");
       return {
         ...declaration,
-        description: `Propose a governed side effect. Medium/high risk actions enter the operator approval queue. You may propose: ${offered || "nothing (your role takes no governed actions)"}`,
+        description: `Propose a governed side effect. In autonomous mode it executes immediately (update_policy always waits for an operator); in supervised mode medium/high risk actions enter the operator approval queue. You may propose: ${offered || "nothing (your role takes no governed actions)"}`,
         parameters: parameters as unknown as ToolDeclaration["parameters"],
       };
     })

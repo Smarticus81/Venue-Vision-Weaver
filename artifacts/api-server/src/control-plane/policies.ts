@@ -44,9 +44,15 @@ export const POLICY_DEFAULTS: Array<{
       "Lifetime cap of automated emails per prospect (first touch plus follow-ups); replies and opt-outs stop contact immediately.",
   },
   {
+    key: "autonomous_mode",
+    value: { enabled: true },
+    description:
+      "When true the control plane acts on its own: every action except policy changes executes without operator approval, inside the caps, kill switches, vetting and send-time checks. When false (supervised) medium/high-risk actions wait for an operator.",
+  },
+  {
     key: "auto_execute_low_risk",
     value: { enabled: true },
-    description: "Whether low-risk actions execute immediately without operator approval.",
+    description: "Supervised mode only: whether low-risk actions execute immediately without operator approval.",
   },
   // --- kill switches and spend (synthesis / step 0) ---
   {
@@ -115,7 +121,7 @@ export const POLICY_DEFAULTS: Array<{
   {
     key: "lifecycle_email_auto_send",
     value: { enabled: false },
-    description: "When true, low-risk trial lifecycle emails execute without approval.",
+    description: "Supervised mode only: when true, trial lifecycle emails execute without approval.",
   },
   {
     key: "max_lifecycle_emails_per_day",
@@ -148,6 +154,7 @@ const POLICY_FIELD_RULES: Record<string, Record<string, PolicyFieldRule>> = {
   max_prospect_emails_per_day_base: { emails: { kind: "integer", min: 1, max: 200 } },
   min_hours_between_prospect_contacts: { hours: { kind: "integer", min: 24, max: 24 * 60 } },
   max_contacts_per_prospect: { contacts: { kind: "integer", min: 1, max: 6 } },
+  autonomous_mode: { enabled: { kind: "boolean" } },
   auto_execute_low_risk: { enabled: { kind: "boolean" } },
   agents_enabled: { enabled: { kind: "boolean" } },
   outreach_sends_enabled: { enabled: { kind: "boolean" } },

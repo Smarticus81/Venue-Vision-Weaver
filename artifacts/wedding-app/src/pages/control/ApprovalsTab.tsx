@@ -229,7 +229,7 @@ export function ApprovalsTab() {
         {pendingQuery.isLoading ? (
           <TabLoading />
         ) : pending.length === 0 ? (
-          <EmptyState text="No actions waiting for approval. Agents will queue governed side effects here." />
+          <EmptyState text="No actions waiting for approval. In autonomous mode only policy changes queue here; in supervised mode every medium- or high-risk action does." />
         ) : (
           <>
             {pending.map((action) => (

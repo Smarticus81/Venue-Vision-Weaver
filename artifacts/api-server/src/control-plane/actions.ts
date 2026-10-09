@@ -30,9 +30,10 @@ import { renderVenueEmail } from "./outreach/venueEmail.js";
 
 /**
  * The only way agents touch the business is through this catalog. Every
- * action type declares its risk level and a strict parameter schema; medium
- * and high risk actions always wait for an operator approval, low risk
- * actions auto-execute when governance policy allows it.
+ * action type declares its risk level and a strict parameter schema. In
+ * autonomous mode (policy autonomous_mode, default on) everything but
+ * guardrail edits executes inside the caps and send-time checks; in
+ * supervised mode medium/high risk actions wait for an operator.
  */
 export interface ActionDefinition {
   type: string;
@@ -43,20 +44,47 @@ export interface ActionDefinition {
   execute: (params: Record<string, unknown>, ctx?: { actionId: number }) => Promise<Record<string, unknown>>;
   /** Retired types stay in the catalog so historical rows render; proposing or approving them is refused. */
   retired?: boolean;
-  /** Low-risk actions may still demand approval (e.g. until a policy flag is flipped). */
+  /** Supervised mode only: a low-risk action may still demand approval (e.g. until a policy flag is flipped). */
   requiresApproval?: () => Promise<boolean>;
+  /**
+   * Waits for an operator even in autonomous mode. Reserved for actions that
+   * change the guardrails autonomy depends on (caps, kill switches, the mode itself).
+   */
+  alwaysRequiresApproval?: boolean;
 }
 
 /**
- * Pure: low risk auto-executes only when the policy allows AND the
- * definition does not override. Medium/high risk always needs approval.
+ * Pure approval rule.
+ * - alwaysRequiresApproval: an operator decides, whatever the mode.
+ * - autonomous mode: everything else executes; the action layer's caps,
+ *   kill switches, vetting and send-time checks are the guardrails.
+ * - supervised mode: low risk auto-executes only when the policy allows AND
+ *   the definition does not override; medium/high risk waits for approval.
  */
 export function computeRequiresApproval(
-  definition: Pick<ActionDefinition, "riskLevel">,
+  definition: Pick<ActionDefinition, "riskLevel" | "alwaysRequiresApproval">,
   autoLowRisk: boolean,
   override: boolean,
+  autonomous = false,
 ): boolean {
+  if (definition.alwaysRequiresApproval) return true;
+  if (autonomous) return false;
   return definition.riskLevel !== "low" || !autoLowRisk || override;
+}
+
+/** True while the control plane runs without per-action operator approval. */
+export async function autonomousModeEnabled(): Promise<boolean> {
+  return getPolicyBoolean("autonomous_mode", "enabled", true);
+}
+
+/** In autonomous mode a deferred action retries on its own after this long. */
+export const DEFERRED_RETRY_MINUTES = 30;
+/** A deferred action older than this is failed instead of retried again. */
+export const DEFERRED_EXPIRY_HOURS = 72;
+
+/** Pure: an autonomous deferral either retries later or expires. */
+export function deferralOutcome(createdAt: Date, now: Date): "retry" | "expire" {
+  return now.getTime() - createdAt.getTime() >= DEFERRED_EXPIRY_HOURS * 3_600_000 ? "expire" : "retry";
 }
 
 async function creditsGrantedToday(): Promise<number> {
@@ -224,7 +252,7 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     type: "send_outreach_email",
     riskLevel: "high",
     description:
-      "Send a studio outreach email (venue photos + personal copy) that was drafted with draft_outreach_email and reviewed by an operator in /control. Re-checks consent, suppression list, contact gaps, lifetime caps, and the daily cap at send time.",
+      "Send a studio outreach email (venue photos + personal copy) that was drafted with draft_outreach_email. In autonomous mode it sends after a short hold; in supervised mode an operator reviews it in /control first. Re-checks consent, suppression list, contact gaps, lifetime caps, and the daily cap at send time.",
     paramsSchema: sendOutreachEmailSchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = sendOutreachEmailSchema.parse(rawParams);
@@ -236,7 +264,7 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     type: "enroll_prospects_in_campaign",
     riskLevel: "medium",
     description:
-      "Enroll qualified prospects into an outreach campaign (max 25 per action). Enrollment stages future sends; each email still needs its own approval.",
+      "Enroll qualified prospects into an outreach campaign (max 25 per action). Enrollment stages future sends; each email is still drafted, vetted and checked individually.",
     paramsSchema: enrollProspectsSchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = enrollProspectsSchema.parse(rawParams);
@@ -291,7 +319,7 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     type: "launch_campaign",
     riskLevel: "high",
     description:
-      "Activate a draft or paused outreach campaign so its enrolled prospects become eligible for sends (each send still individually approved).",
+      "Activate a draft or paused outreach campaign so its enrolled prospects become eligible for sends (each send is still drafted, vetted and checked individually).",
     paramsSchema: campaignIdSchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = campaignIdSchema.parse(rawParams);
@@ -459,7 +487,9 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
   update_policy: {
     type: "update_policy",
     riskLevel: "high",
-    description: "Change a governance policy value (spend caps, email caps, auto-execution).",
+    description:
+      "Change a governance policy value (spend caps, email caps, kill switches, autonomy). Always waits for an operator, even in autonomous mode.",
+    alwaysRequiresApproval: true,
     paramsSchema: updatePolicySchema as z.ZodType<Record<string, unknown>>,
     async execute(rawParams) {
       const params = updatePolicySchema.parse(rawParams);
@@ -515,9 +545,15 @@ export function agentMayPropose(agentKey: string, actionType: string): { allowed
 }
 
 /**
- * Create a governed action proposal. Low-risk actions execute inline when
- * the auto_execute_low_risk policy allows; everything else waits in the
- * approval queue for a human operator.
+ * Create a governed action proposal. In autonomous mode (the default) every
+ * action except guardrail edits is approved at once and executes inline;
+ * in supervised mode low-risk actions execute when auto_execute_low_risk
+ * allows and everything else waits in the approval queue.
+ *
+ * deferExecution leaves an auto-approved row for the scheduler drain, which
+ * runs it after DRAIN_DELAY_MINUTES. Callers that must link the action id
+ * somewhere before it runs (the outreach studio) use it; the hold is also
+ * the operator's window to cancel a prospect email.
  */
 export async function proposeAction(input: {
   agentKey: string;
@@ -526,6 +562,9 @@ export async function proposeAction(input: {
   title: string;
   reasoning?: string;
   params: Record<string, unknown>;
+  deferExecution?: boolean;
+  /** Queue for operator approval whatever the mode (an operator drafted it and reviews it). */
+  forceApproval?: boolean;
 }): Promise<AgentAction> {
   const definition = ACTION_CATALOG[input.actionType];
   if (!definition) {
@@ -545,9 +584,12 @@ export async function proposeAction(input: {
     throw new Error(`Invalid params for ${input.actionType}: ${parsed.error.message}`);
   }
 
+  const autonomous = await autonomousModeEnabled();
   const autoLowRisk = await getPolicyBoolean("auto_execute_low_risk", "enabled", true);
-  const overrideNeedsApproval = definition.requiresApproval ? await definition.requiresApproval() : false;
-  const requiresApproval = computeRequiresApproval(definition, autoLowRisk, overrideNeedsApproval);
+  const overrideNeedsApproval =
+    !autonomous && definition.requiresApproval ? await definition.requiresApproval() : false;
+  const requiresApproval =
+    input.forceApproval === true || computeRequiresApproval(definition, autoLowRisk, overrideNeedsApproval, autonomous);
 
   const [action] = await db
     .insert(agentActionsTable)
@@ -561,6 +603,7 @@ export async function proposeAction(input: {
       riskLevel: definition.riskLevel,
       requiresApproval,
       status: requiresApproval ? "pending" : "approved",
+      ...(requiresApproval ? {} : { decidedBy: autonomous ? "system:autonomous" : "system:auto", decidedAt: new Date() }),
     })
     .returning();
   if (!action) throw new Error("Failed to persist action proposal.");
@@ -575,12 +618,13 @@ export async function proposeAction(input: {
       actionType: input.actionType,
       riskLevel: definition.riskLevel,
       requiresApproval,
+      autonomous,
       title: input.title,
     },
   });
 
-  if (!requiresApproval) {
-    return executeAction(action.id, "system:auto");
+  if (!requiresApproval && !input.deferExecution) {
+    return executeAction(action.id, autonomous ? "system:autonomous" : "system:auto");
   }
   return action;
 }
@@ -590,8 +634,11 @@ export async function proposeAction(input: {
  * trail. The executor first claims the row atomically (approved → executing);
  * a second executor (the scheduler drain racing an inline approval) finds
  * nothing to claim and gets the current row back without running anything.
- * A DeferredSendError (fixable precondition) returns the action to "pending"
- * with the reason, so the reviewed draft waits instead of failing.
+ * A DeferredSendError (fixable precondition: daily cap, contact gap, missing
+ * config) keeps the draft instead of failing it. In supervised mode the row
+ * returns to "pending" for an operator; in autonomous mode it stays
+ * "approved" and the scheduler retries it after DEFERRED_RETRY_MINUTES, until
+ * DEFERRED_EXPIRY_HOURS after it was proposed.
  */
 export async function executeAction(actionId: number, executor: string): Promise<AgentAction> {
   const [claimed] = await db
@@ -641,10 +688,36 @@ export async function executeAction(actionId: number, executor: string): Promise
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (isDeferredSendError(err)) {
-      logger.warn({ actionId, actionType: action.actionType, reason: message }, "Control-plane action deferred");
+      const now = new Date();
+      const autonomous = await autonomousModeEnabled();
+      const outcome = autonomous ? deferralOutcome(action.createdAt, now) : "pending";
+      if (outcome === "expire") {
+        const expired = `Expired after ${DEFERRED_EXPIRY_HOURS}h of deferrals; last reason: ${message}`;
+        const [updated] = await db
+          .update(agentActionsTable)
+          .set({ status: "failed", executedAt: now, error: expired })
+          .where(eq(agentActionsTable.id, actionId))
+          .returning();
+        await recordAuditEvent({
+          actorType: "system",
+          actor: executor,
+          eventType: "action_failed",
+          subjectType: "action",
+          subjectId: actionId,
+          detail: { actionType: action.actionType, error: expired },
+        });
+        if (action.actionType === "send_outreach_email") await markEmailsRejectedForAction(actionId);
+        return updated ?? action;
+      }
+      logger.warn({ actionId, actionType: action.actionType, reason: message, outcome }, "Control-plane action deferred");
       const [updated] = await db
         .update(agentActionsTable)
-        .set({ status: "pending", decidedBy: null, decidedAt: null, error: message })
+        .set(
+          outcome === "retry"
+            ? // Stays approved; the drain waits DEFERRED_RETRY_MINUTES from this decidedAt.
+              { status: "approved", decidedBy: "system:autonomous", decidedAt: now, executedAt: null, error: message }
+            : { status: "pending", decidedBy: null, decidedAt: null, executedAt: null, error: message },
+        )
         .where(eq(agentActionsTable.id, actionId))
         .returning();
       await recordAuditEvent({
@@ -653,7 +726,7 @@ export async function executeAction(actionId: number, executor: string): Promise
         eventType: "action_deferred",
         subjectType: "action",
         subjectId: actionId,
-        detail: { actionType: action.actionType, reason: message },
+        detail: { actionType: action.actionType, reason: message, outcome },
       });
       return updated ?? action;
     }
@@ -724,8 +797,13 @@ export async function decideAction(
     .from(agentActionsTable)
     .where(eq(agentActionsTable.id, actionId));
   if (!action) throw new Error(`Action ${actionId} not found.`);
-  if (action.status !== "pending") {
-    throw new Error(`Action ${actionId} is "${action.status}", only pending actions can be decided.`);
+  // An auto-approved action that has not started yet can still be cancelled
+  // (the hold before a prospect email, or a deferred send waiting to retry).
+  const cancellable = decision === "reject" && action.status === "approved";
+  if (action.status !== "pending" && !cancellable) {
+    throw new Error(
+      `Action ${actionId} is "${action.status}"; only pending actions can be decided and only approved ones not yet running can be cancelled.`,
+    );
   }
   if (decision === "approve" && ACTION_CATALOG[action.actionType]?.retired) {
     throw new Error(
@@ -741,9 +819,9 @@ export async function decideAction(
       decisionNote: note ?? null,
       decidedAt: new Date(),
     })
-    .where(and(eq(agentActionsTable.id, actionId), eq(agentActionsTable.status, "pending")))
+    .where(and(eq(agentActionsTable.id, actionId), eq(agentActionsTable.status, action.status)))
     .returning();
-  if (!updated) throw new Error(`Action ${actionId} was decided concurrently.`);
+  if (!updated) throw new Error(`Action ${actionId} was decided or started concurrently.`);
 
   await recordAuditEvent({
     actorType: "operator",

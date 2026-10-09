@@ -16,8 +16,8 @@ import { cn } from "@/lib/utils";
 import { ActionButton, Card, EmptyState, Pill, TabLoading, apiErrorMessage, fmt } from "./shared";
 
 /*
- * Governance policies in the console: the two kill switches in the header
- * (agents_enabled, outreach_sends_enabled) and editable policy cards. The
+ * Governance policies in the console: the header switches (autonomous_mode,
+ * agents_enabled, outreach_sends_enabled) and editable policy cards. The
  * server validates every value (field names and bounds) and audits it.
  */
 
@@ -27,7 +27,8 @@ export const SYSTEM_MANAGED_POLICIES = new Set(["deliverability_guard", "segment
 const POLICY_LABELS: Record<string, string> = {
   agents_enabled: "Agents running",
   outreach_sends_enabled: "Outbound email",
-  auto_execute_low_risk: "Auto-run low-risk actions",
+  autonomous_mode: "Autonomous mode",
+  auto_execute_low_risk: "Auto-run low-risk actions (supervised)",
   max_prospect_emails_per_day: "Prospect emails per day (now)",
   max_prospect_emails_per_day_base: "Prospect emails per day (base)",
   max_outbound_emails_per_day: "Venue emails per day",
@@ -41,13 +42,14 @@ const POLICY_LABELS: Record<string, string> = {
   vetting_blocked_countries: "Blocked countries",
   outreach_require_reply_to: "Require a reply-to mailbox",
   max_campaign_steps: "Steps per campaign",
-  lifecycle_email_auto_send: "Auto-send trial emails",
+  lifecycle_email_auto_send: "Auto-send trial emails (supervised)",
   max_lifecycle_emails_per_day: "Trial emails per day",
   deliverability_guard: "Deliverability guard",
   segment_guidance: "Segment guidance",
 };
 
 const POLICY_ORDER = [
+  "autonomous_mode",
   "agents_enabled",
   "outreach_sends_enabled",
   "max_prospect_emails_per_day_base",
@@ -180,6 +182,17 @@ export function KillSwitches() {
   const policies = policiesQuery.data.policies;
   return (
     <div className="flex flex-wrap items-center gap-2" aria-label="Kill switches">
+      <KillSwitch
+        policyKey="autonomous_mode"
+        enabled={policyBoolean(policies, "autonomous_mode")}
+        onLabel="autonomous"
+        offLabel="supervised"
+        stopVerb="Switch to supervised"
+        startVerb="Go autonomous"
+        confirmText="Emails, campaigns and credit grants will wait for your approval."
+        iconOn={<Play className="h-3 w-3" />}
+        iconOff={<Pause className="h-3 w-3" />}
+      />
       <KillSwitch
         policyKey="agents_enabled"
         enabled={policyBoolean(policies, "agents_enabled")}

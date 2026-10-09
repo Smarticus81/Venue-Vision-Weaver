@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { DreemerLogo } from "@/components/brand/DreemerLogo";
+import { useIsOperator } from "@/lib/operatorAccess";
 import { usePublicConfig } from "@/lib/publicConfig";
 import { track } from "@/lib/track";
 import type { ReactNode } from "react";
@@ -15,6 +16,7 @@ import type { ReactNode } from "react";
 export function SiteHeader() {
   const [path] = useLocation();
   const onHome = path === "/";
+  const isOperator = useIsOperator();
   return (
     <>
       <a href="#main-content" className="skip-link">
@@ -29,6 +31,11 @@ export function SiteHeader() {
           <a href={onHome ? "#pricing" : "/#pricing"} className="nav-anchor">
             Pricing
           </a>
+          {isOperator ? (
+            <Link href="/control" data-testid="header-control-link">
+              Control
+            </Link>
+          ) : null}
           <Link href="/login" data-testid="venue-header-sign-in">
             Sign in
           </Link>

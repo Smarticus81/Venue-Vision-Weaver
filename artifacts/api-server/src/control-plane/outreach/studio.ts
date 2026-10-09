@@ -549,6 +549,11 @@ export async function createDraft(input: CreateDraftInput): Promise<{
       ...research.warnings.map((warning) => `Research: ${warning}`),
     ].join("\n"),
     params: { emailId: email.id },
+    // The send must run after the email row is linked to this action; in
+    // autonomous mode the scheduler drain sends it after a short hold.
+    deferExecution: true,
+    // An operator who drafts by hand reviews and approves it in Outreach.
+    forceApproval: input.actor.startsWith("operator:"),
   });
   const [linked] = await db
     .update(controlOutreachEmailsTable)

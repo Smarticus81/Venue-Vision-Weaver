@@ -769,6 +769,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/PublicConfig"
 
+  /operator/access:
+    get:
+      operationId: getOperatorAccess
+      tags: [control-plane]
+      summary: Whether the signed-in user may open the operator console
+      description: >-
+        Never 401/403: answers operator=false for anonymous callers, non-operators,
+        and when Clerk is not configured, so the web app can decide whether to show
+        the Control link. The console routes themselves still gate every request.
+      responses:
+        "200":
+          description: Access decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorAccessResponse"
+
   /sessions/by-token/{shareToken}/events:
     post:
       operationId: recordGalleryEvent
@@ -2318,6 +2335,12 @@ components:
       type: string
       enum: [ok, degraded]
 
+    OperatorAccessResponse:
+      type: object
+      required: [operator]
+      properties:
+        operator:
+          type: boolean
     ErrorEnvelope:
       type: object
       required: [error]

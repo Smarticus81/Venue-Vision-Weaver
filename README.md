@@ -150,11 +150,13 @@ Without Docker: `pnpm run build` then `node artifacts/api-server/dist/index.mjs`
 set of Grok-backed domain agents (prospecting, outreach, campaigns, support,
 product repair, finance, growth, activation, governance). They read live
 business data through a restricted tool belt and can only act through a
-governed action catalog. Anything that contacts a real person, launches a
-campaign or grants credits is a high-risk action that waits for an operator to
-approve it in `/control`; the action layer also enforces daily send caps,
-per-prospect contact gaps and lifetime caps, opt-out footers, and
-reply/unsubscribe locks. State lives in the `control_*` and `agent_*` tables in
+governed action catalog. It runs autonomously by default: actions execute
+without operator approval (prospect emails after a two-minute hold that can be
+cancelled in `/control`), and only policy changes wait for an operator. The
+action layer enforces vetting, daily send caps, per-prospect contact gaps and
+lifetime caps, opt-out footers, reply/unsubscribe locks, the deliverability
+auto-pause and the kill switches. Switch the `/control` header to supervised to
+approve every high-risk action by hand again. State lives in the `control_*` and `agent_*` tables in
 `lib/db`. Without `XAI_API_KEY` the control plane boots and idles.
 
 The outreach email studio (`control-plane/outreach/`) is where prospect emails
