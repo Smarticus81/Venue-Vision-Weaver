@@ -10,6 +10,7 @@ import {
   organizationsTable,
   uploadIntentsTable,
   coupleMediaTable,
+  funnelEventsTable,
 } from "@workspace/db";
 import {
   CreateVenueBody,
@@ -52,6 +53,7 @@ import { ownerVenueResponse, toPublicVenue } from "../lib/venueResponse.js";
 import { hasCompletePublicGalleryAssets } from "../lib/sessionVisibility.js";
 import { onVenueCreated } from "../control-plane/growth/hooks.js";
 import { logger } from "../lib/logger.js";
+import { assertCanSpend } from "../lib/trial.js";
 import { galleryStatsForSessions, recordGalleryEvent, type SessionGalleryStats } from "../lib/galleryEvents.js";
 import { recordFunnelEvent } from "../lib/funnelEvents.js";
 import { defaultWebsiteImportDeps, importWebsiteMedia, IMPORT_LIMITS } from "../lib/websiteMediaImport.js";
@@ -59,6 +61,9 @@ import { defaultSamplePhotoDeps, prepareSamplePhotos, SAMPLE_COUPLE_NAME } from 
 import {
   appendDisplayOrders,
   MAX_SAMPLES_PER_VENUE,
+  MAX_SAMPLE_STARTS_PER_ORG,
+  SAMPLE_STARTED_EVENT,
+  sampleOrgLimitRefusal,
   markTourCardDownloaded,
   normalizeIncentiveText,
   ownerActor,
@@ -884,17 +889,40 @@ async function countSampleSessions(venueId: number, executor: Pick<typeof db, "s
   return { inFlight: Number(row?.inFlight ?? 0), nonFailed: Number(row?.nonFailed ?? 0) };
 }
 
-function sampleGalleryDeps(venue: { id: number; ownerEmail: string }): SampleGalleryDeps<typeof coupleSessionsTable.$inferSelect> {
+/** Sample starts the organization has ever logged (persistent; deleting a sample never lowers it). */
+async function countOrgSampleStarts(organizationId: number, executor: Pick<typeof db, "select"> = db): Promise<number> {
+  const [row] = await executor
+    .select({ starts: sql<number>`count(*)::int` })
+    .from(funnelEventsTable)
+    .where(and(eq(funnelEventsTable.organizationId, organizationId), eq(funnelEventsTable.event, SAMPLE_STARTED_EVENT)));
+  return Number(row?.starts ?? 0);
+}
+
+function sampleGalleryDeps(venue: {
+  id: number;
+  ownerEmail: string;
+  organizationId: number;
+}): SampleGalleryDeps<typeof coupleSessionsTable.$inferSelect> {
   const photoDeps = defaultSamplePhotoDeps(objectStorageService);
   return {
     loadMedia: (venueId) =>
       db.select({ coverage: venueMediaTable.coverage }).from(venueMediaTable).where(eq(venueMediaTable.venueId, venueId)),
     countSamples: (venueId) => countSampleSessions(venueId),
+    canSpend: (venueId) => assertCanSpend(venueId, 1),
+    countOrgSampleStarts: () => countOrgSampleStarts(venue.organizationId),
     preparePhotos: () => prepareSamplePhotos(photoDeps),
     insertSession: (venueId, objectKeys) =>
       db.transaction(async (tx) => {
-        // Serialize sample starts per venue, then re-check under the lock.
-        await tx.select({ id: venuesTable.id }).from(venuesTable).where(eq(venuesTable.id, venueId)).for("update");
+        // Serialize sample starts per organization (which also serializes
+        // them per venue), then re-check under the lock.
+        await tx
+          .select({ id: organizationsTable.id })
+          .from(organizationsTable)
+          .where(eq(organizationsTable.id, venue.organizationId))
+          .for("update");
+        if ((await countOrgSampleStarts(venue.organizationId, tx)) >= MAX_SAMPLE_STARTS_PER_ORG) {
+          return sampleOrgLimitRefusal();
+        }
         const counts = await countSampleSessions(venueId, tx);
         if (counts.inFlight > 0) {
           return {
@@ -929,6 +957,13 @@ function sampleGalleryDeps(venue: { id: number; ownerEmail: string }): SampleGal
           .returning();
         if (!created) throw new Error("Failed to create sample session.");
         await tx.insert(coupleMediaTable).values(objectKeys.map((objectKey) => ({ sessionId: created.id, objectKey })));
+        await tx.insert(funnelEventsTable).values({
+          organizationId: venue.organizationId,
+          venueId,
+          event: SAMPLE_STARTED_EVENT,
+          properties: { sessionId: created.id },
+          source: "server",
+        });
         return { ok: true as const, session: created };
       }),
     async discardPhotos(objectKeys) {
@@ -945,7 +980,8 @@ const DEFAULT_SAMPLE_STYLE_ID = "cinematic-editorial";
 /** Sample starts per organization per hour (on top of the per-venue limits). */
 const SAMPLE_ORG_HOURLY_LIMIT = 6;
 
-// POST /venues/:slug/sample-gallery (organization member; no credit charged)
+// POST /venues/:slug/sample-gallery (organization member; no credit charged, but the
+// account must be fundable and has a lifetime allowance of sample starts)
 router.post("/venues/:slug/sample-gallery", async (req, res): Promise<void> => {
   const params = CreateSampleGalleryParams.safeParse(req.params);
   if (!params.success) {
@@ -962,7 +998,10 @@ router.post("/venues/:slug/sample-gallery", async (req, res): Promise<void> => {
     return;
   }
 
-  const outcome = await startSampleGallery(sampleGalleryDeps(venue), venue.id);
+  const outcome = await startSampleGallery(
+    sampleGalleryDeps({ id: venue.id, ownerEmail: venue.ownerEmail, organizationId: ctx.org.id }),
+    venue.id,
+  );
   if (!outcome.ok) {
     res.status(outcome.status).json({ error: outcome.error, code: outcome.code });
     return;
