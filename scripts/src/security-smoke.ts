@@ -1876,8 +1876,8 @@ try {
   );
   assert.match(
     appSource,
-    /session\.status === "ready"[\s\S]*hasCompletePublicGalleryAssets\(generatedAssets\)[\s\S]*thumbnailAsset[\s\S]*displayOrder === 1/s,
-    "share-page Open Graph thumbnails are only emitted for ready sessions with a complete public gallery bundle",
+    /canExposeGeneratedAssetsToSharePage\(session\.status, session\.deliveryHoldReason\)[\s\S]*hasCompletePublicGalleryAssets\(generatedAssets\)[\s\S]*thumbnailAsset[\s\S]*displayOrder === 1/s,
+    "share-page Open Graph thumbnails are only emitted for ready, unheld sessions with a complete public gallery bundle",
   );
   const spaRouteSource = fs.readFileSync(
     new URL("../../artifacts/wedding-app/src/App.tsx", import.meta.url),
