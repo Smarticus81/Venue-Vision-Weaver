@@ -230,7 +230,7 @@ function OrganizationSettings({ ctx }: { ctx: DashboardContext }) {
         testId="settings-share-aggregates"
       />
       <form
-        className="toggle"
+        className="grid gap-3 border-t border-border pt-4"
         onSubmit={(e) => {
           e.preventDefault();
           if (!emailInvalid) void patch({ contactEmail: contactEmail.trim().toLowerCase() || null }, "Account email saved");
@@ -250,7 +250,7 @@ function OrganizationSettings({ ctx }: { ctx: DashboardContext }) {
             {emailInvalid ? "Check the email address." : "Where we send trial, credit and billing notes."}
           </p>
         </div>
-        <Button type="submit" variant="ghost" size="sm" disabled={!billing.isAdmin || emailInvalid || update.isPending}>
+        <Button type="submit" variant="outline" size="sm" className="justify-self-start" disabled={!billing.isAdmin || emailInvalid || update.isPending}>
           Save
         </Button>
       </form>

@@ -13,7 +13,7 @@ const STEP_COPY: Record<ActivationStepId, { title: string; body: string; action:
   },
   booking_link: {
     title: "Add your booking link",
-    body: "Couples tap “Check your date” on their gallery and land here. A website or inquiry email works too.",
+    body: "Couples tap “Check your date” on their gallery and land on your tour or enquiry page, with their wedding month.",
     action: "Add link",
   },
   tour_card: {

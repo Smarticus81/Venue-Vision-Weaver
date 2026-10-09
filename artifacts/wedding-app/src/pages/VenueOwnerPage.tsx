@@ -20,6 +20,7 @@ import { activationMilestones, localSpendCheck, venueReadiness, type VenueReadin
 import { ActivationChecklist } from "./dashboard/ActivationChecklist";
 import { Billing } from "./dashboard/Billing";
 import { billingReturnMessage } from "./dashboard/billing";
+import { CoupleLinkCard } from "./dashboard/CoupleLinkCard";
 import { CreateGallery } from "./dashboard/CreateGallery";
 import { cleanedSearch, DASHBOARD_TABS, parseDashboardLocation, tabFromHash } from "./dashboard/dashboardRoute";
 import { GalleryList } from "./dashboard/GalleryList";
@@ -184,11 +185,18 @@ function DashboardShell() {
     refreshOrg: () => orgQuery.refetch(),
   };
 
-  const badges: Partial<Record<DashboardTab, string>> = {};
-  if (!readiness.ready) badges.photos = `${readiness.missing.length || readiness.needed} to add`;
+  // Short badges so a label never wraps in the 232px rail; the long form is the accessible name.
+  const badges: Partial<Record<DashboardTab, { short: string; long: string }>> = {};
+  if (!readiness.ready) {
+    const n = readiness.missing.length || readiness.needed;
+    badges.photos = { short: String(n), long: `${n} ${n === 1 ? "view" : "views"} to add` };
+  }
   const rendering = ctx.sessions.filter((s) => s.status === "pending" || s.status === "processing").length;
-  if (rendering > 0) badges.galleries = `${rendering} rendering`;
-  if (!ctx.spend.ok) badges.billing = ctx.spend.reason === "trial_expired" ? "Trial ended" : "0 credits";
+  if (rendering > 0) badges.galleries = { short: String(rendering), long: `${rendering} rendering` };
+  if (!ctx.spend.ok) {
+    badges.billing =
+      ctx.spend.reason === "trial_expired" ? { short: "Ended", long: "trial ended" } : { short: "0", long: "no credits left" };
+  }
 
   return (
     <div className="dash">
@@ -204,7 +212,14 @@ function DashboardShell() {
               data-testid={`dash-tab-${item.id}`}
             >
               <span>{item.label}</span>
-              {badges[item.id] ? <span className="dash-nav-badge">{badges[item.id]}</span> : null}
+              {badges[item.id] ? (
+                <>
+                  <span className="dash-nav-badge" aria-hidden="true">
+                    {badges[item.id]!.short}
+                  </span>
+                  <span className="sr-only">, {badges[item.id]!.long}</span>
+                </>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -214,7 +229,7 @@ function DashboardShell() {
             {DASHBOARD_TABS.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}
-                {badges[item.id] ? ` (${badges[item.id]})` : ""}
+                {badges[item.id] ? ` (${badges[item.id]!.long})` : ""}
               </option>
             ))}
           </select>
@@ -292,6 +307,7 @@ function DashboardShell() {
             <>
               <ActivationChecklist ctx={ctx} />
               <GalleryList ctx={ctx} />
+              {readiness.ready ? <CoupleLinkCard url={ctx.coupleUrl} venueReady /> : null}
             </>
           ) : null}
           {tab === "new" ? <CreateGallery ctx={ctx} /> : null}

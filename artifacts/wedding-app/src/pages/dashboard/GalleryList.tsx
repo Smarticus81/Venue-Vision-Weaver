@@ -129,7 +129,7 @@ function EmptyGalleries({ ctx }: { ctx: DashboardContext }) {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="brand" onClick={() => ctx.goTo("new")}>
+        <Button type="button" variant="outline" onClick={() => ctx.goTo("new")}>
           <Sparkles className="h-4 w-4" /> Create a gallery
         </Button>
         {!sampleUnavailable ? (

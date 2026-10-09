@@ -1,7 +1,7 @@
 import type { PublicConfig } from "@workspace/api-client-react";
 import { describeApiError } from "./errors";
 import { formatMoney } from "../../lib/publicConfig";
-import { isSubscriptionPlan, perGalleryCost } from "./plans";
+import { formatUnitPrice, isSubscriptionPlan, perGalleryCost } from "./plans";
 import type { BillingProductId } from "./types";
 
 /**
@@ -29,12 +29,7 @@ export function buildBillingCards(config: PublicConfig): BillingCard[] {
   const { pricing } = config;
   const money = (n: number) => formatMoney(n, pricing.currency);
   const per = (monthly: number, credits: number) =>
-    `${new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: pricing.currency,
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 0,
-    }).format(perGalleryCost(monthly, credits))} per gallery`;
+    `${formatUnitPrice(perGalleryCost(monthly, credits), pricing.currency)} per gallery`;
   return [
     {
       id: "starter",

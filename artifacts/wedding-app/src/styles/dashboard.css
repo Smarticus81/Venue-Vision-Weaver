@@ -480,7 +480,9 @@
   gap: 14px;
 }
 .coverage-tile {
+  min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   gap: 10px;
   padding: 14px;
@@ -541,6 +543,8 @@
   gap: 6px;
 }
 .coverage-thumb-actions select {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 32px;
   max-width: 100%;
   padding: 0 8px;
@@ -593,6 +597,8 @@
   color: var(--dm-text);
   font-size: 13px;
   font-weight: 600;
+  padding: 6px 10px;
+  text-align: center;
   transition: background var(--dm-motion-fast);
 }
 .coverage-tile-add:hover {
@@ -1051,14 +1057,15 @@
   font-weight: 600;
   letter-spacing: -0.015em;
 }
-.plan-price {
+/* Scoped under .plan-card so it outranks `.plan-card p` below. */
+.plan-card .plan-price {
   font-family: var(--dm-font-display);
   font-size: 30px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1;
 }
-.plan-price small {
+.plan-card .plan-price small {
   display: block;
   margin-top: 6px;
   font-family: var(--dm-font-body);
@@ -1176,6 +1183,9 @@
   position: relative;
   width: 44px;
   height: 26px;
+  /* The base layer gives every button a 44px min-height; the track is 26px. */
+  min-height: 26px;
+  margin-top: 2px;
   flex: none;
   border-radius: 999px;
   background: var(--dm-ivory-400);
@@ -1279,7 +1289,7 @@
 }
 .tour-capture {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .tour-sticky {
@@ -1362,10 +1372,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .plan-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .dash-grid-settings {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 760px) {
@@ -1413,7 +1423,7 @@
     font-size: 26px;
   }
   .dash-stat-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
   .dash-stat {
@@ -1433,7 +1443,7 @@
   }
   .dash-grid-2,
   .create-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .checklist-item {
     grid-template-columns: 32px minmax(0, 1fr);
@@ -1442,14 +1452,14 @@
     grid-column: 2;
   }
   .coverage-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .coverage-tile {
     min-height: 0;
     padding: 12px;
   }
   .proof-strip {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .gallery-row {
     grid-template-columns: 56px minmax(0, 1fr);
@@ -1474,14 +1484,14 @@
     justify-self: start;
   }
   .style-options {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 400px) {
+@media (max-width: 359px) {
   .dash-stat-row,
   .coverage-grid,
   .proof-strip {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .photo-slots {
     gap: 6px;
