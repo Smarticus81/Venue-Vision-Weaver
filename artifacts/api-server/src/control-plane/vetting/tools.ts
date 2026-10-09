@@ -1,9 +1,13 @@
+import { num } from "../toolTypes.js";
 import type { ControlPlaneTool } from "../toolTypes.js";
+import { loadProspectById } from "../outreach/studio.js";
+import { citableFacts, loadFacts } from "./facts.js";
+import { ensureVetted, loadVetting } from "./vet.js";
 
 /**
- * Vetting-owned agent tools, merged into the registry by tools.ts. Step 0
- * ships the declaration (vetting.md 3.2 verbatim) with a stub body so the
- * grants in agents.ts resolve; the vetting workstream fills the execute.
+ * Vetting-owned agent tools, merged into the registry by tools.ts
+ * (vetting.md 3.2). Agents can read the verdict and the evidence and ask for
+ * a re-run; they can never change the verdict — operators override in /control.
  */
 export const vettingTools: Record<string, ControlPlaneTool> = {
   vet_prospect: {
@@ -17,8 +21,22 @@ export const vettingTools: Record<string, ControlPlaneTool> = {
         required: ["prospectId"],
       },
     },
-    async execute() {
-      return { ok: false, reason: "not implemented yet" };
+    async execute(args, ctx) {
+      const prospectId = num(args.prospectId, 0, Number.MAX_SAFE_INTEGER);
+      if (!prospectId) throw new Error("prospectId is required.");
+      const prospect = await loadProspectById(prospectId);
+      if (!prospect) throw new Error(`Prospect ${prospectId} not found.`);
+      const { vetting } =
+        args.refresh === true
+          ? await ensureVetted(prospect, { force: true, requestedBy: ctx.agentKey })
+          : { vetting: await loadVetting(prospectId) };
+      const facts = await loadFacts(prospectId);
+      return {
+        vetting,
+        facts,
+        citable: citableFacts(facts),
+        hint: vetting ? undefined : "Not vetted yet; call again with refresh=true.",
+      };
     },
   },
 };

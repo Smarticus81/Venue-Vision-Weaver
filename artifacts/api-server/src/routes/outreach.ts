@@ -4,9 +4,11 @@ import { rateLimit, clientKey } from "../lib/rateLimit.js";
 import { logger } from "../lib/logger.js";
 import { findUnsubscribeTarget, unsubscribeByToken } from "../control-plane/outreach/unsubscribe.js";
 import { escapeHtml } from "../control-plane/outreach/emailTemplate.js";
+import { resolveClaim } from "../control-plane/outreach/claim.js";
 
 /**
- * Public, unauthenticated unsubscribe endpoints for studio emails.
+ * Public, unauthenticated outreach endpoints: the claim-link resolver that
+ * pre-fills signup from the email a venue received, and unsubscribe.
  *
  * GET shows a one-button confirmation page (so link scanners cannot opt a
  * recipient out by prefetching), the form POST performs the opt-out, and the
@@ -133,6 +135,27 @@ router.post("/outreach/unsubscribe/:token", async (req, res): Promise<void> => {
        <p class="muted">${escapeHtml(BRAND.name)} · ${escapeHtml(BRAND.domain)}</p>`,
     ),
   );
+});
+
+// GET /outreach/claim/{token} — the venue an outreach email was written for (pre-fills signup).
+// Only sent emails resolve; the first resolution stamps the email's clickedAt.
+router.get("/outreach/claim/:token", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store");
+  if (!rateLimit(`outreach-claim:${clientKey(req)}`, 60, 60 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many requests; try again shortly." });
+    return;
+  }
+  try {
+    const claim = await resolveClaim(String(req.params.token ?? ""));
+    if (!claim) {
+      res.status(404).json({ error: "This claim link is not recognized." });
+      return;
+    }
+    res.json(claim);
+  } catch (err) {
+    logger.error({ err }, "Outreach claim lookup failed");
+    res.status(500).json({ error: "Could not load this claim link." });
+  }
 });
 
 export default router;
