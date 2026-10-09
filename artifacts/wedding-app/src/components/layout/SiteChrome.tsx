@@ -54,7 +54,6 @@ export function SiteFooter() {
       <p>Turn tours into bookings.</p>
       <Link href="/pricing">Pricing</Link>
       <Link href="/privacy">Privacy &amp; AI previews</Link>
-      <Link href="/find-my-gallery">Couples: find your gallery</Link>
       {config.contactEmail ? <a href={`mailto:${config.contactEmail}`}>Email us</a> : null}
       <span>© {new Date().getFullYear()} Dreemer</span>
     </footer>
