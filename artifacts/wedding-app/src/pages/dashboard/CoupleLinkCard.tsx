@@ -77,7 +77,7 @@ export function CoupleLinkCard({ url, venueReady }: { url: string; venueReady: b
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {venueReady
             ? "Put the QR code on your tour card, or paste the link into your follow-up email. Couples open it, add their photos, and get their gallery."
-            : "Add at least one venue photo and this link opens for couples."}
+            : "Finish your five venue photos and this link opens for couples."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
