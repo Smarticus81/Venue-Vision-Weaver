@@ -418,7 +418,6 @@ router.get("/control/overview", async (req, res): Promise<void> => {
         runningExperiments: runningExperiments?.total ?? 0,
         runs24h: runs24h?.total ?? 0,
       },
-      // Not yet declared on ControlOverviewResponse (contract follow-up); the console reads both as optional.
       funnel,
       trends,
     });
@@ -621,8 +620,7 @@ router.post("/control/actions/:id/decision", async (req, res): Promise<void> => 
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  // `reviewed` is not on the generated body yet (contract follow-up); read it raw.
-  const reviewed = (req.body as Record<string, unknown> | undefined)?.reviewed === true;
+  const reviewed = parsed.data.reviewed === true;
 
   const [existing] = await db
     .select({ actionType: agentActionsTable.actionType })

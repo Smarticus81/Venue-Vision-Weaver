@@ -7,7 +7,9 @@
  */
 import type { BusinessMetrics } from "./businessMetrics";
 import type { ControlAgent } from "./controlAgent";
+import type { ControlOverviewFunnel } from "./controlOverviewFunnel";
 import type { ControlOverviewResponseCounts } from "./controlOverviewResponseCounts";
+import type { ControlOverviewTrends } from "./controlOverviewTrends";
 
 export interface ControlOverviewResponse {
   operatorEmail: string;
@@ -16,4 +18,8 @@ export interface ControlOverviewResponse {
   metrics: BusinessMetrics;
   agents: ControlAgent[];
   counts: ControlOverviewResponseCounts;
+  /** Owner and prospect funnel counts (null when the loader failed). */
+  funnel?: ControlOverviewFunnel | null;
+  /** KPI series from metrics snapshots (null when the loader failed). */
+  trends?: ControlOverviewTrends | null;
 }

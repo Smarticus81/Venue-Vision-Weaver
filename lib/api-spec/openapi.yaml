@@ -54,7 +54,18 @@ paths:
       operationId: readinessCheck
       tags: [health]
       summary: Readiness check
-      description: Returns non-secret production readiness checks for deploy monitors.
+      description: |
+        Returns the coarse ok/degraded map for deploy monitors. The reasons
+        behind each degraded check (`details`: missing env keys, tables, hosts)
+        are only included for a signed-in control-plane operator or a caller
+        presenting READINESS_DETAIL_TOKEN in the x-readiness-token header.
+      parameters:
+        - name: x-readiness-token
+          in: header
+          required: false
+          description: Matches READINESS_DETAIL_TOKEN to receive `details`.
+          schema:
+            type: string
       responses:
         "200":
           description: Ready
@@ -256,6 +267,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BillingCheckoutResponse"
+        "400":
+          description: Unknown product (code invalid_product)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "401":
           description: Not signed in
           content:
@@ -263,11 +280,17 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "403":
-          description: No active organization
+          description: No active organization, or the caller is not an organization admin
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Organization already has a subscription; change plans in the portal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCheckoutConflictResponse"
         "503":
           description: Billing not configured
           content:
@@ -785,6 +808,12 @@ paths:
       operationId: setSessionBooked
       tags: [venues]
       summary: Venue marks a couple as booked (or undoes it)
+      description: |
+        Idempotent: marking an already-booked couple as booked (or an unbooked
+        one as unbooked) returns the row unchanged and records no event. A
+        change records a `booked`/`unbooked` gallery event and stamps
+        couple_sessions.booked_at / booked_by. Any organization member may
+        mark a booking.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
         - { name: id, in: path, required: true, schema: { type: integer } }
@@ -819,12 +848,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Sample galleries cannot be booked (code sample_session)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /venues/{slug}/media/import-website:
     post:
       operationId: importVenueWebsiteMedia
       tags: [venues]
       summary: Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
+      description: |
+        Organization admins only. Fetches the homepage and up to two venue
+        subpages through the SSRF-guarded fetcher, keeps at most five usable,
+        distinct photos with suggested coverage roles, and stamps
+        websiteImportedAt. A second import within ten minutes answers 429
+        (code import_cooldown).
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -841,13 +882,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportWebsiteMediaResponse"
         "400":
-          description: No website URL on file or invalid URL
+          description: No website URL on file (code no_website_url) or invalid URL (code invalid_website_url)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401":
           description: Sign in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Only organization admins can import photos (code org_admin_required)
           content:
             application/json:
               schema:
@@ -870,6 +917,12 @@ paths:
       operationId: createSampleGallery
       tags: [venues]
       summary: Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
+      description: |
+        Queues a gallery of the demo couple (DEMO_COUPLE_DIR) at this venue.
+        No credit is charged; the session is kind = sample, created_via =
+        sample, never emailed and never counted in proof or KPIs. One sample
+        may be in flight per venue, and a venue gets at most
+        MAX_SAMPLES_PER_VENUE samples that did not fail.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
       responses:
@@ -892,13 +945,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "409":
-          description: Venue has no usable space photos yet, or a sample is already rendering
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "503":
-          description: Demo couple assets are not available on this server
+          description: >-
+            The sample cannot start: venue_not_ready (space photos missing),
+            sample_in_progress, sample_limit, or demo_not_configured (no demo
+            couple photos on this server)
           content:
             application/json:
               schema:
@@ -1302,8 +1352,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Action not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "409":
-          description: Action is not pending
+          description: >-
+            Action is not pending, or the decision is refused with a code
+            (e.g. review_in_outreach for send_outreach_email approved outside
+            the Outreach studio)
           content:
             application/json:
               schema:
@@ -2235,6 +2294,16 @@ components:
               $ref: "#/components/schemas/ReadinessCheckState"
             rls:
               $ref: "#/components/schemas/ReadinessCheckState"
+        details:
+          type: object
+          description: >-
+            Reasons per check (operators or x-readiness-token only). Keys are
+            check names (env, auth, database, rls); values are human-readable
+            reasons, empty when the check is ok.
+          additionalProperties:
+            type: array
+            items:
+              type: string
 
     ReadinessCheckState:
       type: string
@@ -2287,7 +2356,7 @@ components:
 
     VenueResponse:
       type: object
-      required: [id, name, slug, plan, creditsBalance, createdAt]
+      required: [id, name, slug, plan, creditsBalance, reviewBeforeSend, createdAt]
       properties:
         id:
           type: integer
@@ -2334,6 +2403,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        reviewBeforeSend:
+          type: boolean
+          description: >-
+            When true, ready galleries wait in the dashboard for the venue to
+            send them; when false (default) they are emailed to the couple
+            automatically.
         organizationId:
           type: integer
           nullable: true
@@ -2368,6 +2443,20 @@ components:
         url:
           type: string
           format: uri
+
+    BillingCheckoutConflictResponse:
+      type: object
+      required: [error, code, url]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          enum: [subscription_exists]
+        url:
+          type: string
+          format: uri
+          description: Stripe portal session (flow subscription_update) where the plan can be changed.
 
     BillingPortalResponse:
       type: object
@@ -2413,6 +2502,9 @@ components:
           nullable: true
           maxLength: 160
           description: One line shown under the reel on the share page. Null clears it.
+        reviewBeforeSend:
+          type: boolean
+          description: Hold ready galleries for the venue to review and send instead of emailing couples automatically.
 
     OrganizationResponse:
       type: object
@@ -2460,6 +2552,14 @@ components:
             billingConfigured:
               type: boolean
               description: Whether Stripe billing is configured on this server.
+            subscriptionStatus:
+              type: string
+              nullable: true
+              enum: [active, past_due, canceled, paused]
+              description: Stripe subscription status; null without a subscription.
+            cancelAtPeriodEnd:
+              type: boolean
+              description: The subscription is set to end at the close of the current period.
         venues:
           type: array
           items:
@@ -2507,7 +2607,7 @@ components:
 
     VenuePublicResponse:
       type: object
-      required: [id, name, slug, media, isReady, bookingReady, turnstileSiteKey, missingCoverages]
+      required: [id, name, slug, media, isReady, bookingReady, turnstileSiteKey, missingCoverages, reviewBeforeSend]
       description: Couple-facing venue profile. Never exposes billing or credit balances.
       properties:
         id:
@@ -2568,6 +2668,11 @@ components:
           type: string
           nullable: true
           description: One line the venue shows under the reel on the share page.
+        reviewBeforeSend:
+          type: boolean
+          description: >-
+            True when the venue reviews each gallery before it is emailed to the
+            couple; false when galleries are emailed automatically once ready.
         uploadToken:
           type: string
           description: Short-lived venue-scoped token required for couple photo upload URL requests.
@@ -3077,7 +3182,6 @@ components:
               prospecting,
               outreach,
               campaigns,
-              growth,
               support,
               product,
               finance,
@@ -3128,6 +3232,75 @@ components:
               type: integer
             runs24h:
               type: integer
+        funnel:
+          nullable: true
+          description: Owner and prospect funnel counts (null when the loader failed).
+          allOf:
+            - $ref: "#/components/schemas/ControlOverviewFunnel"
+        trends:
+          nullable: true
+          description: KPI series from metrics snapshots (null when the loader failed).
+          allOf:
+            - $ref: "#/components/schemas/ControlOverviewTrends"
+
+    ControlOverviewFunnel:
+      type: object
+      required: [owners, prospects]
+      properties:
+        owners:
+          type: object
+          required: [signups, signups30d, activated, paid, churned]
+          properties:
+            signups: { type: integer }
+            signups30d: { type: integer }
+            activated: { type: integer }
+            paid: { type: integer }
+            churned: { type: integer }
+        prospects:
+          type: object
+          required: [total, vetted, contacted, replied, converted, unsubscribed]
+          properties:
+            total: { type: integer }
+            vetted: { type: integer }
+            contacted: { type: integer }
+            replied: { type: integer }
+            converted: { type: integer }
+            unsubscribed: { type: integer }
+
+    ControlOverviewTrends:
+      type: object
+      required: [windowDays, series]
+      properties:
+        windowDays:
+          type: integer
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlTrendSeries"
+
+    ControlTrendSeries:
+      type: object
+      required: [key, label, unit, betterWhen, points, current, previous7d, delta7d]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        unit:
+          type: string
+          enum: [count, percent, cents, rate]
+        betterWhen:
+          type: string
+          enum: [higher, lower]
+        points:
+          type: array
+          items:
+            type: object
+            required: [at, value]
+            properties:
+              at: { type: string, format: date-time }
+              value: { type: number }
+        current: { type: number, nullable: true }
+        previous7d: { type: number, nullable: true }
+        delta7d: { type: number, nullable: true }
 
     ControlAgentStatusBody:
       type: object
@@ -3291,6 +3464,12 @@ components:
         note:
           type: string
           maxLength: 500
+        reviewed:
+          type: boolean
+          description: >-
+            Set by the Outreach studio after the rendered email was on screen.
+            Approving send_outreach_email without it returns 409 with code
+            review_in_outreach.
 
     ControlActionResponse:
       type: object

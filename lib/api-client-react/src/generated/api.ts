@@ -20,6 +20,7 @@ import type {
   AddControlProspectFactBody,
   AddVenueMediaBody,
   BillingCheckoutBody,
+  BillingCheckoutConflictResponse,
   BillingCheckoutResponse,
   BillingPortalResponse,
   ControlActionDecisionBody,
@@ -201,7 +202,11 @@ export function useHealthCheck<
 }
 
 /**
- * Returns non-secret production readiness checks for deploy monitors.
+ * Returns the coarse ok/degraded map for deploy monitors. The reasons
+behind each degraded check (`details`: missing env keys, tables, hosts)
+are only included for a signed-in control-plane operator or a caller
+presenting READINESS_DETAIL_TOKEN in the x-readiness-token header.
+
  * @summary Readiness check
  */
 export const getReadinessCheckUrl = () => {
@@ -730,7 +735,7 @@ export const createOrgBillingCheckout = async (
 };
 
 export const getCreateOrgBillingCheckoutMutationOptions = <
-  TError = ErrorType<ErrorEnvelope>,
+  TError = ErrorType<ErrorEnvelope | BillingCheckoutConflictResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -772,13 +777,15 @@ export type CreateOrgBillingCheckoutMutationResult = NonNullable<
 >;
 export type CreateOrgBillingCheckoutMutationBody =
   BodyType<BillingCheckoutBody>;
-export type CreateOrgBillingCheckoutMutationError = ErrorType<ErrorEnvelope>;
+export type CreateOrgBillingCheckoutMutationError = ErrorType<
+  ErrorEnvelope | BillingCheckoutConflictResponse
+>;
 
 /**
  * @summary Start Stripe Checkout for the caller's organization
  */
 export const useCreateOrgBillingCheckout = <
-  TError = ErrorType<ErrorEnvelope>,
+  TError = ErrorType<ErrorEnvelope | BillingCheckoutConflictResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -2096,6 +2103,12 @@ export const useRecordGalleryEvent = <
 };
 
 /**
+ * Idempotent: marking an already-booked couple as booked (or an unbooked
+one as unbooked) returns the row unchanged and records no event. A
+change records a `booked`/`unbooked` gallery event and stamps
+couple_sessions.booked_at / booked_by. Any organization member may
+mark a booking.
+
  * @summary Venue marks a couple as booked (or undoes it)
  */
 export const getSetSessionBookedUrl = (slug: string, id: number) => {
@@ -2184,6 +2197,12 @@ export const useSetSessionBooked = <
 };
 
 /**
+ * Organization admins only. Fetches the homepage and up to two venue
+subpages through the SSRF-guarded fetcher, keeps at most five usable,
+distinct photos with suggested coverage roles, and stamps
+websiteImportedAt. A second import within ten minutes answers 429
+(code import_cooldown).
+
  * @summary Pull candidate space photos from the venue's own website into venue media (owner confirms/deletes afterwards)
  */
 export const getImportVenueWebsiteMediaUrl = (slug: string) => {
@@ -2275,6 +2294,12 @@ export const useImportVenueWebsiteMedia = <
 };
 
 /**
+ * Queues a gallery of the demo couple (DEMO_COUPLE_DIR) at this venue.
+No credit is charged; the session is kind = sample, created_via =
+sample, never emailed and never counted in proof or KPIs. One sample
+may be in flight per venue, and a venue gets at most
+MAX_SAMPLES_PER_VENUE samples that did not fail.
+
  * @summary Render a sample gallery of the demo couple at this venue (owner; no credit charged; kind = sample)
  */
 export const getCreateSampleGalleryUrl = (slug: string) => {

@@ -30,6 +30,7 @@ export function ownerVenueResponse(venue: Venue, org?: Organization | null) {
     incentiveText: venue.incentiveText,
     tourCardDownloadedAt: venue.tourCardDownloadedAt,
     websiteImportedAt: venue.websiteImportedAt,
+    reviewBeforeSend: venue.reviewBeforeSend,
     plan: org ? org.plan : venue.plan,
     creditsBalance: org ? org.creditsBalance : venue.creditsBalance,
     billingPeriodEnd: org ? org.billingPeriodEnd : venue.billingPeriodEnd,
@@ -127,6 +128,7 @@ export function toPublicVenue(
     websiteUrl: string | null;
     bookingUrl: string | null;
     incentiveText?: string | null;
+    reviewBeforeSend?: boolean | null;
     createdAt: Date;
   },
   media: Array<MediaCoverageRow>,
@@ -142,6 +144,8 @@ export function toPublicVenue(
     websiteUrl: venue.websiteUrl,
     bookingUrl: venue.bookingUrl,
     incentiveText: venue.incentiveText ?? null,
+    // Lets the couple page say truthfully whether the link is emailed on ready.
+    reviewBeforeSend: venue.reviewBeforeSend === true,
     createdAt: venue.createdAt,
     media,
     isReady: isVenueReady(media),

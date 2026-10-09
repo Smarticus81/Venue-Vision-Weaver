@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { OrganizationResponseOrganizationPlan } from "./organizationResponseOrganizationPlan";
+import type { OrganizationResponseOrganizationSubscriptionStatus } from "./organizationResponseOrganizationSubscriptionStatus";
 import type { TrialState } from "./trialState";
 
 export type OrganizationResponseOrganization = {
@@ -25,4 +26,8 @@ export type OrganizationResponseOrganization = {
   role?: string | null;
   /** Whether Stripe billing is configured on this server. */
   billingConfigured?: boolean;
+  /** Stripe subscription status; null without a subscription. */
+  subscriptionStatus?: OrganizationResponseOrganizationSubscriptionStatus;
+  /** The subscription is set to end at the close of the current period. */
+  cancelAtPeriodEnd?: boolean;
 };

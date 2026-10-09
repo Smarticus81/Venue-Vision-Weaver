@@ -27,4 +27,6 @@ export interface UpdateVenueBody {
    * @maxLength 160
    */
   incentiveText?: string | null;
+  /** Hold ready galleries for the venue to review and send instead of emailing couples automatically. */
+  reviewBeforeSend?: boolean;
 }

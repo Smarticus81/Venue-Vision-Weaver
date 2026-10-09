@@ -521,9 +521,14 @@ export async function getCallerOrgDbId(req: Request): Promise<number | null> {
 /**
  * Org-scoped replacement for the old requireOwnerVenue: resolves a venue by
  * slug and verifies it belongs to the caller's active organization. Applies
- * the same mutation-origin policy as before.
+ * the same mutation-origin policy as before. Returns the org context too, for
+ * routes that gate on the member's role or record who acted.
  */
-export async function requireOrgVenue(req: Request, res: Response, slug: string) {
+export async function requireOrgVenueContext(
+  req: Request,
+  res: Response,
+  slug: string,
+): Promise<{ ctx: OrgContext; venue: typeof venuesTable.$inferSelect } | null> {
   if (!requireOwnerMutationOrigin(req, res)) return null;
 
   const ctx = await requireOrg(req, res);
@@ -539,5 +544,10 @@ export async function requireOrgVenue(req: Request, res: Response, slug: string)
     return null;
   }
 
-  return venue;
+  return { ctx, venue };
+}
+
+export async function requireOrgVenue(req: Request, res: Response, slug: string) {
+  const resolved = await requireOrgVenueContext(req, res, slug);
+  return resolved ? resolved.venue : null;
 }

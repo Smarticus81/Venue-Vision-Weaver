@@ -11,6 +11,7 @@ import {
   organizationsTable,
   creditTransactionsTable,
   uploadIntentsTable,
+  renderAttemptsTable,
   type SessionCreatedVia,
 } from "@workspace/db";
 import {
@@ -91,12 +92,30 @@ const COUPLE_UNAVAILABLE_MESSAGE = "This venue isn't taking new galleries just y
 
 /* ————— Payloads ————— */
 
+/**
+ * Owner-only quality flag for a session: below target when any still was
+ * kept below the judge's bar or could not be judged, plus the number of
+ * render attempts the pipeline logged. Null before anything rendered.
+ */
+export function summarizeSessionQuality(
+  assets: ReadonlyArray<{ assetType: string; qualityReport: Record<string, unknown> | null }>,
+  attempts: number,
+): { belowTarget: boolean; attempts: number } | null {
+  const stills = assets.filter((asset) => asset.assetType === "image");
+  if (stills.length === 0 && attempts === 0) return null;
+  const belowTarget = stills.some((asset) => {
+    const status = asset.qualityReport?.judgeStatus;
+    return status === "below_target" || status === "unjudged";
+  });
+  return { belowTarget, attempts };
+}
+
 function buildSessionDetailPayload(
   session: typeof coupleSessionsTable.$inferSelect,
   venue: typeof venuesTable.$inferSelect | undefined,
   venueMedia: Array<typeof venueMediaTable.$inferSelect>,
   generatedAssets: Array<typeof generatedAssetsTable.$inferSelect>,
-  options: { includeEmail: boolean },
+  options: { includeEmail: boolean; renderAttempts?: number },
 ) {
   const base = {
     id: session.id,
@@ -125,9 +144,7 @@ function buildSessionDetailPayload(
       bookedAt: session.bookedAt,
       consentAt: session.consentAt,
       failureDetail: session.failureDetail,
-      // Render telemetry (render_attempts) belongs to the gallery pipeline
-      // workstream; null until it publishes a summary.
-      qualitySummary: null,
+      qualitySummary: summarizeSessionQuality(generatedAssets, options.renderAttempts ?? 0),
     };
   }
   return base;
@@ -734,7 +751,17 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
     .where(eq(generatedAssetsTable.sessionId, session.id))
     .orderBy(generatedAssetsTable.displayOrder);
 
-  res.json(buildSessionDetailPayload(session, venue, venueMedia, generatedAssets, { includeEmail: true }));
+  const [attempts] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(renderAttemptsTable)
+    .where(eq(renderAttemptsTable.sessionId, session.id));
+
+  res.json(
+    buildSessionDetailPayload(session, venue, venueMedia, generatedAssets, {
+      includeEmail: true,
+      renderAttempts: Number(attempts?.count ?? 0),
+    }),
+  );
 });
 
 // DELETE /sessions/:id  (owner session, organization admins only)

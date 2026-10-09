@@ -37,6 +37,8 @@ export interface VenuePublicResponse {
   missingCoverages: VenueMediaCoverage[];
   /** One line the venue shows under the reel on the share page. */
   incentiveText?: string | null;
+  /** True when the venue reviews each gallery before it is emailed to the couple; false when galleries are emailed automatically once ready. */
+  reviewBeforeSend: boolean;
   /** Short-lived venue-scoped token required for couple photo upload URL requests. */
   uploadToken?: string;
 }

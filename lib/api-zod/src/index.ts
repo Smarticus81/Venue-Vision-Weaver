@@ -76,6 +76,11 @@ import type {
   ControlExperimentEvaluation,
   ControlCampaign,
   ControlPolicy,
+  BillingCheckoutConflictResponse,
+  ControlOverviewFunnel,
+  ControlOverviewTrends,
+  ControlTrendSeries,
+  ReadinessStatusDetails,
 } from "./generated/types";
 
 // Wildcard export everything from api (explicitly overriding the merged ones below)
@@ -171,4 +176,9 @@ export type {
   ControlExperimentEvaluation,
   ControlCampaign,
   ControlPolicy,
+  BillingCheckoutConflictResponse,
+  ControlOverviewFunnel,
+  ControlOverviewTrends,
+  ControlTrendSeries,
+  ReadinessStatusDetails,
 };
