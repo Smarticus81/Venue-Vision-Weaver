@@ -318,10 +318,6 @@ export function configWarningsFor(state: SendReadiness): string[] {
   return warnings;
 }
 
-export async function configWarnings(): Promise<string[]> {
-  return configWarningsFor(await loadSendReadiness());
-}
-
 /** Pure: why the vetting state would stop (or delay) this email. */
 export function vettingWarningsFor(
   vetting: Pick<ControlProspectVetting, "status" | "score" | "expiresAt" | "summary"> | null,

@@ -52,17 +52,13 @@ export function canSpendCredits(org: TrialOrg, amount: number, now = new Date())
   return { ok: true };
 }
 
-/** Org-backed venue: time + balance check. Legacy venue (no org): venue balance only. */
+/** Trial clock + balance check against the venue's billing organization. */
 export async function assertCanSpend(venueId: number, amount: number): Promise<SpendCheck> {
   const [venue] = await db
-    .select({ organizationId: venuesTable.organizationId, creditsBalance: venuesTable.creditsBalance })
+    .select({ organizationId: venuesTable.organizationId })
     .from(venuesTable)
     .where(eq(venuesTable.id, venueId));
-  if (!venue) return { ok: false, reason: "insufficient_credits" };
-
-  if (venue.organizationId == null) {
-    return venue.creditsBalance >= amount ? { ok: true } : { ok: false, reason: "insufficient_credits" };
-  }
+  if (!venue || venue.organizationId == null) return { ok: false, reason: "insufficient_credits" };
 
   const [org] = await db
     .select({

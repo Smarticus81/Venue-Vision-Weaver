@@ -636,31 +636,21 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
   let session: typeof coupleSessionsTable.$inferSelect | null = null;
   try {
     session = await db.transaction(async (tx) => {
-      // Credits are debited from the billing organization when the venue has
-      // one; legacy venues (not yet adopted) draw from their own balance.
-      if (venue.organizationId != null) {
-        const [updatedCredits] = await tx
-          .update(organizationsTable)
-          .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${neededCredits}` })
-          .where(
-            and(
-              eq(organizationsTable.id, venue.organizationId),
-              gte(organizationsTable.creditsBalance, neededCredits),
-            ),
-          )
-          .returning({ creditsBalance: organizationsTable.creditsBalance });
-        if (!updatedCredits) {
-          return null;
-        }
-      } else {
-        const [updatedCredits] = await tx
-          .update(venuesTable)
-          .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${neededCredits}` })
-          .where(and(eq(venuesTable.id, venue.id), gte(venuesTable.creditsBalance, neededCredits)))
-          .returning({ creditsBalance: venuesTable.creditsBalance });
-        if (!updatedCredits) {
-          return null;
-        }
+      // Credits are debited from the venue's billing organization; every venue
+      // belongs to one (venues are only created inside an organization).
+      if (venue.organizationId == null) return null;
+      const [updatedCredits] = await tx
+        .update(organizationsTable)
+        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${neededCredits}` })
+        .where(
+          and(
+            eq(organizationsTable.id, venue.organizationId),
+            gte(organizationsTable.creditsBalance, neededCredits),
+          ),
+        )
+        .returning({ creditsBalance: organizationsTable.creditsBalance });
+      if (!updatedCredits) {
+        return null;
       }
 
       for (const objectKey of body.data.couplePhotoKeys) {

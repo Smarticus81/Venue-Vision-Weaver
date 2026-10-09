@@ -52,8 +52,6 @@ import { loadGuard, prospectSendsToday, type GuardState } from "./sendingHealth.
  * recipients and provider rejections fail it. Dependencies are injectable.
  */
 
-export const OUTREACH_SEND_ACTION_TYPES = ["send_prospect_email", "send_outreach_email"] as const;
-
 /** Action statuses under which the sender may deliver (approved, or claimed by the executor). */
 const SENDABLE_ACTION_STATUSES = new Set(["approved", "executing"]);
 

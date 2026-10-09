@@ -49,14 +49,6 @@ export const PARKED_HTML = `<!doctype html><html><head><title>willowhousewedding
 
 export const EMPTY_SHELL_HTML = `<!doctype html><html><head><title>Welcome</title></head><body><p>Hello. More soon.</p></body></html>`;
 
-export const NO_WEDDINGS_HTML = `<!doctype html><html lang="en"><head><title>Riverside Family Dentistry | Hudson, NY</title></head><body>
-<h1>Riverside Family Dentistry</h1>
-<img src="/images/office.jpg" alt="Our office" width="1200" height="800" />
-<p>Gentle, modern dental care for the whole family in Hudson. We offer cleanings, fillings, crowns, whitening, and emergency appointments the same day whenever we can. New patients are always welcome, and we accept most insurance plans.</p>
-<p>Our team has served the Hudson Valley for twenty years. Call the office to schedule a visit, ask about financing, or request your records. Parking is free behind the building and the office is wheelchair accessible.</p>
-<footer><p>Riverside Family Dentistry · 88 Warren Street, Hudson, NY 12534 · (518) 555-0199</p></footer>
-</body></html>`;
-
 export const CANADA_HTML = `<!doctype html><html lang="en"><head><title>Maple Hall Weddings</title>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"EventVenue","name":"Maple Hall","telephone":"+1 416-555-0133","address":{"@type":"PostalAddress","streetAddress":"12 Queen Street West","addressLocality":"Toronto","addressRegion":"ON","postalCode":"M5V 2T6","addressCountry":"CA"}}</script>
 </head><body>
@@ -111,12 +103,6 @@ export const TLS_OK: TlsInfo = {
   error: null,
   servername: "www.willowhouseweddings.test",
 };
-export const TLS_EXPIRED: TlsInfo = {
-  ...TLS_OK,
-  ok: false,
-  validFrom: new Date(NOW.getTime() - 120 * DAY_MS),
-  validTo: new Date(NOW.getTime() - 5 * DAY_MS),
-};
 
 export const PLACES_MATCH = {
   places: [
@@ -136,7 +122,6 @@ export const PLACES_MATCH = {
 export const PLACES_CLOSED = {
   places: [{ ...PLACES_MATCH.places[0]!, businessStatus: "CLOSED_PERMANENTLY" }],
 };
-export const PLACES_NONE = { places: [] };
 
 /* ————— Builders ————— */
 

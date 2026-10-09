@@ -275,11 +275,6 @@ export async function buildPublicConfig(options: BuildPublicConfigOptions | numb
   return value;
 }
 
-/** Drop the cached config (tests and env reloads). */
-export function resetPublicConfigCache(): void {
-  cached = null;
-}
-
 function escapeAttribute(text: string): string {
   return text
     .replace(/&/g, "&amp;")

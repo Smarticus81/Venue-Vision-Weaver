@@ -87,10 +87,6 @@ function hasSupabaseStorage(env: EnvLike): boolean {
   return hasRealValue(env, "SUPABASE_URL") && hasRealValue(env, "SUPABASE_SERVICE_ROLE_KEY");
 }
 
-function hasGcsStorage(env: EnvLike): boolean {
-  return hasRealValue(env, "PRIVATE_OBJECT_DIR") && hasRealValue(env, "PUBLIC_OBJECT_SEARCH_PATHS");
-}
-
 function supabaseUrlError(env: EnvLike): string | null {
   const raw = env.SUPABASE_URL?.trim() ?? "";
   if (!raw) return null;
@@ -374,10 +370,8 @@ export function validateProductionEnvironment(env: EnvLike = process.env): strin
   const appUrlError = appBaseUrlError(env);
   if (appUrlError) errors.push(appUrlError);
 
-  if (!hasSupabaseStorage(env) && !hasGcsStorage(env)) {
-    errors.push(
-      "Configure either Supabase storage (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) or GCS storage (PRIVATE_OBJECT_DIR and PUBLIC_OBJECT_SEARCH_PATHS)",
-    );
+  if (!hasSupabaseStorage(env)) {
+    errors.push("Configure Supabase storage (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)");
   }
   const supabaseError = supabaseUrlError(env);
   if (supabaseError) errors.push(supabaseError);

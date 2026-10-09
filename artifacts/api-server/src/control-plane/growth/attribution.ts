@@ -380,8 +380,3 @@ export async function maybeRunAttribution(now: Date = new Date()): Promise<numbe
   lastSweepAt = now.getTime();
   return attributeSignups();
 }
-
-/** Test seam: reset the hourly gate. */
-export function resetAttributionClock(): void {
-  lastSweepAt = 0;
-}

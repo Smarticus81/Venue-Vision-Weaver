@@ -45,13 +45,6 @@ export function providerBackoffRemainingMs(now: Date = new Date()): number {
   return Math.max(0, providerBackoffUntil - now.getTime());
 }
 
-/** Test seam. */
-export function resetRunnerState(): void {
-  activeRunId = null;
-  consecutiveProviderFailures = 0;
-  providerBackoffUntil = 0;
-}
-
 /* ————— Briefing ————— */
 
 export interface RecentRun {

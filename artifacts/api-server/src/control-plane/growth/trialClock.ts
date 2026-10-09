@@ -309,9 +309,3 @@ export async function runTrialClock(now: Date = new Date()): Promise<TrialClockR
   lastRunAt = now.getTime();
   return sweepTrialClock(now);
 }
-
-/** Test seam. */
-export function resetTrialClock(): void {
-  lastRunAt = 0;
-  skippedNoRecipient.clear();
-}

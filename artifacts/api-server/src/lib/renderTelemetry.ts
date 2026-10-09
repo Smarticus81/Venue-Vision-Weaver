@@ -1,4 +1,3 @@
-import { asc, eq } from "drizzle-orm";
 import {
   db,
   renderAttemptsTable,
@@ -214,26 +213,4 @@ export function summarizeRenderCost(rows: RenderAttemptRow[], env: EnvLike = pro
     unpricedModels,
     byModel,
   };
-}
-
-/** Measured COGS for one session (finance agent / owner detail). */
-export async function sessionCostSummary(
-  sessionId: number,
-  env: EnvLike = process.env,
-): Promise<RenderCostSummary> {
-  const rows = await db
-    .select({
-      sceneId: renderAttemptsTable.sceneId,
-      attempt: renderAttemptsTable.attempt,
-      model: renderAttemptsTable.model,
-      fallbackUsed: renderAttemptsTable.fallbackUsed,
-      inputTokens: renderAttemptsTable.inputTokens,
-      outputTokens: renderAttemptsTable.outputTokens,
-      latencyMs: renderAttemptsTable.latencyMs,
-      outcome: renderAttemptsTable.outcome,
-    })
-    .from(renderAttemptsTable)
-    .where(eq(renderAttemptsTable.sessionId, sessionId))
-    .orderBy(asc(renderAttemptsTable.createdAt));
-  return summarizeRenderCost(rows, env);
 }

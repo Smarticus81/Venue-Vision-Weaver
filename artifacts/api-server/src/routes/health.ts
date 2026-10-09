@@ -31,9 +31,7 @@ function hasValue(key: string): boolean {
 }
 
 function storageConfigured(): boolean {
-  const hasSupabase = hasValue("SUPABASE_URL") && hasValue("SUPABASE_SERVICE_ROLE_KEY");
-  const hasGcs = hasValue("PRIVATE_OBJECT_DIR") && hasValue("PUBLIC_OBJECT_SEARCH_PATHS");
-  return hasSupabase || hasGcs;
+  return hasValue("SUPABASE_URL") && hasValue("SUPABASE_SERVICE_ROLE_KEY");
 }
 
 function productionImageModelChainReady(): boolean {

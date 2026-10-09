@@ -13,10 +13,6 @@ import { logger } from "./logger.js";
 export const SHARE_PAGE_EVENT_TYPES = ["shared", "cta_click", "download"] as const satisfies readonly GalleryEventType[];
 export type SharePageEventType = (typeof SHARE_PAGE_EVENT_TYPES)[number];
 
-export function isSharePageEventType(value: unknown): value is SharePageEventType {
-  return typeof value === "string" && (SHARE_PAGE_EVENT_TYPES as readonly string[]).includes(value);
-}
-
 export interface SessionGalleryStats {
   /** First "sent" event (gallery emailed to the couple). */
   emailedAt: Date | null;

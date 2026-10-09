@@ -9,7 +9,6 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, gte } from "drizzle-orm";
 import { logger } from "./logger.js";
-import { assertCanSpend } from "./trial.js";
 import { planCreditRolloverCap } from "./stripe.js";
 
 const CREDITS_STANDARD = 1;
@@ -29,35 +28,11 @@ export function creditsForSession(): number {
   return CREDITS_STANDARD;
 }
 
-/**
- * Billing lives on the organization. A venue with an organizationId draws
- * from the org balance; a legacy venue (no org yet) still draws from its own
- * venue-level balance until an owner sign-in adopts it.
- */
-async function resolveVenueOrgId(venueId: number): Promise<number | null> {
-  const [row] = await db
-    .select({ organizationId: venuesTable.organizationId })
-    .from(venuesTable)
-    .where(eq(venuesTable.id, venueId));
-  return row?.organizationId ?? null;
-}
-
 async function getOrgCreditsBalance(orgId: number): Promise<number> {
   const [row] = await db
     .select({ creditsBalance: organizationsTable.creditsBalance })
     .from(organizationsTable)
     .where(eq(organizationsTable.id, orgId));
-  return row?.creditsBalance ?? 0;
-}
-
-/** Effective spendable balance for a venue (org balance when adopted). */
-export async function getVenueCreditsBalance(venueId: number): Promise<number> {
-  const orgId = await resolveVenueOrgId(venueId);
-  if (orgId != null) return getOrgCreditsBalance(orgId);
-  const [row] = await db
-    .select({ creditsBalance: venuesTable.creditsBalance })
-    .from(venuesTable)
-    .where(eq(venuesTable.id, venueId));
   return row?.creditsBalance ?? 0;
 }
 
@@ -289,17 +264,13 @@ export async function refundCreditsForSession(sessionId: number): Promise<boolea
       .where(eq(venuesTable.id, session.venueId));
     const orgId = venueRow?.organizationId ?? null;
 
-    if (orgId != null) {
-      await tx
-        .update(organizationsTable)
-        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} + ${session.creditsCharged}` })
-        .where(eq(organizationsTable.id, orgId));
-    } else {
-      await tx
-        .update(venuesTable)
-        .set({ creditsBalance: sql`${venuesTable.creditsBalance} + ${session.creditsCharged}` })
-        .where(eq(venuesTable.id, session.venueId));
-    }
+    // Every venue belongs to an organization; without one there is no
+    // balance to return the credit to, so the transaction rolls back.
+    if (orgId == null) throw new Error(`Venue ${session.venueId} has no billing organization to refund.`);
+    await tx
+      .update(organizationsTable)
+      .set({ creditsBalance: sql`${organizationsTable.creditsBalance} + ${session.creditsCharged}` })
+      .where(eq(organizationsTable.id, orgId));
 
     await tx.insert(creditTransactionsTable).values({
       organizationId: orgId,
@@ -348,15 +319,4 @@ export async function countVenueSessionsToday(venueId: number): Promise<number> 
       ),
     );
   return row?.count ?? 0;
-}
-
-/**
- * Thin wrapper over the trial clock + balance check in lib/trial.ts. Route
- * handlers that need the reason (402 code) call assertCanSpend directly.
- */
-export async function hasSufficientCredits(
-  venueId: number,
-  amount: number,
-): Promise<boolean> {
-  return (await assertCanSpend(venueId, amount)).ok;
 }

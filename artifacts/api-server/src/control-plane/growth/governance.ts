@@ -164,8 +164,3 @@ export async function runRetention(now: Date = new Date(), force = false): Promi
   }
   return result;
 }
-
-/** Test seam. */
-export function resetRetentionClock(): void {
-  lastRetentionDay = null;
-}
