@@ -28,8 +28,12 @@ export function UpgradePanel({
   const pack = cards.find((c) => c.id === "credit_pack")!;
   const starter = cards.find((c) => c.id === "starter")!;
   const growth = cards.find((c) => c.id === "growth")!;
-  const primaryPlan = copy.fix === "plan" ? starter : pack;
-  const secondaryPlan = copy.fix === "plan" ? pack : starter;
+  // A Starter org that runs dry is offered a pack and the step up to Growth
+  // (through the portal), never its own plan again.
+  const plan = ctx.organization.plan;
+  const primaryPlan = copy.fix === "plan" && plan !== "starter" && plan !== "growth" ? starter : pack;
+  const secondaryPlan =
+    plan === "growth" ? null : plan === "starter" ? growth : primaryPlan.id === "starter" ? pack : starter;
   const label = ctx.publicConfig.pricing.label;
 
   return (
@@ -40,7 +44,9 @@ export function UpgradePanel({
       </div>
       <div className="upgrade-panel-actions">
         <ActionButton ctx={ctx} product={primaryPlan.id} variant="brand" source={source} price={`${primaryPlan.price} · ${primaryPlan.credits}`} />
-        <ActionButton ctx={ctx} product={secondaryPlan.id} variant="outline" source={source} price={`${secondaryPlan.price} · ${secondaryPlan.credits}`} />
+        {secondaryPlan ? (
+          <ActionButton ctx={ctx} product={secondaryPlan.id} variant="outline" source={source} price={`${secondaryPlan.price} · ${secondaryPlan.credits}`} />
+        ) : null}
         {!compact ? (
           <Button type="button" variant="ghost" onClick={() => ctx.goTo("billing")} data-testid="upgrade-see-plans">
             Compare plans
@@ -62,7 +68,7 @@ function ActionButton({
   source,
   price,
 }: {
-  ctx: { organization: DashboardContext["organization"]; billing: BillingActions };
+  ctx: { organization: DashboardContext["organization"]; billing: BillingActions; publicConfig: DashboardContext["publicConfig"] };
   product: "starter" | "growth" | "credit_pack";
   variant: "brand" | "outline";
   source: string;
@@ -73,6 +79,7 @@ function ActionButton({
     plan: ctx.organization.plan,
     isAdmin: ctx.billing.isAdmin,
     billingConfigured: ctx.billing.billingConfigured,
+    packCredits: ctx.publicConfig.pricing.creditPackCredits,
   });
   const pending = ctx.billing.checkoutPending === product;
   return (
