@@ -1,5 +1,5 @@
-import { db, coupleSessionsTable, coupleMediaTable } from "@workspace/db";
-import { and, eq, inArray, isNull, lt } from "drizzle-orm";
+import { db, coupleSessionsTable, coupleMediaTable, generatedAssetsTable } from "@workspace/db";
+import { and, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { ObjectStorageService } from "./objectStorage.js";
 import { readRetentionDays } from "./publicConfig.js";
@@ -8,9 +8,12 @@ import { readRetentionDays } from "./publicConfig.js";
  * Couple source-photo retention (funnel-ux.md 10.8, orchestrator consent
  * rules): the photos a couple uploads are deleted COUPLE_PHOTO_RETENTION_DAYS
  * after their gallery was delivered, and couple_sessions.source_photos_deleted_at
- * records that it happened. Generated galleries are untouched. Sessions that
- * never reached "ready" keep their photos until the owner deletes the session
- * or the orphan cleanup in index.ts refunds and removes them.
+ * records that it happened. Delivered (ready) galleries are untouched.
+ * Sessions that never reached "ready" (failed, or stuck and never reaped) are
+ * swept on the same window, keyed on completed_at or else created_at: their
+ * couple photos AND their generated frames (kept only for a retry, never
+ * delivered, and showing the couple's likeness) are deleted, and
+ * source_photos_deleted_at is stamped so a later requeue is refused.
  */
 
 const DAY_MS = 86_400_000;
@@ -21,14 +24,34 @@ const FIRST_SWEEP_DELAY_MS = 90_000;
 export interface RetentionCandidate {
   sessionId: number;
   objectKeys: string[];
+  /** Never-delivered session: its generated frames are deleted too (and listed in objectKeys). */
+  purgeGenerated?: boolean;
 }
 
 export interface RetentionStore {
-  /** Ready sessions delivered before `cutoff` whose source photos are still stored. */
+  /**
+   * Sessions whose source photos are still stored and that are past the
+   * window: ready ones delivered before `cutoff`, and never-ready ones
+   * (failed, stuck) that ended, or were created, before `cutoff`.
+   */
   listDue(cutoff: Date, limit: number): Promise<RetentionCandidate[]>;
   deleteObject(objectKey: string): Promise<void>;
-  /** Remove the couple_media rows and stamp source_photos_deleted_at in one step. */
-  markDeleted(sessionId: number, deletedAt: Date): Promise<void>;
+  /** Remove the couple_media rows (and generated_assets when purging) and stamp source_photos_deleted_at in one step. */
+  markDeleted(sessionId: number, deletedAt: Date, options?: { purgeGenerated?: boolean }): Promise<void>;
+}
+
+/** Where clause for listDue: ready past delivery + window, or never-ready past end/creation + window. */
+export function retentionDueWhere(cutoff: Date) {
+  return and(
+    isNull(coupleSessionsTable.sourcePhotosDeletedAt),
+    or(
+      and(eq(coupleSessionsTable.status, "ready"), lt(coupleSessionsTable.completedAt, cutoff)),
+      and(
+        ne(coupleSessionsTable.status, "ready"),
+        lt(sql`coalesce(${coupleSessionsTable.completedAt}, ${coupleSessionsTable.createdAt})`, cutoff),
+      ),
+    ),
+  );
 }
 
 export interface RetentionSweepResult {
@@ -70,7 +93,7 @@ export async function runPhotoRetentionSweep(
       }
     }
     if (failed) continue;
-    await store.markDeleted(candidate.sessionId, now);
+    await store.markDeleted(candidate.sessionId, now, { purgeGenerated: candidate.purgeGenerated === true });
     result.sessionsCleared += 1;
   }
   return result;
@@ -80,31 +103,41 @@ export function createDbRetentionStore(storage = new ObjectStorageService()): Re
   return {
     async listDue(cutoff, limit) {
       const sessions = await db
-        .select({ id: coupleSessionsTable.id })
+        .select({ id: coupleSessionsTable.id, status: coupleSessionsTable.status })
         .from(coupleSessionsTable)
-        .where(
-          and(
-            eq(coupleSessionsTable.status, "ready"),
-            isNull(coupleSessionsTable.sourcePhotosDeletedAt),
-            lt(coupleSessionsTable.completedAt, cutoff),
-          ),
-        )
-        .orderBy(coupleSessionsTable.completedAt)
+        .where(retentionDueWhere(cutoff))
+        .orderBy(sql`coalesce(${coupleSessionsTable.completedAt}, ${coupleSessionsTable.createdAt})`)
         .limit(limit);
       if (sessions.length === 0) return [];
       const ids = sessions.map((row) => row.id);
+      const purgeIds = sessions.filter((row) => row.status !== "ready").map((row) => row.id);
       const media = await db
         .select({ sessionId: coupleMediaTable.sessionId, objectKey: coupleMediaTable.objectKey })
         .from(coupleMediaTable)
         .where(inArray(coupleMediaTable.sessionId, ids));
       const byId = new Map<number, string[]>(ids.map((id) => [id, []]));
       for (const row of media) byId.get(row.sessionId)?.push(row.objectKey);
-      return ids.map((sessionId) => ({ sessionId, objectKeys: byId.get(sessionId) ?? [] }));
+      if (purgeIds.length > 0) {
+        const frames = await db
+          .select({ sessionId: generatedAssetsTable.sessionId, objectKey: generatedAssetsTable.objectKey })
+          .from(generatedAssetsTable)
+          .where(inArray(generatedAssetsTable.sessionId, purgeIds));
+        for (const row of frames) byId.get(row.sessionId)?.push(row.objectKey);
+      }
+      const purge = new Set(purgeIds);
+      return ids.map((sessionId) => ({
+        sessionId,
+        objectKeys: byId.get(sessionId) ?? [],
+        purgeGenerated: purge.has(sessionId),
+      }));
     },
     deleteObject: (objectKey) => storage.deleteObjectEntity(objectKey),
-    async markDeleted(sessionId, deletedAt) {
+    async markDeleted(sessionId, deletedAt, options = {}) {
       await db.transaction(async (tx) => {
         await tx.delete(coupleMediaTable).where(eq(coupleMediaTable.sessionId, sessionId));
+        if (options.purgeGenerated) {
+          await tx.delete(generatedAssetsTable).where(eq(generatedAssetsTable.sessionId, sessionId));
+        }
         await tx
           .update(coupleSessionsTable)
           .set({ sourcePhotosDeletedAt: deletedAt })

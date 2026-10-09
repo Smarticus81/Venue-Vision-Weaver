@@ -12,7 +12,7 @@ import {
   type AgentAction,
   type ActionRiskLevel,
 } from "@workspace/db";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { grantCreditsToOrg } from "../lib/credits.js";
 import { sendRawEmail } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
@@ -376,11 +376,15 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
             and(
               eq(coupleSessionsTable.id, params.sessionId),
               eq(coupleSessionsTable.status, "failed"),
+              // Past retention the couple's photos are gone; there is nothing to rerun.
+              isNull(coupleSessionsTable.sourcePhotosDeletedAt),
             ),
           )
           .returning({ id: coupleSessionsTable.id, venueId: coupleSessionsTable.venueId });
         if (!updated) {
-          throw new Error(`Session ${params.sessionId} is not in a failed state (or does not exist).`);
+          throw new Error(
+            `Session ${params.sessionId} is not in a failed state, its photos were deleted after the retention window, or it does not exist.`,
+          );
         }
         const [venue] = await tx
           .select({ organizationId: venuesTable.organizationId })

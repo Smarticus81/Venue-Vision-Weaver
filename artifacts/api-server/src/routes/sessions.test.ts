@@ -171,3 +171,34 @@ test("gallery recovery matches the address exactly (lower(email) = $1), never wi
   assert.ok(query.params.includes("a_b%c@example.com"));
   assert.ok(query.params.includes("couple"), "only couple sessions are recoverable, never samples");
 });
+
+test("retention sweeps never-ready (failed, stuck) sessions too, and purges their generated frames", async () => {
+  const retention = await import("../lib/photoRetention.js");
+  const { db, coupleSessionsTable } = await import("@workspace/db");
+  const cutoff = new Date("2026-09-01T00:00:00Z");
+  const query = db.select({ id: coupleSessionsTable.id }).from(coupleSessionsTable).where(retention.retentionDueWhere(cutoff)).toSQL();
+  assert.match(query.sql, /coalesce\("couple_sessions"\."completed_at", "couple_sessions"\."created_at"\)/);
+  assert.match(query.sql, /"couple_sessions"\."status" <> \$\d/);
+  assert.match(query.sql, /"couple_sessions"\."source_photos_deleted_at" is null/);
+
+  const marked: Array<[number, boolean]> = [];
+  const result = await retention.runPhotoRetentionSweep(
+    {
+      listDue: async () => [
+        { sessionId: 1, objectKeys: ["/objects/uploads/a"] },
+        { sessionId: 2, objectKeys: ["/objects/uploads/b", "/objects/generated/frame"], purgeGenerated: true },
+      ],
+      deleteObject: async () => {},
+      markDeleted: async (sessionId, _at, options) => {
+        marked.push([sessionId, options?.purgeGenerated === true]);
+      },
+    },
+    { now: new Date("2026-10-01T00:00:00Z"), retentionDays: 30 },
+  );
+  assert.equal(result.sessionsCleared, 2);
+  assert.equal(result.objectsDeleted, 3);
+  assert.deepEqual(marked, [
+    [1, false],
+    [2, true],
+  ]);
+});
