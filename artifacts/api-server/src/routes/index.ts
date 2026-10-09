@@ -11,6 +11,7 @@ import controlPlaneRouter from "./controlPlane";
 import controlProspectsRouter from "./controlProspects";
 import controlGrowthRouter from "./controlGrowth";
 import outreachRouter from "./outreach";
+import operatorAccessRouter from "./operatorAccess";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(controlPlaneRouter); // overview, agents, runs, actions, tasks, audit
 router.use(controlProspectsRouter); // prospects, outreach emails, vetting, research
 router.use(controlGrowthRouter); // /control/growth/*, /control/experiments*, /control/digest/*
 router.use(outreachRouter);
+router.use(operatorAccessRouter); // GET /operator/access (shows the Control link)
 
 export default router;

@@ -1260,6 +1260,33 @@ try {
         );
       }
     }
+    const operatorAccessSource = fs.readFileSync(
+      new URL("../../artifacts/api-server/src/routes/operatorAccess.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(
+      operatorAccessSource,
+      /res\.json\(\{ operator: await isOperatorRequest\(req\) \}\)/,
+      "GET /operator/access answers only a boolean from the same allowlist check as the console",
+    );
+    const actionsSource = fs.readFileSync(
+      new URL("../../artifacts/api-server/src/control-plane/actions.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(
+      actionsSource,
+      /update_policy: \{[\s\S]*?alwaysRequiresApproval: true/,
+      "update_policy always waits for an operator, so agents cannot loosen their own guardrails in autonomous mode",
+    );
+    const studioSource = fs.readFileSync(
+      new URL("../../artifacts/api-server/src/control-plane/outreach/studio.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(
+      studioSource,
+      /forceApproval: input\.actor\.startsWith\("operator:"\)/,
+      "an operator's hand-made draft waits for that operator's review even in autonomous mode",
+    );
   }
   {
     const sessionsSource = fs.readFileSync(

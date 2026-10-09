@@ -1,10 +1,10 @@
 import { db, controlAgentsTable, agentRunsTable, agentActionsTable } from "@workspace/db";
-import { and, asc, eq, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { AGENT_DEFINITIONS, AGENT_KEYS } from "./agents.js";
 import { ensurePolicyDefaults, getPolicy, setPolicy } from "./policies.js";
 import { snapshotMetrics, latestSnapshotAgeMinutes, latestGrowthSnapshot, type MetricsSnapshot } from "./metrics.js";
-import { ACTION_CATALOG, executeAction, recoverStaleExecutingActions } from "./actions.js";
+import { ACTION_CATALOG, DEFERRED_RETRY_MINUTES, executeAction, recoverStaleExecutingActions } from "./actions.js";
 import { startAgentRun, isRunInProgress, providerBackoffRemainingMs } from "./runner.js";
 import { controlPlaneAiConfigured } from "./grok.js";
 import { runAdaptationRules } from "./growth/adaptation.js";
@@ -89,24 +89,35 @@ async function failOrphanedRuns(): Promise<void> {
 }
 
 /**
- * Execute operator-approved actions that have not run yet. Only rows whose
- * approval is at least two minutes old are picked up: decideAction and
- * proposeAction execute inline right after approving, so a fresh row is
- * normally already running in another call stack. Rows in "executing" (the
- * atomic claim the executor takes) are never selected, so an action can
- * never run twice.
+ * Approved rows the drain may run now. A fresh approval waits two minutes:
+ * decideAction and proposeAction execute inline right after approving, and
+ * an outreach email the studio leaves for the drain gets its cancel window.
+ * A row that was deferred before (error set; autonomous retry) waits
+ * DEFERRED_RETRY_MINUTES from its last attempt instead.
+ */
+export function drainableActionsWhere(now: Date) {
+  const cutoff = drainCutoff(now);
+  const retryCutoff = drainCutoff(now, DEFERRED_RETRY_MINUTES);
+  return and(
+    eq(agentActionsTable.status, "approved"),
+    or(
+      and(isNull(agentActionsTable.error), lt(agentActionsTable.decidedAt, cutoff)),
+      and(isNotNull(agentActionsTable.error), lt(agentActionsTable.decidedAt, retryCutoff)),
+      and(isNull(agentActionsTable.decidedAt), lt(agentActionsTable.createdAt, cutoff)),
+    ),
+  );
+}
+
+/**
+ * Execute approved actions that have not run yet (see drainableActionsWhere).
+ * Rows in "executing" (the atomic claim the executor takes) are never
+ * selected, so an action can never run twice.
  */
 async function drainApprovedActions(now: Date): Promise<void> {
-  const cutoff = drainCutoff(now);
   const approved = await db
     .select({ id: agentActionsTable.id })
     .from(agentActionsTable)
-    .where(
-      and(
-        eq(agentActionsTable.status, "approved"),
-        or(lt(agentActionsTable.decidedAt, cutoff), and(isNull(agentActionsTable.decidedAt), lt(agentActionsTable.createdAt, cutoff))),
-      ),
-    )
+    .where(drainableActionsWhere(now))
     .orderBy(asc(agentActionsTable.createdAt))
     .limit(DRAIN_BATCH);
   for (const action of approved) {

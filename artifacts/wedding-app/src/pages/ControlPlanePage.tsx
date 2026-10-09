@@ -257,6 +257,9 @@ function ControlConsole() {
             <span className="mono-label truncate text-muted-foreground">Control plane</span>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <Link href="/dashboard" className="mono-label hover:text-foreground">
+              Dashboard
+            </Link>
             <span className="hidden sm:inline">{overview.operatorEmail}</span>
             <span
               className={cn(

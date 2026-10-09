@@ -222,7 +222,7 @@ export async function sendOutreachEmail(
   const actionStatus = await deps.loadActionStatus(email.actionId);
   if (!actionStatus || !SENDABLE_ACTION_STATUSES.has(actionStatus)) {
     throw new Error(
-      `Outreach email ${emailId} cannot send: its action #${email.actionId} is "${actionStatus ?? "missing"}", not approved by an operator.`,
+      `Outreach email ${emailId} cannot send: its action #${email.actionId} is "${actionStatus ?? "missing"}", not approved.`,
     );
   }
 

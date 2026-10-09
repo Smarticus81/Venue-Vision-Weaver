@@ -247,6 +247,7 @@ export * from "./listControlTasksParams";
 export * from "./listControlTasksStatus";
 export * from "./listGalleryStylesResponse";
 export * from "./listVenueMediaResponse";
+export * from "./operatorAccessResponse";
 export * from "./organizationResponse";
 export * from "./organizationResponseOrganization";
 export * from "./organizationResponseOrganizationPlan";

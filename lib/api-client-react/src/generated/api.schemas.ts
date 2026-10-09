@@ -51,6 +51,10 @@ export interface ReadinessStatus {
   details?: ReadinessStatusDetails;
 }
 
+export interface OperatorAccessResponse {
+  operator: boolean;
+}
+
 export interface ErrorEnvelope {
   error: string;
   /** Machine-readable reason, e.g. trial_expired, insufficient_credits, no_active_organization. */

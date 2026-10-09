@@ -29,12 +29,14 @@ import { ActionButton, Card, EmptyState, Pill, TabLoading, apiErrorMessage, fmt 
 import { VettingBadge } from "./VettingBadge";
 
 /**
- * Outreach studio: the only place a prospect email is approved. Operators
+ * Outreach studio. In autonomous mode agent-drafted emails send after a
+ * two-minute hold and can be cancelled here until then; in supervised mode
+ * this is the only place a prospect email is approved. Operators
  * review each agent-drafted venue email with the real rendering
  * (desktop/mobile, light/dark), the venue's vetting, the verified facts the
  * copy cites, the photos and where they came from. They can edit, swap or
  * drop images, regenerate, and approve (which sends through the governed
- * action, marked as reviewed) or reject. Nothing here sends on its own.
+ * action, marked as reviewed) or reject.
  *
  * Keyboard: j / k move to the next / previous email in the list.
  */
@@ -463,6 +465,15 @@ function EmailReviewBody({
               </ActionButton>
               <ActionButton tone="danger" disabled={busy} onClick={() => onDecide("reject", note)}>
                 Reject
+              </ActionButton>
+            </div>
+          ) : email.status === "draft" && action?.status === "approved" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                {email.lastError ? `Waiting to retry: ${email.lastError}` : "Sending in about two minutes."}
+              </p>
+              <ActionButton tone="danger" disabled={busy} onClick={() => onDecide("reject", "cancelled before sending")}>
+                Cancel send
               </ActionButton>
             </div>
           ) : action?.decidedBy ? (

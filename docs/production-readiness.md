@@ -135,7 +135,9 @@ overhaul) and tick each one off.
    "superseded by outreach studio" (decided by `system:retirement`). Check the
    queue is clean after the first boot.
 5. **Set the operator and contact values.** `CONTROL_PLANE_OPERATOR_EMAILS`
-   (required; the console fails closed without it), `PUBLIC_CONTACT_EMAIL`
+   (required; the console fails closed without it; set it to
+   `tmusoni@thinkertons.com`, whose verified Clerk email then sees a Control
+   button in the dashboard top bar and site header — nobody else does), `PUBLIC_CONTACT_EMAIL`
    (the "Email us" and founding-venue address), `PRICING_CURRENCY`,
    `PRICING_STARTER_MONTHLY`, `PRICING_GROWTH_MONTHLY`, `PRICING_CREDIT_PACK`,
    `PRICING_LABEL`, `TRIAL_DAYS`, and `PUBLIC_FOUNDING_SLOTS_LEFT` /
@@ -189,8 +191,15 @@ overhaul) and tick each one off.
 11. **Ramp.** Start outreach at 5-10 sends a day per mailbox
     (`max_prospect_emails_per_day` in `/control` policies) and keep an eye on
     the deliverability numbers on the Growth tab (bounce rate under 4%,
-    complaints under 0.08%). Lifecycle emails to trial venues wait for
-    approval until the `lifecycle_email_auto_send` policy is switched on.
+    complaints under 0.08%). The control plane runs autonomously by default
+    (`autonomous_mode` policy, the "autonomous / supervised" switch in the
+    `/control` header): agents' emails, campaign launches and credit grants
+    execute without approval inside the caps, kill switches, vetting and
+    send-time checks; prospect emails wait two minutes and can be cancelled
+    in Outreach; policy changes always wait for an operator. Before the first
+    autonomous day, confirm the caps, set `OUTREACH_POSTAL_ADDRESS` and
+    `OUTREACH_REPLY_TO`, and read the first sends in Outreach. Switch to
+    supervised to review every action again.
 12. **Demo couple photos (optional).** "Render a sample" answers
     `409 demo_not_configured` until two or three consented demo couple photos
     are in `lib/brand/assets/demo-couple` (committed before the image is

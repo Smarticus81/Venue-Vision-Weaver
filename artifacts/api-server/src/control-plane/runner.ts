@@ -18,7 +18,7 @@ import { runDeadlineMs } from "./growth/config.js";
 import { agentRunGate, backoffMs, isRetryableProviderError } from "./growth/governance.js";
 import { GUIDANCE_AGENT_KEYS, loadSegmentGuidance, renderGuidanceBlock } from "./growth/guidance.js";
 import { baseDailyCap, effectiveDailyCap, loadGuard } from "./outreach/sendingHealth.js";
-import { getPolicyNumber } from "./policies.js";
+import { getPolicyBoolean, getPolicyNumber } from "./policies.js";
 
 const MAX_SUMMARY_CHARS = 8000;
 const RECENT_RUNS_IN_BRIEFING = 5;
@@ -62,6 +62,8 @@ export interface BriefingParts {
   recentRuns: RecentRun[];
   openTasks: Array<{ id: number; title: string; priority: string; status: string }>;
   pendingActions: number;
+  /** Autonomous mode (default true): proposals execute without operator approval. */
+  autonomous?: boolean;
   /** Rendered GROWTH GUIDANCE block (growth-loop.md 11.4) or null for agents outside the revenue loop. */
   guidanceBlock: string | null;
 }
@@ -99,6 +101,9 @@ export function composeBriefing(parts: BriefingParts): string {
   lines.push(
     "",
     parts.openTasks.length > 0 ? `YOUR OPEN TASKS (do not duplicate): ${JSON.stringify(parts.openTasks)}` : "You have no open tasks.",
+    parts.autonomous === false
+      ? "MODE: supervised. Medium/high-risk proposals wait for an operator."
+      : "MODE: autonomous. Your proposals execute immediately within the caps, kill switches, vetting and send-time checks (prospect emails after a two-minute hold); only update_policy waits for an operator. Act only on evidence you would defend.",
     `You have ${parts.pendingActions} action proposal(s) still awaiting operator approval — do not re-propose the same effect.`,
     "",
     "Investigate with your tools as needed, take governed actions where justified, and finish with your operator report.",
@@ -124,7 +129,7 @@ async function loadGuidanceBlock(definition: AgentDefinition): Promise<string | 
 }
 
 async function buildRunBriefing(definition: AgentDefinition, now: Date): Promise<string> {
-  const [metrics, recentRuns, openTasks, [pendingCount], guidanceBlock] = await Promise.all([
+  const [metrics, recentRuns, openTasks, [pendingCount], guidanceBlock, autonomous] = await Promise.all([
     computeBusinessMetrics(),
     db
       .select({
@@ -154,6 +159,7 @@ async function buildRunBriefing(definition: AgentDefinition, now: Date): Promise
       .from(agentActionsTable)
       .where(and(eq(agentActionsTable.agentKey, definition.key), eq(agentActionsTable.status, "pending"))),
     loadGuidanceBlock(definition),
+    getPolicyBoolean("autonomous_mode", "enabled", true),
   ]);
 
   return composeBriefing({
@@ -163,6 +169,7 @@ async function buildRunBriefing(definition: AgentDefinition, now: Date): Promise
     recentRuns,
     openTasks,
     pendingActions: pendingCount?.total ?? 0,
+    autonomous,
     guidanceBlock,
   });
 }

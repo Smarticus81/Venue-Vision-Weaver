@@ -18,8 +18,8 @@ import { resolveLifecycleRecipient } from "./lifecycleRecipient.js";
  * Trial clock sweep (growth-loop.md 7.4). Spending is blocked by time through
  * lib/trial.ts the moment trial_ends_at passes; this sweep only records the
  * fact (trial_expired_at) and proposes the fixed-template nudges as governed
- * low-risk send_lifecycle_email actions, which wait for operator approval
- * until the lifecycle_email_auto_send policy is flipped.
+ * low-risk send_lifecycle_email actions (executed in autonomous mode; in
+ * supervised mode they wait until lifecycle_email_auto_send is flipped).
  */
 
 export type { LifecycleTemplate };

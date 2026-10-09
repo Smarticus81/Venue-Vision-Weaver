@@ -1138,6 +1138,14 @@ export const GetPublicConfigResponse = zod.object({
 });
 
 /**
+ * Never 401/403: answers operator=false for anonymous callers, non-operators, and when Clerk is not configured, so the web app can decide whether to show the Control link. The console routes themselves still gate every request.
+ * @summary Whether the signed-in user may open the operator console
+ */
+export const GetOperatorAccessResponse = zod.object({
+  operator: zod.boolean(),
+});
+
+/**
  * Public, rate-limited per IP. "viewed" is recorded server-side by GET /sessions/by-token and is rejected here.
  * @summary Record a share-page event (shared, cta_click) for the gallery funnel
  */
