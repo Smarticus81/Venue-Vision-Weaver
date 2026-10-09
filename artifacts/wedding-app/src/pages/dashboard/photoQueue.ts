@@ -6,7 +6,11 @@ import { COVERAGES, isCoverage, nextCoverageFor, type Coverage } from "./activat
  * before uploading). No DOM, no network.
  */
 
-export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"] as const;
+/**
+ * What POST /storage/uploads/request-url accepts. HEIC is left out on
+ * purpose: listing only these in a file input makes iOS hand over a JPEG.
+ */
+export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const MAX_VENUE_PHOTOS_PER_BATCH = 10;
 /** Soft ceiling so the reference set stays curated. */
 export const MAX_VENUE_PHOTOS = 20;

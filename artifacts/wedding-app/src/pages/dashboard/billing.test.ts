@@ -7,8 +7,13 @@ import {
   checkoutConflictUrl,
   creditReasonLabel,
   pollAttempts,
+  billingReturnMessage,
+  isOrgAdmin,
+  saveCheckoutSnapshot,
+  takeCheckoutSnapshot,
+  type SnapshotStorage,
 } from "./billing.ts";
-import { DEFAULT_PUBLIC_CONFIG } from "./publicConfig.ts";
+import { DEFAULT_PUBLIC_CONFIG } from "../../lib/publicConfig.ts";
 
 test("billing cards come from the published prices, never a constant", () => {
   const cards = buildBillingCards({
@@ -85,4 +90,51 @@ test("billingChanged and pollAttempts drive the post-checkout confirmation", () 
   assert.equal(pollAttempts(3000, 30_000), 10);
   assert.equal(pollAttempts(0, 30_000), 0);
   assert.equal(pollAttempts(60_000, 30_000), 1);
+});
+
+function memoryStorage(): SnapshotStorage {
+  const data = new Map<string, string>();
+  return {
+    getItem: (k) => data.get(k) ?? null,
+    setItem: (k, v) => void data.set(k, v),
+    removeItem: (k) => void data.delete(k),
+  };
+}
+
+test("checkout snapshots round-trip once and expire", () => {
+  const storage = memoryStorage();
+  const now = 1_800_000_000_000;
+  saveCheckoutSnapshot(storage, { plan: "trial", creditsBalance: 1, billingPeriodEnd: null, product: "starter", at: now });
+  const taken = takeCheckoutSnapshot(storage, now + 5_000);
+  assert.deepEqual(taken, { plan: "trial", creditsBalance: 1, billingPeriodEnd: null, product: "starter", at: now });
+  assert.equal(takeCheckoutSnapshot(storage, now + 6_000), null, "read once");
+
+  saveCheckoutSnapshot(storage, { plan: "trial", creditsBalance: 1, billingPeriodEnd: null, product: "credit_pack", at: now });
+  assert.equal(takeCheckoutSnapshot(storage, now + 3 * 60 * 60 * 1000), null, "stale snapshot ignored");
+
+  storage.setItem("dreemer:checkout-snapshot", "{not json");
+  assert.equal(takeCheckoutSnapshot(storage, now), null);
+  storage.setItem("dreemer:checkout-snapshot", JSON.stringify({ plan: "trial", creditsBalance: 1, at: now, product: "gift" }));
+  assert.equal(takeCheckoutSnapshot(storage, now), null, "unknown product rejected");
+  assert.equal(takeCheckoutSnapshot(null, now), null);
+});
+
+test("billing return copy is plain and never claims success early", () => {
+  assert.match(billingReturnMessage("confirming", 0, "Starter"), /Confirming/);
+  assert.equal(billingReturnMessage("confirmed", 25, "Starter"), "Payment confirmed. You are on Starter with 25 credits.");
+  assert.equal(billingReturnMessage("confirmed", 1, "Pay as you go"), "Payment confirmed. You are on Pay as you go with 1 credit.");
+  assert.match(billingReturnMessage("timeout", 0, "Starter"), /not confirmed/);
+  assert.match(billingReturnMessage("cancelled", 0, "Starter"), /Nothing was charged/);
+});
+
+test("isOrgAdmin mirrors the server's org:admin rule", () => {
+  assert.equal(isOrgAdmin("org:admin"), true);
+  assert.equal(isOrgAdmin("org:member"), false);
+  assert.equal(isOrgAdmin(null), false);
+  assert.equal(isOrgAdmin(undefined), true, "older API without the field: let the server decide");
+});
+
+test("billingGuard names the configured pack size", () => {
+  const g = billingGuard({ product: "credit_pack", plan: "trial", isAdmin: true, billingConfigured: true, packCredits: 12 });
+  assert.equal(g.label, "Add 12 credits");
 });

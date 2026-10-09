@@ -36,7 +36,10 @@ test("planUploads rejects non-images and files past the limits", () => {
 });
 
 test("accepted types, labels and grouping", () => {
-  assert.equal(isAcceptedImageType("image/heic"), true);
+  assert.equal(isAcceptedImageType("image/png"), true);
+  // The upload endpoint accepts JPG, PNG and WebP only; iOS converts HEIC
+  // to JPEG when the file input does not list it.
+  assert.equal(isAcceptedImageType("image/heic"), false);
   assert.equal(isAcceptedImageType("image/gif"), false);
   assert.equal(isAcceptedImageType(undefined), false);
   assert.equal(coverageLabel("natural_light"), "Natural light");

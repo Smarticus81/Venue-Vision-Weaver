@@ -25,8 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { normalizeWebsiteInput, toVenueSlug } from "@/lib/venueSlug";
 import { ClerkWidgetFrame, ClerkSetupNotice, OrgGate, Pending } from "@/components/auth/OrgGate";
 import { clerkConfigured, brandAppearance } from "@/lib/clerk";
-import { usePublicConfig } from "@/pages/dashboard/usePublicConfig";
-import { trackFunnel, trackFunnelOnce } from "@/pages/dashboard/funnel";
+import { usePublicConfig } from "@/lib/publicConfig";
+import { track, trackOnce } from "@/lib/track";
 import { apiErrorMessage, describeApiError } from "@/pages/dashboard/errors";
 
 /**
@@ -72,7 +72,7 @@ function currentSearch(): string {
 
 function SignUpStep() {
   useEffect(() => {
-    trackFunnelOnce("signup_started", "signup_started", undefined, "signup");
+    trackOnce("signup_started", "signup_started", { surface: "signup" });
   }, []);
   // Keep the claim token and any prefill through Clerk's redirect.
   const redirect = `/create-venue${currentSearch()}`;
@@ -188,7 +188,6 @@ function VenueForm() {
         const org = await createOrganization({ name });
         await setActive({ organization: org.id });
         createdOrg = true;
-        trackFunnel("org_created", { from: "venue_name" }, "signup");
       }
 
       setSubmitting("venue");
@@ -215,12 +214,14 @@ function VenueForm() {
         }
       }
 
-      trackFunnel(
-        "venue_created",
-        { venueId: venue.id, website: Boolean(websiteNormalized), booking: Boolean(bookingNormalized), claim: Boolean(prefill.claimToken) },
-        "signup",
-      );
-      if (!hasVenue) trackFunnel("signup_completed", { venueId: venue.id }, "signup");
+      track("venue_created", {
+        venueId: venue.id,
+        website: Boolean(websiteNormalized),
+        booking: Boolean(bookingNormalized),
+        claim: Boolean(prefill.claimToken),
+        surface: "signup",
+      });
+      if (!hasVenue) track("signup_completed", { venueId: venue.id, surface: "signup" });
 
       toast({ title: "Venue created", description: "Your dashboard is ready." });
       const next = new URLSearchParams();

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apiErrorMessage, describeApiError, isNotImplemented, ownerSpendCopy } from "./errors.ts";
+import { apiErrorMessage, describeApiError, isFeatureUnavailable, isNotImplemented, ownerSpendCopy } from "./errors.ts";
 
 test("describeApiError reads the envelope off a generated-client error", () => {
   const err = { status: 402, data: { error: "Couple copy", code: "insufficient_credits" }, message: "HTTP 402 Payment Required: Couple copy" };
@@ -9,6 +9,15 @@ test("describeApiError reads the envelope off a generated-client error", () => {
   assert.equal(apiErrorMessage(undefined, "fallback"), "fallback");
   assert.equal(isNotImplemented({ status: 501 }), true);
   assert.equal(isNotImplemented({ status: 404 }), false);
+});
+
+test("isFeatureUnavailable separates a missing endpoint from a missing record", () => {
+  assert.equal(isFeatureUnavailable({ status: 501, data: { error: "Not implemented" } }), true);
+  assert.equal(isFeatureUnavailable({ status: 404, data: { error: "Not found" } }), true);
+  assert.equal(isFeatureUnavailable({ status: 404, data: { error: "Session not found" } }), false);
+  assert.equal(isFeatureUnavailable({ status: 404, data: { error: "Not found", code: "venue_missing" } }), false);
+  assert.equal(isFeatureUnavailable({ status: 500 }), false);
+  assert.equal(isFeatureUnavailable(new Error("offline")), false);
 });
 
 test("ownerSpendCopy speaks to the owner, not the couple", () => {

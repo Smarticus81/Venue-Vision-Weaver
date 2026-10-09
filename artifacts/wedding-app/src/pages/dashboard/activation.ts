@@ -147,6 +147,23 @@ export function localSpendCheck(org: {
   return { ok: true };
 }
 
+/**
+ * Funnel milestones crossed between two observations of the same venue in
+ * this browser session: the first photo, and the moment all five views are
+ * covered. Nothing fires on the first observation (a returning owner
+ * reloading a ready venue has not just activated).
+ */
+export function activationMilestones(
+  previous: Pick<VenueReadiness, "count" | "ready"> | null,
+  next: Pick<VenueReadiness, "count" | "ready">,
+): Array<"first_photo" | "venue_ready"> {
+  if (!previous) return [];
+  const out: Array<"first_photo" | "venue_ready"> = [];
+  if (previous.count === 0 && next.count > 0) out.push("first_photo");
+  if (!previous.ready && next.ready) out.push("venue_ready");
+  return out;
+}
+
 /** Days left on a trial, floored at zero; null when no end date is known. */
 export function trialDaysLeft(endsAt: string | null | undefined, now: Date = new Date()): number | null {
   if (!endsAt) return null;

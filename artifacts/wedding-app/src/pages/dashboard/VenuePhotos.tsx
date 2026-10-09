@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeWebsiteInput } from "@/lib/venueSlug";
 import { isCoverage, type Coverage } from "./activation";
-import { apiErrorMessage, describeApiError, isNotImplemented } from "./errors";
+import { apiErrorMessage, describeApiError, isFeatureUnavailable } from "./errors";
 import { COVERAGE_TILES, coverageLabel, groupByCoverage, planUploads, ACCEPTED_IMAGE_TYPES } from "./photoQueue";
 import { objectKeyFileName, venueReferenceUrl } from "./storageUrls";
 import type { DashboardContext } from "./types";
@@ -69,7 +69,7 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
   const addFiles = (files: File[], coverage: Coverage | null) => {
     const plan = planUploads(files, media, { forceCoverage: coverage, existingQueued: queuedCoverages });
     if (plan.rejected.some((r) => r.reason === "type")) {
-      toast({ title: "Use JPG, PNG, WebP or HEIC photos", variant: "destructive" });
+      toast({ title: "Use JPG, PNG or WebP photos", variant: "destructive" });
     }
     if (plan.rejected.some((r) => r.reason === "limit")) {
       toast({ title: "That is enough for one batch", description: "Upload these first, then add more." });
@@ -234,7 +234,7 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
       if (result.warnings.length > 0) setImportNote((n) => `${n ?? ""} ${result.warnings[0]}`.trim());
     } catch (err) {
       const failure = describeApiError(err);
-      if (isNotImplemented(err)) setImportNote("Website import is not switched on for this server yet. Add photos by hand for now.");
+      if (isFeatureUnavailable(err)) setImportNote("Website import is not switched on for this server yet. Add photos by hand for now.");
       else if (failure.status === 429) setImportNote("The import already ran recently. Try again in a little while.");
       else setImportNote(apiErrorMessage(err, "The import did not run."));
     }

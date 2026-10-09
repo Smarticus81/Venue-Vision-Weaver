@@ -1,6 +1,7 @@
 import type { PublicConfig } from "@workspace/api-client-react";
 import { describeApiError } from "./errors";
-import { formatMoney, isSubscriptionPlan, perGalleryCost } from "./publicConfig";
+import { formatMoney } from "../../lib/publicConfig";
+import { isSubscriptionPlan, perGalleryCost } from "./plans";
 import type { BillingProductId } from "./types";
 
 /**
@@ -70,6 +71,8 @@ export function buildBillingCards(config: PublicConfig): BillingCard[] {
 
 export interface BillingGuardInput {
   product: BillingProductId;
+  /** Credits in one pack, from the public config; the pack button names it. */
+  packCredits?: number;
   plan: string | null | undefined;
   isAdmin: boolean;
   billingConfigured: boolean;
@@ -93,7 +96,7 @@ export function billingGuard(input: BillingGuardInput): BillingGuard {
   const subscribed = isSubscriptionPlan(input.plan);
   const viaPortal = subscribed && input.product !== "credit_pack" && !current;
   let label: string;
-  if (input.product === "credit_pack") label = "Add 10 credits";
+  if (input.product === "credit_pack") label = `Add ${input.packCredits ?? 10} credits`;
   else if (current) label = input.cancelAtPeriodEnd ? "Resume plan" : "Current plan";
   else if (subscribed) label = "Switch plan";
   else label = input.product === "starter" ? "Start Starter" : "Start Growth";
@@ -174,4 +177,97 @@ export function pollAttempts(
 ): number {
   if (intervalMs <= 0) return 0;
   return Math.max(1, Math.floor(deadlineMs / intervalMs));
+}
+
+/**
+ * What the organization looked like just before the owner left for Stripe.
+ * Kept in sessionStorage so the return trip can tell "the webhook already
+ * landed" (confirm at once) from "still waiting" (poll), instead of
+ * comparing against a page load that may already be fresh.
+ */
+export interface CheckoutSnapshot extends BillingSnapshot {
+  product: BillingProductId;
+  /** Epoch ms the checkout started. */
+  at: number;
+}
+
+export const CHECKOUT_SNAPSHOT_KEY = "dreemer:checkout-snapshot";
+/** A snapshot older than this belongs to an abandoned checkout. */
+export const CHECKOUT_SNAPSHOT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+export interface SnapshotStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+export function saveCheckoutSnapshot(storage: SnapshotStorage | null | undefined, snapshot: CheckoutSnapshot): void {
+  if (!storage) return;
+  try {
+    storage.setItem(CHECKOUT_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    /* private mode: the return trip falls back to polling */
+  }
+}
+
+/** Reads and clears the snapshot; null when absent, malformed or stale. */
+export function takeCheckoutSnapshot(
+  storage: SnapshotStorage | null | undefined,
+  now: number = Date.now(),
+): CheckoutSnapshot | null {
+  if (!storage) return null;
+  let raw: string | null = null;
+  try {
+    raw = storage.getItem(CHECKOUT_SNAPSHOT_KEY);
+    storage.removeItem(CHECKOUT_SNAPSHOT_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CheckoutSnapshot>;
+    if (
+      typeof parsed.plan !== "string" ||
+      typeof parsed.creditsBalance !== "number" ||
+      typeof parsed.at !== "number" ||
+      (parsed.product !== "starter" && parsed.product !== "growth" && parsed.product !== "credit_pack")
+    ) {
+      return null;
+    }
+    if (now - parsed.at > CHECKOUT_SNAPSHOT_MAX_AGE_MS || parsed.at > now + 60_000) return null;
+    return {
+      plan: parsed.plan,
+      creditsBalance: parsed.creditsBalance,
+      billingPeriodEnd: typeof parsed.billingPeriodEnd === "string" ? parsed.billingPeriodEnd : null,
+      product: parsed.product,
+      at: parsed.at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mirrors requireOrgAdmin on the server (orgRole === "org:admin"). A
+ * response without the field at all (an older API) shows the controls and
+ * lets the server's 403 org_admin_required decide.
+ */
+export function isOrgAdmin(role: string | null | undefined): boolean {
+  return role === undefined || role === "org:admin";
+}
+
+export type BillingReturnState ="confirming" | "confirmed" | "timeout" | "cancelled";
+
+/** Owner-facing line for each stage of the return from Stripe. */
+export function billingReturnMessage(state: BillingReturnState, creditsBalance: number, planName: string): string {
+  switch (state) {
+    case "confirming":
+      return "Confirming your payment with Stripe. This usually takes a few seconds.";
+    case "confirmed":
+      return `Payment confirmed. You are on ${planName} with ${creditsBalance} ${creditsBalance === 1 ? "credit" : "credits"}.`;
+    case "timeout":
+      return "Stripe has not confirmed the payment yet. Your credits appear here as soon as it does; nothing to redo.";
+    case "cancelled":
+      return "Checkout was cancelled. Nothing was charged.";
+  }
 }

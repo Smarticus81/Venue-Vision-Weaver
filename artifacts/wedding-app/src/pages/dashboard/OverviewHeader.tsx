@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { planLabel } from "./publicConfig";
+import { planLabel } from "./plans";
 import { summarizeGalleries } from "./galleryStats";
 import { readOrgExtras, type DashboardContext } from "./types";
 

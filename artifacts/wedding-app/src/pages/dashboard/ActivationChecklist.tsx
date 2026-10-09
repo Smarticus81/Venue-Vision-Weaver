@@ -42,7 +42,7 @@ export function ActivationChecklist({ ctx }: { ctx: DashboardContext }) {
   const coupleGalleries = sessions.filter((s) => s.kind !== "sample").length;
   const activation = computeActivation({
     readiness,
-    bookingUrl: venue.bookingUrl ?? venue.websiteUrl ?? venue.contactEmail,
+    bookingUrl: venue.bookingUrl,
     tourCardDownloadedAt: venue.tourCardDownloadedAt,
     coupleGalleries,
     plan: organization.plan,

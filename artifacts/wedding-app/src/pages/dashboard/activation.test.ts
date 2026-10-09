@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  activationMilestones,
   computeActivation,
   localSpendCheck,
   nextCoverageFor,
@@ -82,4 +83,12 @@ test("trialDaysLeft rounds up and floors at zero", () => {
   assert.equal(trialDaysLeft("2026-10-01T00:00:00Z", now), 0);
   assert.equal(trialDaysLeft(null, now), null);
   assert.equal(trialDaysLeft("not a date", now), null);
+});
+
+test("activationMilestones fires only on transitions seen in this session", () => {
+  assert.deepEqual(activationMilestones(null, { count: 5, ready: true }), []);
+  assert.deepEqual(activationMilestones({ count: 0, ready: false }, { count: 2, ready: false }), ["first_photo"]);
+  assert.deepEqual(activationMilestones({ count: 4, ready: false }, { count: 5, ready: true }), ["venue_ready"]);
+  assert.deepEqual(activationMilestones({ count: 0, ready: false }, { count: 5, ready: true }), ["first_photo", "venue_ready"]);
+  assert.deepEqual(activationMilestones({ count: 5, ready: true }, { count: 4, ready: false }), []);
 });
