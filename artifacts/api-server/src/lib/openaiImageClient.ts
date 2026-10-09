@@ -1,7 +1,12 @@
 import sharp from "sharp";
 import type { ReferenceAspectRatio } from "./referenceImage.js";
 import { logger } from "./logger.js";
-import { StillImageBlockedError, StillImageRequestError } from "./stillImageErrors.js";
+import {
+  StillImageBlockedError,
+  StillImageRequestError,
+  isAbortOrTimeoutError,
+  isModelAvailabilityFailure,
+} from "./stillImageErrors.js";
 
 /**
  * OpenAI Image API transport for gallery stills.
@@ -162,7 +167,7 @@ function aspectRatioValue(ratio: ReferenceAspectRatio): number {
  * gpt-image honours custom sizes exactly, so this only bites when a request
  * fell back to one of the three standard sizes.
  */
-async function conformAspectRatio(
+export async function conformAspectRatio(
   buffer: Buffer,
   aspectRatio: ReferenceAspectRatio,
 ): Promise<{ buffer: Buffer; cropped: boolean }> {
@@ -214,14 +219,6 @@ async function conformAspectRatio(
   return { buffer: cropped, cropped: true };
 }
 
-function isModelAvailabilityFailure(status: number, body: string): boolean {
-  if (status === 404 || status === 429 || status >= 500) return true;
-  if (status === 400) {
-    return /model|not found|not supported|unavailable|invalid model|unsupported_value/i.test(body);
-  }
-  return false;
-}
-
 function isSizeRejection(status: number, body: string): boolean {
   if (status !== 400) return false;
   return /\bsize\b|dimension|resolution|multiple of 16|aspect ratio/i.test(body);
@@ -254,11 +251,6 @@ function buildEditsForm(params: {
   if (compression !== undefined) {
     form.append("output_compression", String(compression));
   }
-  const moderation = process.env.OPENAI_IMAGE_MODERATION?.trim().toLowerCase();
-  if (moderation === "low" || moderation === "auto") {
-    form.append("moderation", moderation);
-  }
-
   // Repeated `image[]` parts, in the order the prompt manifest describes them.
   // `response_format` is deliberately never sent: gpt-image models reject it
   // and always answer with base64.
@@ -279,6 +271,7 @@ async function postEdits(params: {
   prompt: string;
   size: string;
   images: OpenAiReferenceImage[];
+  signal?: AbortSignal;
 }): Promise<OpenAiImageResponse> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${params.apiKey}`,
@@ -288,18 +281,44 @@ async function postEdits(params: {
   const project = process.env.OPENAI_PROJECT_ID?.trim();
   if (project) headers["OpenAI-Project"] = project;
 
-  const res = await fetch(`${openaiApiBase()}/images/edits`, {
-    method: "POST",
-    headers,
-    body: buildEditsForm(params),
-    signal: AbortSignal.timeout(requestTimeoutMs()),
-  });
+  const timeout = AbortSignal.timeout(requestTimeoutMs());
+  const signal = params.signal ? AbortSignal.any([timeout, params.signal]) : timeout;
 
-  const text = await res.text();
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${openaiApiBase()}/images/edits`, {
+      method: "POST",
+      headers,
+      body: buildEditsForm(params),
+      signal,
+    });
+    text = await res.text();
+  } catch (err) {
+    // The session deadline aborting the render is not a provider problem:
+    // surface it unchanged so nothing falls back or retries.
+    if (params.signal?.aborted) throw err;
+    // A request timeout (DOMException TimeoutError) or a dropped connection
+    // must reach the fallback chain as an availability failure instead of
+    // retrying the same stalled model.
+    const timedOut = isAbortOrTimeoutError(err);
+    throw new StillImageRequestError({
+      message: timedOut
+        ? `OpenAI image model ${params.model} did not answer within ${requestTimeoutMs()}ms`
+        : `OpenAI image model ${params.model} request failed before a response: ${err instanceof Error ? err.message : String(err)}`,
+      status: 0,
+      body: "",
+      retryWithFallbackModel: true,
+      timedOut,
+      model: params.model,
+    });
+  }
+
   if (!res.ok) {
     if (isContentBlock(res.status, text)) {
       throw new StillImageBlockedError(
         `OpenAI image model ${params.model} blocked the request for safety. Try different photos.`,
+        params.model,
       );
     }
     throw new StillImageRequestError({
@@ -307,6 +326,7 @@ async function postEdits(params: {
       status: res.status,
       body: text,
       retryWithFallbackModel: isModelAvailabilityFailure(res.status, text),
+      model: params.model,
     });
   }
 
@@ -340,6 +360,8 @@ export async function generateStillWithOpenAi(params: {
   prompt: string;
   aspectRatio: ReferenceAspectRatio;
   images: OpenAiReferenceImage[];
+  /** Aborts the in-flight request (session deadline). */
+  signal?: AbortSignal;
 }): Promise<OpenAiStillResult> {
   if (params.images.length === 0) {
     throw new Error("OpenAI image generation requires at least one reference image.");

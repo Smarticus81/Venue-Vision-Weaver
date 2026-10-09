@@ -1,9 +1,9 @@
-import sharp from "sharp";
 import {
   assertReferenceImageQuality,
   hammingDistance,
   MIN_REFERENCE_EDGE_PX,
   NEAR_DUPLICATE_HAMMING,
+  ReferenceImageError,
   type ReferenceImageQuality,
 } from "./referenceImageQuality.js";
 
@@ -16,23 +16,12 @@ export const MIN_COUPLE_REFERENCES = 2;
 /** Venue photos needed before any gallery renders; venue readiness reads this. */
 export const MIN_VENUE_REFERENCES = 5;
 
-async function assertImageLargeEnough(label: string, image: ImageRef): Promise<void> {
-  const meta = await sharp(image.buffer).rotate().metadata();
-  const width = meta.width ?? 0;
-  const height = meta.height ?? 0;
-  if (width < MIN_REFERENCE_EDGE_PX || height < MIN_REFERENCE_EDGE_PX) {
-    throw new Error(
-      `${label} reference photo is too small (${width}x${height}). Upload at least ${MIN_REFERENCE_EDGE_PX}px on each side.`,
-    );
-  }
-}
-
-async function assertImageClearEnough(
+function assertImageClearEnough(
   label: string,
   image: ImageRef,
   profile: "couple" | "venue",
 ): Promise<ReferenceImageQuality> {
-  await assertImageLargeEnough(label, image);
+  // assertReferenceImageQuality also enforces the minimum edge (EXIF-rotated).
   return assertReferenceImageQuality({
     buffer: image.buffer,
     label,
@@ -41,19 +30,25 @@ async function assertImageClearEnough(
   });
 }
 
-/** Fail the session if required reference photos are missing or unusable. */
+/**
+ * Fail the session if required reference photos are missing or unusable.
+ * Every failure is a ReferenceImageError naming whose photos are at fault, so
+ * the couple sees "your photos" only when it is their photos.
+ */
 export async function assertReferenceImagesValid(
   coupleBuffers: ImageRef[],
   venueBuffers: ImageRef[],
 ): Promise<void> {
   if (coupleBuffers.length < MIN_COUPLE_REFERENCES) {
-    throw new Error(
+    throw new ReferenceImageError(
       `At least ${MIN_COUPLE_REFERENCES} couple reference photos are required for accurate likeness.`,
+      "couple",
     );
   }
   if (venueBuffers.length < MIN_VENUE_REFERENCES) {
-    throw new Error(
+    throw new ReferenceImageError(
       `At least ${MIN_VENUE_REFERENCES} venue reference photos are required. The venue owner must upload complete venue coverage before generation.`,
+      "venue",
     );
   }
   const coupleQualities = await Promise.all(
@@ -69,8 +64,9 @@ export async function assertReferenceImagesValid(
         hammingDistance(coupleQualities[i]!.perceptualHash, coupleQualities[j]!.perceptualHash) <=
         NEAR_DUPLICATE_HAMMING
       ) {
-        throw new Error(
+        throw new ReferenceImageError(
           `Couple photos ${i + 1} and ${j + 1} look nearly identical. Upload distinct angles or expressions for better likeness.`,
+          "couple",
         );
       }
     }
