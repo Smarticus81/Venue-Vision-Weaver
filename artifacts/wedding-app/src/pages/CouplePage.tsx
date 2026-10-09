@@ -1146,7 +1146,7 @@ function DetailsStep({
               type="text"
               autoComplete="off"
               maxLength={80}
-              placeholder="Ana & Sam"
+              placeholder="e.g. Ana & Sam"
               value={draft.coupleName}
               onChange={(e) => onDraft({ coupleName: e.target.value })}
               disabled={submitting}
@@ -1214,6 +1214,11 @@ function DetailsStep({
           </p>
         ) : null}
 
+        {!canSubmit && !submitting ? (
+          <p className="cp-help cp-actions__why" aria-live="polite">
+            {blocker}
+          </p>
+        ) : null}
         <div className="cp-actions">
           <Button type="button" variant="ghost" onClick={onBack} disabled={submitting} data-testid="style-back-button">
             <ArrowLeft /> Back
@@ -1230,11 +1235,6 @@ function DetailsStep({
             Make our gallery
           </Button>
         </div>
-        {!canSubmit && !submitting ? (
-          <p className="cp-help cp-actions__why" aria-live="polite">
-            {blocker}
-          </p>
-        ) : null}
       </form>
     </section>
   );

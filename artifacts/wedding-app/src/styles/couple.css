@@ -357,6 +357,7 @@
 }
 .cp-actions__why {
   text-align: right;
+  margin-bottom: -8px;
 }
 .cp-primary {
   min-width: 0;
@@ -960,6 +961,8 @@
 }
 .gs-hero__media {
   position: relative;
+  justify-self: center;
+  width: 100%;
   border-radius: var(--dm-radius-xl);
   overflow: hidden;
   background: var(--dm-ink-900);
@@ -969,8 +972,8 @@
 .gs-hero__media img {
   display: block;
   width: 100%;
+  height: auto;
   max-height: 78vh;
-  aspect-ratio: 4 / 5;
   object-fit: contain;
   background: var(--dm-ink-900);
 }
