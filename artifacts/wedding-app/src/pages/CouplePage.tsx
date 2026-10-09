@@ -837,8 +837,8 @@ function PhotoStep({
         <p className="eyebrow">Your photos</p>
         <h1 id="photos-heading">Two or three photos of you</h1>
         <p className="cp-lede">
-          Clear, well lit, faces forward. One of you together plus one of each of you works best. Pick distinct
-          angles or expressions.
+          Clear, well lit, faces forward. One of you together plus one of each of you works best.{" "}
+          <span>Pick distinct angles or expressions.</span>
         </p>
         {restoredDraft ? (
           <p className="cp-note" role="status">
