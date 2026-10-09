@@ -1,15 +1,22 @@
 # Dreemer Production Readiness
 
-Use this checklist before calling a Dreemer deployment production-ready.
+Use this checklist before calling a Dreemer deployment production-ready. The
+order is: build gate, database preflight, runtime gate, deploy, then the
+after-deploy checklist. Nothing here is optional for a launch that takes real
+money or emails real people.
 
 ## Build Gate
 
 ```bash
 pnpm install
-pnpm run smoke:security
 pnpm run typecheck
+pnpm run test
+pnpm run smoke:security
 pnpm run build
 ```
+
+CI runs the same steps on Node 24 plus a codegen drift check and a UTF-8 BOM
+check (`.github/workflows/ci.yml`).
 
 ## Runtime Gate
 
@@ -19,7 +26,8 @@ schema contract because production now requires venue owner emails, couple
 emails, share tokens, venue media coverage metadata, and unique generated
 gallery asset slots.
 
-Set real production environment variables, then run:
+Set real production environment variables (`railway.env.template` lists every
+key; `.env.example` explains each one), then run:
 
 ```bash
 pnpm run verify:production
@@ -27,18 +35,22 @@ pnpm run verify:production
 
 The command checks:
 
-- production environment policy with `NODE_ENV=production`
+- production environment policy with `NODE_ENV=production`: Clerk keys and
+  webhook secret, `CONTROL_PLANE_OPERATOR_EMAILS`, live Stripe keys and price
+  ids, Resend, storage, the image model chain, quality floors, and
+  `RESEND_WEBHOOK_SECRET` whenever `XAI_API_KEY` switches the control plane on
 - generated API and web app build artifacts
 - source-contract smoke tests for gallery-only flow, owner auth, protected
-  storage, billing-event idempotency, quality thresholds, and generated asset visibility
+  storage, billing-event idempotency, quality thresholds, generated asset
+  visibility, operator gating and env template parity
 - ffmpeg availability for the branded motion reel, either locally or through the
   Railway Dockerfile deployment image
 - saved live gallery QA evidence from real consented references, including an
   automated passing `quality-report.json` with input SHA-256 fingerprints and
   manual acceptance marker
 - migrated database tables, columns, non-null constraints, and critical unique
-  indexes for uploads, owner sessions, generated gallery metadata, and billing
-  webhook idempotency
+  indexes for uploads, organizations, generated gallery metadata, gallery and
+  funnel events, the outreach studio, and billing webhook idempotency
 
 After deployment, verify the live app:
 
@@ -47,8 +59,10 @@ pnpm run verify:production -- --url https://your-dreemer-host.example
 ```
 
 The deployed `/api/readyz` endpoint must return `200` with every check set to
-`ok`: env, database, storage, AI, billing, email, quality gate, image model, and
-ffmpeg.
+`ok`: env, auth, database, rls, storage, AI, billing, email, quality gate, image
+model, and ffmpeg. The public response only says ok or degraded; to see the
+reasons, sign in to `/control` as an operator or send the header
+`x-readiness-token: <READINESS_DETAIL_TOKEN>` (16+ characters).
 
 When running the verifier on a workstation without ffmpeg, the local ffmpeg
 check can still pass if `railway.toml` deploys the Dockerfile and the Dockerfile
@@ -65,20 +79,124 @@ pnpm run test:mobile-reel
 ```
 
 The `database` readiness check is intentionally stricter than a connection
-test. It degrades if launch-critical schema items are missing or nullable,
-including owner magic-link/session columns, generated-asset quality metadata
-columns, venue media coverage metadata, venue slug and share-token uniqueness,
-upload intent uniqueness, owner auth token/session uniqueness, and the partial
-unique `stripe_event_id` index that prevents billing webhook replay (Clerk svix message ids) from
-duplicating credits.
+test. It degrades if launch-critical schema items are missing or nullable:
+organizations (unique `clerk_org_id`), venue and ledger `organization_id`
+columns, generated-asset quality metadata, venue media coverage metadata,
+venue slug and share-token uniqueness, upload intent uniqueness, gallery and
+funnel event tables, render telemetry, the control-plane and outreach studio
+tables (unique prospect email, suppression email and unsubscribe token), and
+the partial unique `stripe_event_id` index that stops a replayed Stripe
+webhook from granting credits twice. The `rls` check degrades while any public
+table has row-level security off (see the after-deploy checklist).
 
 Railway is configured to use `/api/readyz` as the deploy health check, so a
-deployment with missing DB/storage/Gemini/Stripe/Clerk/email/ffmpeg readiness should
-not be treated as healthy.
+deployment with missing DB/storage/Gemini/Stripe/Clerk/email/ffmpeg readiness
+should not be treated as healthy.
+
+## After-Deploy Checklist
+
+Do these in order on the first deploy of this build (2026-10 viability
+overhaul) and tick each one off.
+
+1. **Apply the additive schema migration.** Run `supabase/bootstrap.sql` in
+   the Supabase SQL editor (idempotent: `CREATE TABLE / INDEX IF NOT EXISTS`,
+   `ADD COLUMN IF NOT EXISTS`) or `pnpm --filter @workspace/db run push`. It
+   adds the trial clock, `first_paid_at` / `churned_at` / attribution columns,
+   `review_before_send`, incentive text, gallery and funnel events, render
+   telemetry, `stripe_events` / `billing_events`, and the vetting, facts, copy
+   variant, adaptation and digest tables. Nothing is dropped. `/api/readyz`
+   `database` must read `ok` afterwards.
+2. **Decide RLS.** Production tables were created with row-level security off.
+   The server connects as the table owner and is not affected by RLS; RLS only
+   closes the Supabase PostgREST surface (the anon and authenticated keys).
+   `bootstrap.sql` ends by enabling RLS on every table and revoking all table
+   grants from `anon` and `authenticated`. Keep that (recommended: no browser
+   ever talks to Postgres directly, and the anon key must never ship to a
+   browser), or, if something outside this app reads these tables through
+   PostgREST, write policies for it first. Until every table has RLS on,
+   `/api/readyz` reports `rls: degraded` and answers 503.
+3. **Drop the retired owner-auth tables, after the new build is live.** Run
+   `supabase/migrations/2026-10-08-drop-owner-auth.sql` (drops
+   `owner_sessions`, `owner_login_tokens`, `owner_credentials`). Not before:
+   the previous build still reads them at startup. Destructive; export
+   `owner_credentials` first if you want an archive.
+4. **Clear legacy approvals.** The old `send_prospect_email` action bypassed
+   the outreach studio and is retired. Reject any pending
+   `send_prospect_email`, `resume_agent` or other retired rows in `/control` ->
+   Approvals, or let the scheduler do it: on boot it marks every
+   pending/approved row of a retired action type `rejected` with the note
+   "superseded by outreach studio" (decided by `system:retirement`). Check the
+   queue is clean after the first boot.
+5. **Set the operator and contact values.** `CONTROL_PLANE_OPERATOR_EMAILS`
+   (required; the console fails closed without it), `PUBLIC_CONTACT_EMAIL`
+   (the "Email us" and founding-venue address), `PRICING_CURRENCY`,
+   `PRICING_STARTER_MONTHLY`, `PRICING_GROWTH_MONTHLY`, `PRICING_CREDIT_PACK`,
+   `PRICING_LABEL`, `TRIAL_DAYS`, and `PUBLIC_FOUNDING_SLOTS_LEFT` /
+   `PUBLIC_FOUNDING_SLOTS_TOTAL`. Prices are display values: keep them equal
+   to what the Stripe prices charge.
+6. **Stripe.** Create the Starter and Growth monthly prices and the 10-credit
+   pack in the live Dashboard and set `STRIPE_PRICE_STARTER_MONTHLY`,
+   `STRIPE_PRICE_GROWTH_MONTHLY`, `STRIPE_PRICE_CREDIT_PACK_10` to those exact
+   ids. An invoice for a price the server cannot map answers 500 and Stripe
+   retries until the ids are fixed. Point a webhook endpoint at
+   `https://<host>/api/billing/webhook`, put its signing secret in
+   `STRIPE_WEBHOOK_SECRET`, and subscribe it to:
+   - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded`
+   - `checkout.session.async_payment_failed`
+   - `invoice.paid`
+   - `invoice.payment_failed`
+   - `customer.subscription.updated`
+   - `customer.subscription.paused`
+   - `customer.subscription.resumed`
+   - `customer.subscription.deleted`
+
+   Renewals add the plan quota, clipped so plan credits never exceed
+   `PLAN_CREDIT_ROLLOVER_CAP` (default 3) months of quota; pack credits are
+   never clipped. Enable the customer portal with plan switching (the
+   dashboard sends subscribed organizations there to change plans).
+7. **Clerk.** Use production keys issued for the domain the site is served
+   from (a `pk_live_` key on another host makes sign-in fail; readiness
+   `auth` says so). Point a webhook at `https://<host>/api/webhooks/clerk`
+   with `organization.created` and `organization.updated`, and set
+   `CLERK_WEBHOOK_SIGNING_SECRET`.
+8. **Sending domain.** Send from a dedicated subdomain (for example
+   `mail.yourdomain.com`) verified in Resend, with SPF, DKIM and a DMARC
+   record (start at `p=none` with reporting, tighten once reports are clean).
+   `EMAIL_FROM` must use that verified domain, never `onboarding@resend.dev`.
+9. **Outreach preconditions.** Every outreach send is refused until these are
+   real: `OUTREACH_POSTAL_ADDRESS` (a physical mailing address printed in
+   every footer), `OUTREACH_REPLY_TO` (a monitored mailbox on your own domain,
+   not free mail), `EMAIL_FROM` on the verified domain. Then point a Resend
+   webhook at `https://<host>/api/webhooks/resend`, set
+   `RESEND_WEBHOOK_SECRET`, and subscribe it to `email.sent`,
+   `email.delivered`, `email.delivery_delayed`, `email.bounced`,
+   `email.complained`, `email.opened` and `email.clicked`. Bounces and
+   complaints suppress the address and feed the deliverability guard that
+   throttles or pauses sending.
+10. **Replies.** Set up Resend inbound routing (an MX record on a reply
+    subdomain, or forward `OUTREACH_REPLY_TO` into it) and add
+    `email.received` to the Resend webhook, so prospect replies lock the
+    prospect as replied and stop follow-ups. Until then, record replies by
+    hand in `/control` -> Pipeline.
+11. **Ramp.** Start outreach at 5-10 sends a day per mailbox
+    (`max_prospect_emails_per_day` in `/control` policies) and keep an eye on
+    the deliverability numbers on the Growth tab (bounce rate under 4%,
+    complaints under 0.08%). Lifecycle emails to trial venues wait for
+    approval until the `lifecycle_email_auto_send` policy is switched on.
+12. **Demo couple photos (optional).** "Render a sample" answers
+    `409 demo_not_configured` until two or three consented demo couple photos
+    are in `lib/brand/assets/demo-couple` or `DEMO_COUPLE_DIR`.
+13. **Database TLS.** Download the Supabase CA certificate and set
+    `DATABASE_SSL_CA` (PEM text) or `DATABASE_SSL_CA_PATH` so the connection
+    is verified, not only encrypted.
+14. **Final check.** `pnpm run verify:production -- --url https://<host>` and
+    a signed-in walk through signup, venue photos, a tour-day gallery, the
+    shared gallery and a test checkout.
 
 ## Gallery Quality Gate
 
-Before Gemini generation, the server prepares in-memory copies of every couple
+Before image generation, the server prepares in-memory copies of every couple
 and venue reference with deterministic Lanczos resampling. References whose
 shortest edge is below 1024px are upscaled to that minimum, while large images
 are reduced when possible without dropping below it. Exposure normalization and
@@ -158,13 +276,6 @@ multimodal quality judge and the venue reference selector still run on Gemini.
 The Autonomous Business Control Plane reasons with Grok instead and needs
 `XAI_API_KEY`; without it the server boots normally and the control-plane
 agents simply stay idle (approvals and metrics snapshots keep running).
-
-The outreach email studio (prospect emails with the venue's own photos) sends
-through Resend with `List-Unsubscribe` / one-click headers and needs
-`OUTREACH_POSTAL_ADDRESS` set to a real mailing address before the first real
-send; previews in `/control` → Outreach warn while it is a placeholder. Point a
-Resend webhook at `/api/webhooks/resend` with `RESEND_WEBHOOK_SECRET` so bounces
-and complaints land on the email record and suppress the address.
 
 Quality steps run low, medium, high, xhigh, max, and auto; production uses
 `high` via `OPENAI_IMAGE_QUALITY`. Cost and latency climb steeply above it. If a
