@@ -513,7 +513,7 @@ function EmailReviewBody({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Preview */}
-        <Card className="p-0">
+        <Card className="min-w-0 p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
             <div className="flex items-center gap-1.5">
               <ToggleButton active={device === "desktop" && !showText} onClick={() => { setDevice("desktop"); setShowText(false); }} label="Desktop">
@@ -563,7 +563,7 @@ function EmailReviewBody({
         </Card>
 
         {/* Editor */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className={cn("mono-label", subject.length > SUBJECT_MAX ? "text-danger" : "text-muted-foreground")}>
@@ -697,7 +697,7 @@ function EmailReviewBody({
                 {assets.map((asset) => {
                   const position = imageIds.indexOf(asset.id);
                   return (
-                    <figure key={asset.id} className={cn("border bg-background", position >= 0 ? "border-primary/70" : "border-border")}>
+                    <figure key={asset.id} className={cn("min-w-0 border bg-background", position >= 0 ? "border-primary/70" : "border-border")}>
                       <button
                         type="button"
                         disabled={!editable}
@@ -722,7 +722,7 @@ function EmailReviewBody({
                           {asset.width}×{asset.height} · {Math.round(asset.bytes / 1024)} KB
                         </p>
                         {asset.sourceUrl ? (
-                          <a href={asset.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 truncate underline hover:text-foreground">
+                          <a href={asset.sourceUrl} target="_blank" rel="noreferrer" className="flex min-w-0 max-w-full items-center gap-1 underline hover:text-foreground">
                             <ExternalLink className="h-3 w-3 shrink-0" />
                             <span className="truncate">{asset.sourceUrl.replace(/^https?:\/\/(www\.)?/, "")}</span>
                           </a>

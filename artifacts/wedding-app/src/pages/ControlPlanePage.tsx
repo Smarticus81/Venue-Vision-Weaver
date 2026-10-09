@@ -249,7 +249,7 @@ function ControlConsole() {
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
-      <header className="top-0 z-40 border-b sm:sticky border-border bg-background/95 backdrop-blur-sm">
+      <header className="relative top-0 z-40 border-b border-border sm:sticky bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <DreemerLogo href="/" className="text-[1.1rem] sm:text-[1.2rem]" />
@@ -288,7 +288,7 @@ function ControlConsole() {
                 type="button"
                 onClick={() => setTab(entry.id)}
                 className={cn(
-                  "mono-label flex h-8 shrink-0 items-center gap-1.5 border-b-2 px-3 transition-colors",
+                  "mono-label relative flex h-8 shrink-0 items-center gap-1.5 border-b-2 px-3 transition-colors",
                   tab === entry.id
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",

@@ -132,11 +132,11 @@ export function TrendTiles({ series, windowDays }: { series: OverviewTrendSeries
         {tiles.map((s) => (
           <StatTile
             key={s.key}
-            label={s.key === "bounceRate" ? "Deliverability" : s.label}
-            value={s.key === "bounceRate" ? `${byUnit(s.current, "rate")} bounced` : byUnit(s.current, s.unit)}
+            label={s.key === "bounceRate" ? "Bounces, last 14 days" : s.label}
+            value={byUnit(s.current, s.unit)}
             sub={
               s.key === "bounceRate"
-                ? `${byUnit(complaint?.current ?? null, "rate")} complaints · last 14 days`
+                ? `complaints ${byUnit(complaint?.current ?? null, "rate")}`
                 : s.key === "mrr"
                   ? "from the latest KPI snapshot"
                   : undefined

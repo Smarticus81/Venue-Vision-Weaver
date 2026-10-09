@@ -17,6 +17,11 @@ Useful routes:
 - `/v/processing`: waiting state.
 - `/v/failed`: failed generation recovery.
 - `/find-my-gallery`: simulated recovery request failure.
+- `/control`: operator console overview: revenue funnel (owners and prospects), KPI sparklines with 7-day deltas, kill switches in the header, editable guardrail cards (saves are rejected by the fixture, so the error toast is the expected result).
+- `/control#growth`: growth loop KPIs, activation funnel, weekly cohorts, segments, copy variants, experiment board, adaptations and the weekly digest.
+- `/control#pipeline`: 72 fixture prospects with paging, search, status and vetting filters; open Evidence on a row for checks and sourced facts.
+- `/control#approvals`: pending queue with a studio email (Review in Outreach link), a retired legacy send and a readable venue email; history shows an executing row.
+- `/control#outreach/2`: a draft held by the daily cap with a broken copy rule, so Retry send stays disabled until an override note is typed.
 - `/control#outreach`: the outreach email studio review screen. Run `pnpm run outreach:demo -- --out qa-output/outreach-demo --site <venue url>` first and the fixture renders those real samples (photos are swapped for the local sample image).
 
 All names, email addresses, balances, and dates are fixtures. Gallery images reuse the generated public sample; no fixture video is included. The sign-in widget itself is not exercised. This preview provides layout and interaction checks, not end-to-end verification of production services.
