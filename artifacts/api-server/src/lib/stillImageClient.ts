@@ -6,12 +6,22 @@ import {
   isVenueMediaCoverage,
   type VenueMediaCoverage,
 } from "./venueMediaCoverage.js";
-import { GalleryQualityError } from "./galleryQuality.js";
+import { GalleryJudgeUnavailableError, GalleryQualityError } from "./galleryQuality.js";
 import {
   prepareReferenceImage,
   REFERENCE_TARGET_MIN_EDGE_PX,
+  type PreparedReferenceImage,
 } from "./referenceImagePreparation.js";
-import { StillImageBlockedError, StillImageRequestError } from "./stillImageErrors.js";
+import { ReferenceImageError } from "./referenceImageQuality.js";
+import {
+  GalleryStorageError,
+  SessionDeadlineError,
+  StillImageBlockedError,
+  StillImageRequestError,
+  isAbortOrTimeoutError,
+  isModelAvailabilityFailure,
+  tagErrorWithModel,
+} from "./stillImageErrors.js";
 import {
   generateStillWithOpenAi,
   isOpenAiImageModel,
@@ -23,8 +33,7 @@ import {
 } from "./openaiImageClient.js";
 
 const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_INTERACTIONS_API_REVISION =
-  process.env.GEMINI_INTERACTIONS_API_REVISION ?? "2026-05-20";
+const DEFAULT_GEMINI_IMAGE_TIMEOUT_MS = 180_000;
 /**
  * Production model chain. gpt-image-2.5-sunburst is the primary renderer: it is
  * OpenAI's precision image model, tuned for edits that preserve the subjects
@@ -47,9 +56,6 @@ const GENERATED_MIN_BRIGHTNESS = Number(process.env.GENERATED_IMAGE_MIN_BRIGHTNE
 const GENERATED_MAX_BRIGHTNESS = Number(process.env.GENERATED_IMAGE_MAX_BRIGHTNESS ?? "246");
 
 type ImagePart = { text?: string; inlineData?: { mimeType: string; data: string } };
-type InteractionInput =
-  | { type: "text"; text: string }
-  | { type: "image"; mime_type: string; data: string };
 type VenueReferenceInput = {
   buffer: Buffer;
   coverage?: VenueMediaCoverage | null;
@@ -59,11 +65,32 @@ function geminiApiBase(): string {
   return (process.env.GEMINI_API_BASE_URL ?? DEFAULT_GEMINI_API_BASE).replace(/\/$/, "");
 }
 
+function geminiImageTimeoutMs(): number {
+  const parsed = Number(process.env.GEMINI_IMAGE_TIMEOUT_MS ?? DEFAULT_GEMINI_IMAGE_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_GEMINI_IMAGE_TIMEOUT_MS;
+}
+
+function geminiApiKey(): string | undefined {
+  const key = (process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY)?.trim();
+  return key ? key : undefined;
+}
+
 type StillAspectRatio = ReferenceAspectRatio;
 
-interface GeneratedStillResult {
+/** One rendered still plus what it cost to make (render telemetry stores these). */
+export interface GeneratedStillResult {
   buffer: Buffer;
+  /** The model that produced the frame. */
   model: string;
+  /** First model of the configured chain. */
+  primaryModel: string;
+  /** True when an earlier model in the chain was skipped or unavailable. */
+  fallbackUsed: boolean;
+  /** Models skipped before `model` rendered, with the reason. */
+  fallbackFrom: { model: string; reason: string }[];
+  size: string | null;
+  quality: string | null;
+  usage: { inputTokens?: number; outputTokens?: number } | null;
 }
 
 interface GeminiResponse {
@@ -81,12 +108,7 @@ interface GeminiResponse {
     blockReason?: string;
     safetyRatings?: { category?: string; probability?: string; blocked?: boolean }[];
   };
-  error?: { message?: string; code?: number; status?: string };
-}
-
-interface GeminiInteractionResponse {
-  output_image?: { mime_type?: string; mimeType?: string; data?: string };
-  outputImage?: { mime_type?: string; mimeType?: string; data?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
   error?: { message?: string; code?: number; status?: string };
 }
 
@@ -103,12 +125,6 @@ function extractImageBytes(json: GeminiResponse): Buffer | null {
   return null;
 }
 
-function extractInteractionImageBytes(json: GeminiInteractionResponse): Buffer | null {
-  const direct = json.output_image?.data ?? json.outputImage?.data;
-  if (direct) return Buffer.from(direct, "base64");
-  return null;
-}
-
 function findTextNote(json: GeminiResponse): string {
   const candidates = json.candidates ?? [];
   for (const c of candidates) {
@@ -118,14 +134,6 @@ function findTextNote(json: GeminiResponse): string {
     }
   }
   return "";
-}
-
-function isGemini3ImageModel(model: string): boolean {
-  return /^gemini-3(?:\.\d+)?-(?:pro|flash|flash-lite)-image$/i.test(model);
-}
-
-function useInteractionsApiForImageGeneration(model: string): boolean {
-  return isGemini3ImageModel(model) && process.env.GEMINI_USE_INTERACTIONS_API === "true";
 }
 
 function referenceLimitsForModel(model: string): { couple: number; venue: number } {
@@ -144,9 +152,6 @@ function referenceLimitsForModel(model: string): { couple: number; venue: number
   if (model === "gemini-3.1-flash-image") {
     return { couple: 3, venue: 10 };
   }
-  if (model === "gemini-2.5-flash-image") {
-    return { couple: 2, venue: 1 };
-  }
   return { couple: MAX_COUPLE_REFERENCES, venue: MAX_TOTAL_REFERENCE_IMAGES - MAX_COUPLE_REFERENCES };
 }
 
@@ -158,21 +163,23 @@ function venueCoverageLabel(coverage?: VenueMediaCoverage | null): string | null
   return coverage ? VENUE_MEDIA_COVERAGE_LABELS[coverage] : null;
 }
 
-function buildReferencePayload(params: {
+interface ReferenceManifest {
+  /** Prompt with the identity, venue and compositing manifest (Gemini text part). */
+  fullPrompt: string;
+  /** Same prompt with the ordered INPUT IMAGE labels folded in (OpenAI has no per-image text slot). */
+  openAiPrompt: string;
+  coupleRefs: Buffer[];
+  venueRefs: VenueReferenceInput[];
+  labels: string[];
+}
+
+function buildReferenceManifest(params: {
   model: string;
   prompt: string;
   aspectInstruction: string;
   normalizedCoupleRefs: Buffer[];
   normalizedVenueRefs: VenueReferenceInput[];
-}): {
-  fullPrompt: string;
-  openAiPrompt: string;
-  imageParts: ImagePart[];
-  interactionInputs: InteractionInput[];
-  orderedReferences: OpenAiReferenceImage[];
-  coupleRefCount: number;
-  venueRefCount: number;
-} {
+}): ReferenceManifest {
   const limits = referenceLimitsForModel(params.model);
   const coupleRefs = params.normalizedCoupleRefs.slice(0, limits.couple);
   const venueRefs = params.normalizedVenueRefs.slice(
@@ -211,35 +218,19 @@ function buildReferencePayload(params: {
       : "") +
     `COMPOSITING HARD CONSTRAINT: integrate the exact couple naturally into the exact venue photograph with realistic scale, perspective, contact shadows, lens depth, matching light direction, and believable camera optics. Keep both faces crisp, unobstructed, front-readable, and fully visible. Do not crop through faces. Do not add extra people.\n`;
   const outputLine = `Output: one photorealistic ${params.aspectInstruction} cinematic wedding photograph with both people from the couple references together inside the venue. Instant recognition required. No text, captions, watermarks, or logos.`;
-  const fullPrompt = `${promptBody}${outputLine}`;
 
-  const imageParts: ImagePart[] = [];
-  const interactionInputs: InteractionInput[] = [{ type: "text", text: fullPrompt }];
-  // The OpenAI edits endpoint has no per-image text slot, so the same labels
-  // are folded into a single ordered manifest inside the prompt and the files
-  // are uploaded in exactly that order.
-  const referenceLabels: string[] = [];
-  const orderedReferences: OpenAiReferenceImage[] = [];
-  coupleRefs.forEach((buf, index) => {
+  const labels: string[] = [];
+  coupleRefs.forEach((_, index) => {
     const role =
       index === 0
         ? "TOGETHER REFERENCE - use to establish both partners as a pair, their relative scale, and any shared identity context"
         : index === 1
           ? "PARTNER A FACE REFERENCE - use as the clearest identity observation for Partner A when it matches the uploaded content"
           : "PARTNER B FACE REFERENCE - use as the clearest identity observation for Partner B when it matches the uploaded content";
-    const label =
+    labels.push(
       `INPUT IMAGE ${index + 1}: COUPLE IDENTITY REFERENCE ${index + 1} (${role}). ` +
-      "Use this only to preserve Partner A and Partner B likenesses. Extract identity traits; ignore clothing/background unless useful for identity. If the stated role does not match the photo content, infer the correct identity mapping from all couple references together.";
-    imageParts.push(
-      { text: label },
-      { inlineData: { mimeType: "image/jpeg", data: buf.toString("base64") } },
+        "Use this only to preserve Partner A and Partner B likenesses. Extract identity traits; ignore clothing/background unless useful for identity. If the stated role does not match the photo content, infer the correct identity mapping from all couple references together.",
     );
-    interactionInputs.push(
-      { type: "text", text: label },
-      { type: "image", mime_type: "image/jpeg", data: buf.toString("base64") },
-    );
-    referenceLabels.push(label);
-    orderedReferences.push({ buffer: buf, filename: `input-${index + 1}-couple.jpg` });
   });
   venueRefs.forEach((ref, index) => {
     const inputIndex = venueImageIndex + index;
@@ -250,36 +241,47 @@ function buildReferencePayload(params: {
         : index < 6
           ? "HIGH-FIDELITY CONTEXT REFERENCE"
           : "BROAD CONTEXT REFERENCE";
-    const label =
+    labels.push(
       `INPUT IMAGE ${inputIndex}: VENUE ${fidelity} ${index + 1}${coverage ? ` (${coverage})` : ""}. ` +
-      "Use this to preserve the real venue's architecture, layout, materials, decor, windows, fixtures, scale, and lighting.";
-    imageParts.push(
-      { text: label },
-      { inlineData: { mimeType: "image/jpeg", data: ref.buffer.toString("base64") } },
+        "Use this to preserve the real venue's architecture, layout, materials, decor, windows, fixtures, scale, and lighting.",
     );
-    interactionInputs.push(
-      { type: "text", text: label },
-      { type: "image", mime_type: "image/jpeg", data: ref.buffer.toString("base64") },
-    );
-    referenceLabels.push(label);
-    orderedReferences.push({ buffer: ref.buffer, filename: `input-${inputIndex}-venue.jpg` });
   });
 
-  const openAiPrompt =
-    `${promptBody}` +
-    `INPUT IMAGE ORDER MANIFEST: the attached reference images are supplied in exactly this order.\n` +
-    `${referenceLabels.join("\n")}\n` +
-    `${outputLine}`;
-
   return {
-    fullPrompt,
-    openAiPrompt,
-    imageParts,
-    interactionInputs,
-    orderedReferences,
-    coupleRefCount: coupleRefs.length,
-    venueRefCount: venueRefs.length,
+    fullPrompt: `${promptBody}${outputLine}`,
+    openAiPrompt:
+      `${promptBody}` +
+      `INPUT IMAGE ORDER MANIFEST: the attached reference images are supplied in exactly this order.\n` +
+      `${labels.join("\n")}\n` +
+      `${outputLine}`,
+    coupleRefs,
+    venueRefs,
+    labels,
   };
+}
+
+/** OpenAI transport payload: files uploaded in exactly the manifest order. */
+function openAiReferences(manifest: ReferenceManifest): OpenAiReferenceImage[] {
+  const coupleCount = manifest.coupleRefs.length;
+  return [
+    ...manifest.coupleRefs.map((buffer, index) => ({
+      buffer,
+      filename: `input-${index + 1}-couple.jpg`,
+    })),
+    ...manifest.venueRefs.map((ref, index) => ({
+      buffer: ref.buffer,
+      filename: `input-${coupleCount + index + 1}-venue.jpg`,
+    })),
+  ];
+}
+
+/** Gemini transport payload: a text label before each inline image. */
+function geminiImageParts(manifest: ReferenceManifest): ImagePart[] {
+  const buffers = [...manifest.coupleRefs, ...manifest.venueRefs.map((ref) => ref.buffer)];
+  return buffers.flatMap((buffer, index) => [
+    { text: manifest.labels[index]! },
+    { inlineData: { mimeType: "image/jpeg", data: buffer.toString("base64") } },
+  ]);
 }
 
 function expectedRatio(ratio: StillAspectRatio): number {
@@ -298,13 +300,15 @@ function expectedRatio(ratio: StillAspectRatio): number {
   }
 }
 
+type EnvLike = Record<string, string | undefined>;
+
 /**
  * Ordered image model chain. `IMAGE_MODEL*` are the provider-neutral names;
  * the legacy `GEMINI_IMAGE_*` names still work so existing deployments keep
- * booting without an env change.
+ * booting without an env change. envValidation.ts mirrors this resolution.
  */
-export function configuredImageModels(): string[] {
-  const explicit = process.env.IMAGE_MODELS ?? process.env.GEMINI_IMAGE_MODELS;
+export function configuredImageModelsFromEnv(env: EnvLike): string[] {
+  const explicit = env.IMAGE_MODELS ?? env.GEMINI_IMAGE_MODELS;
   if (explicit) {
     return explicit
       .split(",")
@@ -313,13 +317,13 @@ export function configuredImageModels(): string[] {
   }
 
   const primary =
-    process.env.IMAGE_MODEL ??
-    process.env.GEMINI_IMAGE_MODEL ??
-    process.env.NANO_BANANA_MODEL ??
+    env.IMAGE_MODEL ??
+    env.GEMINI_IMAGE_MODEL ??
+    env.NANO_BANANA_MODEL ??
     DEFAULT_IMAGE_MODELS[0]!;
   const fallbacks = (
-    process.env.IMAGE_FALLBACK_MODELS ??
-    process.env.GEMINI_IMAGE_FALLBACK_MODELS ??
+    env.IMAGE_FALLBACK_MODELS ??
+    env.GEMINI_IMAGE_FALLBACK_MODELS ??
     DEFAULT_IMAGE_MODELS.slice(1).join(",")
   )
     .split(",")
@@ -328,17 +332,12 @@ export function configuredImageModels(): string[] {
   return [...new Set([primary, ...fallbacks])];
 }
 
-function imageSizeForModel(model: string): string | undefined {
-  if (process.env.GEMINI_IMAGE_SIZE) return process.env.GEMINI_IMAGE_SIZE;
-  return model.includes("2.5") ? undefined : "2K";
+export function configuredImageModels(): string[] {
+  return configuredImageModelsFromEnv(process.env);
 }
 
-function isModelAvailabilityFailure(status: number, body: string): boolean {
-  if (status === 404 || status === 429 || status >= 500) return true;
-  if (status === 400) {
-    return /model|not found|not supported|unavailable|invalid model/i.test(body);
-  }
-  return false;
+function imageSizeForModel(): string {
+  return process.env.GEMINI_IMAGE_SIZE?.trim() || "2K";
 }
 
 function pixelStats(pixels: Buffer): { mean: number; stdev: number } {
@@ -380,9 +379,17 @@ function laplacianVariance(pixels: Buffer, width: number, height: number): numbe
   return sumSquares / count - mean * mean;
 }
 
+/** Output a provider returned that cannot ship (wrong size, blank, blurry...). */
+export class GeneratedStillRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeneratedStillRejectedError";
+  }
+}
+
 async function validateGeneratedStill(buffer: Buffer, aspectRatio: StillAspectRatio): Promise<void> {
   if (buffer.length < 40_000) {
-    throw new Error(`Generated still is unusably small (${buffer.length} bytes).`);
+    throw new GeneratedStillRejectedError(`Generated still is unusably small (${buffer.length} bytes).`);
   }
 
   const image = sharp(buffer, { limitInputPixels: 64_000_000 }).rotate();
@@ -390,18 +397,18 @@ async function validateGeneratedStill(buffer: Buffer, aspectRatio: StillAspectRa
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;
   if (!width || !height) {
-    throw new Error("Generated still is not a readable image.");
+    throw new GeneratedStillRejectedError("Generated still is not a readable image.");
   }
 
   if (width < GENERATED_MIN_EDGE_PX || height < GENERATED_MIN_EDGE_PX) {
-    throw new Error(
+    throw new GeneratedStillRejectedError(
       `Generated still is too low resolution (${width}x${height}); minimum edge is ${GENERATED_MIN_EDGE_PX}px.`,
     );
   }
 
   const relativeDelta = Math.abs(width / height - expectedRatio(aspectRatio)) / expectedRatio(aspectRatio);
   if (relativeDelta > 0.18) {
-    throw new Error(
+    throw new GeneratedStillRejectedError(
       `Generated still aspect ratio is wrong (${width}x${height}); expected ${aspectRatio}.`,
     );
   }
@@ -417,26 +424,201 @@ async function validateGeneratedStill(buffer: Buffer, aspectRatio: StillAspectRa
   const sharpness = laplacianVariance(pixels, info.width, info.height);
 
   if (brightness < GENERATED_MIN_BRIGHTNESS) {
-    throw new Error(`Generated still is too dark for production use (brightness ${brightness.toFixed(1)}).`);
+    throw new GeneratedStillRejectedError(`Generated still is too dark for production use (brightness ${brightness.toFixed(1)}).`);
   }
   if (brightness > GENERATED_MAX_BRIGHTNESS) {
-    throw new Error(`Generated still is too washed out for production use (brightness ${brightness.toFixed(1)}).`);
+    throw new GeneratedStillRejectedError(`Generated still is too washed out for production use (brightness ${brightness.toFixed(1)}).`);
   }
   if (contrast < GENERATED_MIN_CONTRAST) {
-    throw new Error(`Generated still has too little contrast for production use (${contrast.toFixed(1)}).`);
+    throw new GeneratedStillRejectedError(`Generated still has too little contrast for production use (${contrast.toFixed(1)}).`);
   }
   if (sharpness < GENERATED_MIN_SHARPNESS) {
-    throw new Error(`Generated still appears blurry or low-detail (sharpness ${sharpness.toFixed(1)}).`);
+    throw new GeneratedStillRejectedError(`Generated still appears blurry or low-detail (sharpness ${sharpness.toFixed(1)}).`);
   }
+}
+
+/*
+ * Reference preparation (EXIF rotate, Lanczos resize, contrast stretch,
+ * re-encode) is deterministic, so it runs once per source buffer and is
+ * reused by every scene and attempt of a session. Keyed weakly on the buffer
+ * object: the cache disappears with the session's buffers.
+ */
+const preparedReferenceCache = new WeakMap<Buffer, Promise<PreparedReferenceImage>>();
+
+export function prepareReferenceImageOnce(image: {
+  buffer: Buffer;
+  mimeType: string;
+}): Promise<PreparedReferenceImage> {
+  const cached = preparedReferenceCache.get(image.buffer);
+  if (cached) return cached;
+  const pending = prepareReferenceImage(image);
+  preparedReferenceCache.set(image.buffer, pending);
+  pending.catch(() => preparedReferenceCache.delete(image.buffer));
+  return pending;
+}
+
+/*
+ * Fallback audit counters: how many renders ran, and how many of them were
+ * produced by a model other than the configured primary. Exposed so the
+ * operator console / readiness can show silent degradation at a glance; the
+ * per-attempt truth lives in render_attempts.fallback_used.
+ */
+const fallbackCounters = { renders: 0, fallbacks: 0, byModel: new Map<string, number>() };
+
+export function imageModelFallbackStats(): {
+  renders: number;
+  fallbacks: number;
+  byModel: Record<string, number>;
+} {
+  return {
+    renders: fallbackCounters.renders,
+    fallbacks: fallbackCounters.fallbacks,
+    byModel: Object.fromEntries(fallbackCounters.byModel),
+  };
+}
+
+function countRender(result: GeneratedStillResult): void {
+  fallbackCounters.renders += 1;
+  if (!result.fallbackUsed) return;
+  fallbackCounters.fallbacks += 1;
+  fallbackCounters.byModel.set(result.model, (fallbackCounters.byModel.get(result.model) ?? 0) + 1);
+  logger.warn(
+    {
+      event: "image_model_fallback",
+      primaryModel: result.primaryModel,
+      model: result.model,
+      skipped: result.fallbackFrom,
+    },
+    "Gallery still rendered by a fallback image model",
+  );
+}
+
+async function renderWithGemini(params: {
+  apiKey: string;
+  model: string;
+  manifest: ReferenceManifest;
+  aspectRatio: StillAspectRatio;
+  signal?: AbortSignal;
+}): Promise<{ buffer: Buffer; size: string; usage: GeneratedStillResult["usage"] }> {
+  const { apiKey, model, manifest, aspectRatio } = params;
+  const imageSize = imageSizeForModel();
+  const body = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: manifest.fullPrompt }, ...geminiImageParts(manifest)],
+      },
+    ],
+    generationConfig: {
+      responseModalities: ["TEXT", "IMAGE"],
+      imageConfig: { aspectRatio, imageSize },
+      temperature: 0.25,
+    },
+    safetySettings: [
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+    ],
+  };
+
+  const timeout = AbortSignal.timeout(geminiImageTimeoutMs());
+  const signal = params.signal ? AbortSignal.any([timeout, params.signal]) : timeout;
+  let res: Response;
+  let text: string;
+  try {
+    // The key travels in the x-goog-api-key header, never the query string,
+    // so it cannot leak into proxy or error logs that record URLs.
+    res = await fetch(`${geminiApiBase()}/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body),
+      signal,
+    });
+    text = await res.text();
+  } catch (err) {
+    if (params.signal?.aborted) throw err;
+    const timedOut = isAbortOrTimeoutError(err);
+    throw new StillImageRequestError({
+      message: timedOut
+        ? `Gemini image model ${model} did not answer within ${geminiImageTimeoutMs()}ms`
+        : `Gemini image model ${model} request failed before a response: ${err instanceof Error ? err.message : String(err)}`,
+      status: 0,
+      body: "",
+      retryWithFallbackModel: true,
+      timedOut,
+      model,
+    });
+  }
+
+  if (!res.ok) {
+    throw new StillImageRequestError({
+      message: `Gemini image model ${model} request failed (${res.status}): ${text.slice(0, 800)}`,
+      status: res.status,
+      body: text,
+      retryWithFallbackModel: isModelAvailabilityFailure(res.status, text),
+      model,
+    });
+  }
+
+  let json: GeminiResponse;
+  try {
+    json = JSON.parse(text) as GeminiResponse;
+  } catch {
+    throw new Error(`Gemini image model ${model} returned non-JSON body: ${text.slice(0, 400)}`);
+  }
+
+  if (json.error) {
+    throw new Error(`Gemini image model ${model} error: ${json.error.message ?? JSON.stringify(json.error)}`);
+  }
+
+  if (json.promptFeedback?.blockReason) {
+    throw new StillImageBlockedError(
+      `Gemini image model blocked the prompt (${json.promptFeedback.blockReason}). Try different photos.`,
+      model,
+    );
+  }
+
+  const finish = json.candidates?.[0]?.finishReason;
+  if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
+    const blockedRatings = json.candidates?.[0]?.safetyRatings?.filter((r) => r.blocked) ?? [];
+    if (blockedRatings.length > 0 || /SAFETY|PROHIBITED|BLOCKLIST|IMAGE_SAFETY/i.test(finish)) {
+      throw new StillImageBlockedError(
+        `Gemini image model blocked the output for safety (${
+          blockedRatings.map((r) => r.category).join(", ") || finish
+        }).`,
+        model,
+      );
+    }
+  }
+
+  const imageBuffer = extractImageBytes(json);
+  if (!imageBuffer) {
+    const note = findTextNote(json);
+    throw new Error(
+      `Gemini image model ${model} returned no image data. finishReason=${finish ?? "unknown"} ${note ? `note=${note}` : ""}`,
+    );
+  }
+  return {
+    buffer: imageBuffer,
+    size: imageSize,
+    usage: {
+      inputTokens: json.usageMetadata?.promptTokenCount,
+      outputTokens: json.usageMetadata?.candidatesTokenCount,
+    },
+  };
 }
 
 /**
  * Generate one gallery still with the configured image model chain.
  *
  * The chain leads with OpenAI's gpt-image-2.5 models through the
- * `/v1/images/edits` endpoint and falls back to the Gemini native image models.
- * Couple references are sent first to prioritize identity preservation, followed
- * by ranked venue references that anchor the scene to the real venue.
+ * `/v1/images/edits` endpoint and falls back to the Gemini native image models
+ * only when a model is unavailable (explicit model-not-found codes, 404, 429,
+ * 5xx, or no answer before its timeout). Couple references are sent first to
+ * prioritize identity preservation, followed by ranked venue references that
+ * anchor the scene to the real venue. `signal` aborts the in-flight request
+ * when the session deadline passes; that abort is rethrown untouched.
  */
 export async function generateCinematicStillWithMetadata(params: {
   prompt: string;
@@ -445,16 +627,17 @@ export async function generateCinematicStillWithMetadata(params: {
   venueReference: { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null };
   venueReferences?: { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null }[];
   aspectRatio: StillAspectRatio;
+  signal?: AbortSignal;
 }): Promise<GeneratedStillResult> {
-  const geminiApiKey = process.env.GOOGLE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  const openAiApiKey = openaiApiKey();
-  if (!openAiApiKey && !geminiApiKey) {
+  const googleKey = geminiApiKey();
+  const openAiKey = openaiApiKey();
+  if (!openAiKey && !googleKey) {
     throw new Error(
       "OPENAI_API_KEY (for gpt-image models) or GOOGLE_AI_API_KEY (for Gemini image models) is required for image generation.",
     );
   }
 
-  const { prompt, coupleReference, venueReference, aspectRatio } = params;
+  const { prompt, coupleReference, venueReference, aspectRatio, signal } = params;
   const coupleRefs =
     params.coupleReferences?.filter((r) => r.buffer?.length).slice(0, MAX_COUPLE_REFERENCES) ?? [];
   if (coupleRefs.length === 0 && coupleReference.buffer?.length) {
@@ -478,12 +661,10 @@ export async function generateCinematicStillWithMetadata(params: {
     throw new Error("Venue reference photo is empty - cannot generate a venue-anchored gallery.");
   }
 
-  const preparedCoupleRefs = await Promise.all(
-    coupleRefs.map((r) => prepareReferenceImage(r)),
-  );
+  const preparedCoupleRefs = await Promise.all(coupleRefs.map((r) => prepareReferenceImageOnce(r)));
   const preparedVenueRefs = await Promise.all(
     venueRefs.map(async (r) => ({
-      prepared: await prepareReferenceImage(r),
+      prepared: await prepareReferenceImageOnce(r),
       coverage: normalizedVenueCoverage(r.coverage),
     })),
   );
@@ -493,31 +674,25 @@ export async function generateCinematicStillWithMetadata(params: {
     coverage: reference.coverage,
   }));
 
-  logger.info(
+  logger.debug(
     {
       targetMinEdgePx: REFERENCE_TARGET_MIN_EDGE_PX,
       coupleUpscaled: preparedCoupleRefs.filter((reference) => reference.upscaled).length,
       venueUpscaled: preparedVenueRefs.filter((reference) => reference.prepared.upscaled).length,
-      coupleDimensions: preparedCoupleRefs.map(
-        (reference) =>
-          `${reference.sourceWidth}x${reference.sourceHeight}->${reference.width}x${reference.height}`,
-      ),
-      venueDimensions: preparedVenueRefs.map(
-        ({ prepared }) =>
-          `${prepared.sourceWidth}x${prepared.sourceHeight}->${prepared.width}x${prepared.height}`,
-      ),
     },
-    "Prepared and upscaled reference images for generation",
+    "Prepared reference images for generation",
   );
 
   const aspectInstruction = aspectRatioInstruction(aspectRatio);
-
   const models = configuredImageModels();
+  const primaryModel = models[0] ?? DEFAULT_IMAGE_MODELS[0]!;
+  const fallbackFrom: { model: string; reason: string }[] = [];
   let lastError: unknown = null;
 
-  for (const model of models) {
-    const imageSize = imageSizeForModel(model);
-    const referencePayload = buildReferencePayload({
+  for (const [index, model] of models.entries()) {
+    signal?.throwIfAborted();
+    const hasNext = index < models.length - 1;
+    const manifest = buildReferenceManifest({
       model,
       prompt,
       aspectInstruction,
@@ -525,242 +700,100 @@ export async function generateCinematicStillWithMetadata(params: {
       normalizedVenueRefs,
     });
 
-    if (isOpenAiImageModel(model)) {
-      if (!openAiApiKey) {
-        const error = new Error(
-          `OPENAI_API_KEY is required for OpenAI image model ${model}.`,
-        );
-        lastError = error;
-        if (models.length > 1) {
-          logger.warn({ model }, "Skipping OpenAI image model: OPENAI_API_KEY is not configured");
-          continue;
-        }
-        throw error;
-      }
-
-      logger.info(
-        {
-          model,
-          size: openaiImageSize(aspectRatio),
-          quality: openaiImageQuality(),
-          promptSnippet: prompt.slice(0, 160),
-          aspectRatio,
-          coupleRefCount: referencePayload.coupleRefCount,
-          venueRefCount: referencePayload.venueRefCount,
-          referenceLimitProfile: referenceLimitsForModel(model),
-        },
-        "Submitting OpenAI image multi-reference edit",
+    const apiKey = isOpenAiImageModel(model) ? openAiKey : googleKey;
+    if (!apiKey) {
+      const error = new Error(
+        isOpenAiImageModel(model)
+          ? `OPENAI_API_KEY is required for OpenAI image model ${model}.`
+          : `GOOGLE_AI_API_KEY (or GEMINI_API_KEY) is required for Gemini image model ${model}.`,
       );
+      lastError = tagErrorWithModel(error, model);
+      if (hasNext) {
+        logger.warn({ model }, "Skipping image model: its API key is not configured");
+        fallbackFrom.push({ model, reason: "api_key_missing" });
+        continue;
+      }
+      throw lastError;
+    }
 
-      try {
-        const rendered = await generateStillWithOpenAi({
-          apiKey: openAiApiKey,
-          model,
-          prompt: referencePayload.openAiPrompt,
-          aspectRatio,
-          images: referencePayload.orderedReferences,
-        });
-        await validateGeneratedStill(rendered.buffer, aspectRatio);
+    try {
+      let rendered: { buffer: Buffer; size: string | null; quality: string | null; usage: GeneratedStillResult["usage"] };
+      if (isOpenAiImageModel(model)) {
         logger.info(
           {
             model,
-            sizeBytes: rendered.buffer.length,
-            size: rendered.size,
-            quality: rendered.quality,
-            cropped: rendered.cropped,
-            inputTokens: rendered.usage?.inputTokens,
-            outputTokens: rendered.usage?.outputTokens,
+            size: openaiImageSize(aspectRatio),
+            quality: openaiImageQuality(),
+            aspectRatio,
+            coupleRefCount: manifest.coupleRefs.length,
+            venueRefCount: manifest.venueRefs.length,
           },
-          "OpenAI image model rendered validated scene still",
+          "Submitting OpenAI image multi-reference edit",
         );
-        return { buffer: rendered.buffer, model };
-      } catch (err) {
-        if (err instanceof StillImageBlockedError) throw err;
-        lastError = err;
-        if (err instanceof StillImageRequestError && models.length > 1 && err.retryWithFallbackModel) {
-          logger.warn(
-            { err, model, status: err.status },
-            "OpenAI image model unavailable; trying fallback",
-          );
-          continue;
-        }
-        throw err;
-      }
-    }
-
-    if (!geminiApiKey) {
-      const error = new Error(
-        `GOOGLE_AI_API_KEY (or GEMINI_API_KEY) is required for Gemini image model ${model}.`,
-      );
-      lastError = error;
-      if (models.length > 1) {
-        logger.warn({ model }, "Skipping Gemini image model: no Google AI key is configured");
-        continue;
-      }
-      throw error;
-    }
-
-    const body = {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: referencePayload.fullPrompt }, ...referencePayload.imageParts],
-        },
-      ],
-      generationConfig: {
-        responseModalities: ["TEXT", "IMAGE"],
-        imageConfig: {
+        const result = await generateStillWithOpenAi({
+          apiKey,
+          model,
+          prompt: manifest.openAiPrompt,
           aspectRatio,
-          ...(imageSize ? { imageSize } : {}),
-        },
-        temperature: 0.25,
-      },
-      safetySettings: [
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-      ],
-    };
-
-    logger.info(
-      {
-        model,
-        imageSize: imageSize ?? "model-default",
-        promptSnippet: prompt.slice(0, 160),
-        aspectRatio,
-        coupleRefCount: referencePayload.coupleRefCount,
-        venueRefCount: referencePayload.venueRefCount,
-        referenceLimitProfile: referenceLimitsForModel(model),
-        coupleBytes: normalizedCoupleRefs[0]?.length ?? 0,
-        venueBytes: normalizedVenueRefs[0]?.buffer.length ?? 0,
-      },
-      "Submitting Gemini native image multi-reference fusion",
-    );
-
-    if (useInteractionsApiForImageGeneration(model)) {
-      const body = {
-        model,
-        input: referencePayload.interactionInputs,
-        response_format: {
-          type: "image",
-          mime_type: "image/jpeg",
-          aspect_ratio: aspectRatio,
-          ...(imageSize ? { image_size: imageSize } : {}),
-        },
-      };
-
-      const url = `${geminiApiBase()}/interactions`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": geminiApiKey,
-          "Api-Revision": GEMINI_INTERACTIONS_API_REVISION,
-        },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        const error = new Error(
-          `Gemini image model ${model} interactions request failed (${res.status}): ${text.slice(0, 800)}`,
+          images: openAiReferences(manifest),
+          signal,
+        });
+        rendered = { buffer: result.buffer, size: result.size, quality: result.quality, usage: result.usage ?? null };
+      } else {
+        logger.info(
+          {
+            model,
+            aspectRatio,
+            coupleRefCount: manifest.coupleRefs.length,
+            venueRefCount: manifest.venueRefs.length,
+          },
+          "Submitting Gemini native image multi-reference fusion",
         );
-        lastError = error;
-        if (models.length > 1 && isModelAvailabilityFailure(res.status, text)) {
-          logger.warn({ err: error, model, status: res.status }, "Gemini image model unavailable; trying fallback");
-          continue;
-        }
-        throw error;
+        const result = await renderWithGemini({ apiKey, model, manifest, aspectRatio, signal });
+        rendered = { buffer: result.buffer, size: result.size, quality: null, usage: result.usage };
       }
 
-      let json: GeminiInteractionResponse;
-      try {
-        json = JSON.parse(text) as GeminiInteractionResponse;
-      } catch {
-        throw new Error(`Gemini image model ${model} returned non-JSON body: ${text.slice(0, 400)}`);
-      }
-      if (json.error) {
-        throw new Error(`Gemini image model ${model} error: ${json.error.message ?? JSON.stringify(json.error)}`);
-      }
-
-      const imageBuffer = extractInteractionImageBytes(json);
-      if (!imageBuffer) {
-        throw new Error(`Gemini image model ${model} returned no interaction output_image data.`);
-      }
-      await validateGeneratedStill(imageBuffer, aspectRatio);
-
+      await validateGeneratedStill(rendered.buffer, aspectRatio);
+      const still: GeneratedStillResult = {
+        buffer: rendered.buffer,
+        model,
+        primaryModel,
+        fallbackUsed: model !== primaryModel,
+        fallbackFrom: [...fallbackFrom],
+        size: rendered.size,
+        quality: rendered.quality,
+        usage: rendered.usage,
+      };
+      countRender(still);
       logger.info(
         {
           model,
-          sizeBytes: imageBuffer.length,
-          api: "interactions",
+          sizeBytes: still.buffer.length,
+          size: still.size,
+          inputTokens: still.usage?.inputTokens,
+          outputTokens: still.usage?.outputTokens,
+          fallbackUsed: still.fallbackUsed,
         },
-        "Gemini image model rendered validated scene still",
+        "Image model rendered validated scene still",
       );
-      return { buffer: imageBuffer, model };
-    }
-
-    const url = `${geminiApiBase()}/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      const error = new Error(`Gemini image model ${model} request failed (${res.status}): ${text.slice(0, 800)}`);
-      lastError = error;
-      if (models.length > 1 && isModelAvailabilityFailure(res.status, text)) {
-        logger.warn({ err: error, model, status: res.status }, "Gemini image model unavailable; trying fallback");
+      return still;
+    } catch (err) {
+      tagErrorWithModel(err, model);
+      if (signal?.aborted) throw err;
+      lastError = err;
+      if (err instanceof StillImageRequestError && err.retryWithFallbackModel && hasNext) {
+        logger.warn(
+          { err, model, status: err.status, timedOut: err.timedOut },
+          "Image model unavailable; trying the next model in the chain",
+        );
+        fallbackFrom.push({
+          model,
+          reason: err.timedOut ? "timeout" : err.status === 0 ? "network" : `http_${err.status}`,
+        });
         continue;
       }
-      throw error;
+      throw err;
     }
-
-    let json: GeminiResponse;
-    try {
-      json = JSON.parse(text) as GeminiResponse;
-    } catch {
-      throw new Error(`Gemini image model ${model} returned non-JSON body: ${text.slice(0, 400)}`);
-    }
-
-    if (json.error) {
-      throw new Error(`Gemini image model ${model} error: ${json.error.message ?? JSON.stringify(json.error)}`);
-    }
-
-    if (json.promptFeedback?.blockReason) {
-      throw new StillImageBlockedError(
-        `Gemini image model blocked the prompt (${json.promptFeedback.blockReason}). Try different photos.`,
-      );
-    }
-
-    const finish = json.candidates?.[0]?.finishReason;
-    if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
-      const blockedRatings = json.candidates?.[0]?.safetyRatings?.filter((r) => r.blocked) ?? [];
-      if (blockedRatings.length > 0) {
-        throw new StillImageBlockedError(
-          `Gemini image model blocked the output for safety (${blockedRatings.map((r) => r.category).join(", ")}).`,
-        );
-      }
-    }
-
-    const imageBuffer = extractImageBytes(json);
-    if (!imageBuffer) {
-      const note = findTextNote(json);
-      throw new Error(
-        `Gemini image model ${model} returned no image data. finishReason=${finish ?? "unknown"} ${note ? `note=${note}` : ""}`,
-      );
-    }
-    await validateGeneratedStill(imageBuffer, aspectRatio);
-
-    logger.info(
-      {
-        model,
-        sizeBytes: imageBuffer.length,
-      },
-      "Gemini image model rendered validated scene still",
-    );
-    return { buffer: imageBuffer, model };
   }
 
   throw lastError instanceof Error ? lastError : new Error("Image model request failed.");
@@ -782,11 +815,78 @@ function aspectRatioInstruction(ratio: StillAspectRatio): string {
   }
 }
 
-export function userMessageForStillError(err: unknown): string {
-  if (err instanceof StillImageBlockedError) {
-    return "A reference photo was flagged by content safety. Upload different photos of the real couple (no celebrities, public figures, or restricted likenesses).";
-  }
+/* ------------------------------------------------------------------------
+ * Failure copy. couple_sessions.error_message is served on the public share
+ * page, so it is always one of a few fixed sentences (or, for couple photo
+ * problems, our own validation text). The raw provider/storage/ffmpeg detail
+ * goes to couple_sessions.failure_detail, which only owners and operators see.
+ * --------------------------------------------------------------------- */
 
+export type GalleryFailureCategory =
+  | "blocked"
+  | "quality"
+  | "couple_photos"
+  | "venue_setup"
+  | "timeout"
+  | "provider_billing"
+  | "provider_auth"
+  | "provider_rate_limit"
+  | "provider_unavailable"
+  | "configuration"
+  | "storage"
+  | "unknown";
+
+export interface GalleryFailure {
+  category: GalleryFailureCategory;
+  /** Safe to show the couple on the share page. */
+  coupleMessage: string;
+  /** Owner/operator detail with the raw cause. Never shown to the couple. */
+  detail: string;
+}
+
+const COUPLE_MESSAGES = {
+  blocked:
+    "Our image service couldn't use one of these photos. Please try again with different photos of the two of you.",
+  quality:
+    "We couldn't create a close enough likeness from these photos. Clear, sharp, well-lit photos where both faces are easy to see work best. Please try again with different photos.",
+  couplePhotosFallback:
+    "Some of your photos couldn't be used. Please try again with clear, well-lit photos that show both of your faces.",
+  venueSetup:
+    "This venue hasn't finished setting up its gallery photos yet, so we couldn't create your gallery. Please let the venue know.",
+  timeout:
+    "Your gallery took longer than expected, so we stopped it. Please try again in a few minutes.",
+  temporary:
+    "We couldn't finish your gallery because of a temporary problem on our side. Please try again in a few minutes.",
+} as const;
+
+const MAX_FAILURE_DETAIL_CHARS = 2000;
+
+function rawDetail(err: unknown): string {
+  if (err instanceof StillImageRequestError) {
+    return `${err.message}${err.body && !err.message.includes(err.body.slice(0, 80)) ? ` body=${err.body.slice(0, 600)}` : ""}`;
+  }
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+function withDetail(category: GalleryFailureCategory, coupleMessage: string, err: unknown, hint?: string): GalleryFailure {
+  const detail = `[${category}] ${hint ? `${hint} ` : ""}${rawDetail(err)}`.slice(0, MAX_FAILURE_DETAIL_CHARS);
+  return { category, coupleMessage, detail };
+}
+
+/** Classify a pipeline failure into couple-safe copy plus owner-facing detail. */
+export function describeGalleryFailure(err: unknown): GalleryFailure {
+  if (err instanceof SessionDeadlineError) {
+    return withDetail("timeout", COUPLE_MESSAGES.timeout, err);
+  }
+  if (err instanceof StillImageBlockedError) {
+    return withDetail("blocked", COUPLE_MESSAGES.blocked, err, "The image provider refused the photos on safety grounds.");
+  }
   if (err instanceof GalleryQualityError) {
     const r = err.report;
     const pct = (value: number) => `${Math.round(value * 100)}%`;
@@ -802,64 +902,54 @@ export function userMessageForStillError(err: unknown): string {
     }
     if (r.extraPeople) notes.push("extra people appeared");
     if (r.textArtifacts) notes.push("text artifacts appeared");
-    return (
-      `We couldn't render an accurate enough gallery from these photos, even after several attempts ` +
-      `(closest attempt: ${notes.join(", ")}). Clear, sharp, well-lit photos of both faces give the ` +
-      `best results - swap in stronger couple photos and try again. Your venue credit was refunded.`
-    );
+    return withDetail("quality", COUPLE_MESSAGES.quality, err, `Closest attempt: ${notes.join(", ")}.`);
+  }
+  if (err instanceof ReferenceImageError) {
+    return err.subject === "couple"
+      ? withDetail("couple_photos", `${err.message} Please try again with different photos.`, err)
+      : withDetail("venue_setup", COUPLE_MESSAGES.venueSetup, err, "Venue reference photos are missing or unusable.");
+  }
+  if (err instanceof GalleryStorageError) {
+    return withDetail("storage", COUPLE_MESSAGES.temporary, err);
+  }
+  if (err instanceof GalleryJudgeUnavailableError) {
+    return withDetail("provider_unavailable", COUPLE_MESSAGES.temporary, err, "The quality judge was unavailable.");
   }
 
-  const e = err as {
-    message?: string;
-    status?: number;
-    body?: { detail?: string };
-  };
-  const detail =
-    (typeof e?.body?.detail === "string" ? e.body.detail : "") +
-    " " +
-    (e?.message ?? "");
+  const e = err as { status?: number; timedOut?: boolean } | null;
+  const message = rawDetail(err);
+  const provider = /openai|gpt-image/i.test(message) ? "OpenAI" : /gemini|google/i.test(message) ? "Google AI" : "image provider";
 
-  if (
-    (err as { name?: string })?.name === "GalleryQualityError" ||
-    /failed quality gate|likeness|venueScore|compositionScore/i.test(detail)
-  ) {
-    return "We couldn't render an accurate enough gallery from these photos, even after several attempts. Photos with both faces clearly visible, sharp, and well lit give the best results - swap in stronger couple photos and try again. Your venue credit was refunded.";
+  if (e?.timedOut || isAbortOrTimeoutError(err) || /timed? ?out|did not answer within/i.test(message)) {
+    return withDetail("timeout", COUPLE_MESSAGES.timeout, err);
   }
-
-  const isOpenAiFailure = /openai|gpt-image/i.test(detail);
-  const providerName = isOpenAiFailure ? "OpenAI" : "Gemini";
-
+  if (/OPENAI_API_KEY|GOOGLE_AI_API_KEY|GEMINI_API_KEY|API key is required/i.test(message)) {
+    return withDetail("configuration", COUPLE_MESSAGES.temporary, err, "Image generation is not configured on this server.");
+  }
+  // 429 first: a Gemini RESOURCE_EXHAUSTED rate limit is not an empty account.
+  if (e?.status === 429 || /\(429\)|rate[_ ]?limit/i.test(message)) {
+    const quota = /insufficient[_ ]?quota|billing|exhausted balance|top up/i.test(message);
+    return quota
+      ? withDetail("provider_billing", COUPLE_MESSAGES.temporary, err, `The ${provider} account is out of credit or quota; top it up.`)
+      : withDetail("provider_rate_limit", COUPLE_MESSAGES.temporary, err, `The ${provider} API is rate limiting renders.`);
+  }
   if (
     e?.status === 402 ||
-    /exhausted balance|user is locked|top up your balance|insufficient[_ ]?quota|insufficient[_ ]?credit|billing[_ ]?hard[_ ]?limit|RESOURCE_EXHAUSTED/i.test(
-      detail,
-    )
+    /exhausted balance|user is locked|top up your balance|insufficient[_ ]?quota|insufficient[_ ]?credit|billing[_ ]?hard[_ ]?limit/i.test(message) ||
+    (/RESOURCE_EXHAUSTED/.test(message) && /quota|billing/i.test(message))
   ) {
-    return isOpenAiFailure
-      ? "The OpenAI account that powers the AI is out of credit. An admin needs to top up the OpenAI billing balance before new galleries can render. Your venue credit was refunded."
-      : "The Google AI account that powers the AI is out of credit. An admin needs to top up the Gemini API quota before new galleries can render. Your venue credit was refunded.";
+    return withDetail("provider_billing", COUPLE_MESSAGES.temporary, err, `The ${provider} account is out of credit; an admin needs to top it up.`);
   }
+  if (e?.status === 401 || e?.status === 403 || /invalid[_ ]?api[_ ]?key|\(401\)|\(403\)|PERMISSION_DENIED/i.test(message)) {
+    return withDetail("provider_auth", COUPLE_MESSAGES.temporary, err, `The ${provider} API rejected the credentials; fix the API key.`);
+  }
+  if (err instanceof StillImageRequestError) {
+    return withDetail("provider_unavailable", COUPLE_MESSAGES.temporary, err);
+  }
+  return withDetail("unknown", COUPLE_MESSAGES.temporary, err);
+}
 
-  if (err instanceof Error) {
-    if (err.message.includes("OPENAI_API_KEY")) {
-      return "Image generation is not configured on this server (missing OpenAI API key). Your venue credit was refunded.";
-    }
-    if (err.message.includes("GOOGLE_AI_API_KEY") || err.message.includes("GEMINI_API_KEY")) {
-      return "Image generation is not configured on this server (missing Gemini API key). Your venue credit was refunded.";
-    }
-    if (e?.status === 401 || /invalid[_ ]?api[_ ]?key|\(401\)/i.test(err.message)) {
-      return `The ${providerName} API rejected the credentials (Unauthorized). An admin needs to fix the API key before new galleries can render. Your venue credit was refunded.`;
-    }
-    if (e?.status === 403 || /forbidden|PERMISSION_DENIED|\(403\)/i.test(err.message)) {
-      return `The ${providerName} API rejected the request (Forbidden). API key is invalid, blocked, or out of credit. Your venue credit was refunded.`;
-    }
-    if (e?.status === 429 || /rate[_ ]?limit/i.test(err.message)) {
-      return `The ${providerName} API is rate limiting gallery renders right now. Please try again in a few minutes. Your venue credit was refunded.`;
-    }
-    if (/timed? ?out|AbortError|The operation was aborted/i.test(detail)) {
-      return "The image model took too long to render this gallery. Please try again. Your venue credit was refunded.";
-    }
-    return (detail.trim() || err.message).slice(0, 320);
-  }
-  return "Still image generation failed. Please try again. Your venue credit was refunded.";
+/** Couple-safe sentence for a pipeline failure (never raw provider text). */
+export function userMessageForStillError(err: unknown): string {
+  return describeGalleryFailure(err).coupleMessage;
 }

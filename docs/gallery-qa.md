@@ -8,8 +8,10 @@ Use the gallery QA harness before calling a model/prompt change production-ready
 - OpenAI gpt-image-2.5 image generation (Gemini fallback)
 - automated quality gate for aggregate likeness, per-partner likeness, distinct partner identity preservation, venue preservation, exactly-two-partner checks, face visibility, text artifacts, extra people, and composition
 - adaptive frame retries that feed quality-gate failure reasons back into the next prompt
+- judge retries kept separate from render attempts: a judge outage or malformed verdict is retried on the same frame and never buys another render
+- blocked content stops a scene after one attempt (the same photos would be blocked again)
 - branded still polish
-- branded motion reel
+- branded motion reel: portrait and 4:3 stills are letterboxed over a blurred copy of themselves (never cropped), and the title card letters the venue name as paths
 
 ## Inputs
 
@@ -34,7 +36,7 @@ Couple inputs must be 2-3 clear, well-lit images. For best likeness, use this or
 ## Command
 
 ```bash
-pnpm run gallery:qa -- --couple ./samples/couple --venue ./samples/venue --out ./qa-output/live-gallery --style cinematic-editorial --couple-name "Avery & Morgan"
+pnpm run gallery:qa -- --couple ./samples/couple --venue ./samples/venue --out ./qa-output/live-gallery --style cinematic-editorial --venue-name "Willow & Stone"
 ```
 
 For production-gated QA, include `--consent-confirmed`. This records in
@@ -86,7 +88,7 @@ The output folder contains:
 - `01-*.raw.jpg` through `04-*.raw.jpg` - unbranded model outputs
 - `01-*.jpg` through `04-*.jpg` - polished gallery stills
 - `dreemer-motion-reel.mp4` - branded motion reel
-- `quality-report.json` - model settings, input files with SHA-256 fingerprints, automated summary, scene venue refs, attempts, and judge scores
+- `quality-report.json` - model settings, input files with SHA-256 fingerprints, automated summary, scene venue refs, attempts, judge scores, each frame's judge status (`passed`, `below_target`, `unjudged`, `gate_off`), whether a fallback model rendered it, and the per-attempt log production stores in `render_attempts`
 - `review.html` - contact sheet with references, raw frames, polished frames, scores, used venue refs, and operator checklist
 
 The automated summary is a gate, not final approval. It reports:
@@ -96,7 +98,36 @@ The automated summary is a gate, not final approval. It reports:
 - total attempts and max attempts on any frame
 - minimum aggregate likeness, per-partner likeness, venue, and composition scores
 - distinct partner identity preservation on every frame
-- warnings for missing frames, missing reel, failed generation, or failed judge results
+- warnings for missing frames, missing reel, failed generation, failed judge results, frames that shipped below target or unjudged, and frames rendered by a fallback model
+
+## How live sessions differ
+
+The harness renders scenes one after another and keeps its attempt log in the
+report. Live sessions use the same renderer with production plumbing around it:
+
+- Scenes render concurrently, bounded by a process-wide render semaphore
+  (`GALLERY_RENDER_CONCURRENCY`, default 4); sessions per worker are capped by
+  `GALLERY_MAX_CONCURRENT` (default 2).
+- Every session ends ready or refunded within `SESSION_DEADLINE_MS` (default
+  15 minutes): the deadline aborts in-flight provider calls and ffmpeg, marks the
+  session failed and refunds the credit, and a reaper fails anything left in
+  processing past the deadline plus one minute.
+- When a scene fails, the accepted frames stay stored, so a retry renders only
+  the failed scene.
+- Every render attempt lands in `render_attempts` (model, fallback, size,
+  quality, tokens, latency, judge verdict, outcome). `sessionCostSummary()` in
+  `renderTelemetry.ts` turns those rows into measured cost per gallery using the
+  optional `RENDER_PRICE_<MODEL>` per-image prices; with no price configured the
+  cost is reported as unknown, never estimated.
+- A frame rendered by a model other than the primary is flagged
+  (`fallback_used`) and audited once per session as `image_model_fallback`. Only
+  explicit model-not-found codes, 404, 429, 5xx or no answer before the timeout
+  move the chain to the next model; a plain 400 fails loudly instead.
+- The couple sees one of a few fixed sentences when a session fails; the raw
+  cause goes to `failure_detail` for owners and operators.
+- On ready the gallery is emailed to the couple with the venue's "Check your
+  date" link, unless the venue turned on review before send, a frame could not
+  be judged, or the session is an owner sample.
 
 ## Manual Acceptance
 

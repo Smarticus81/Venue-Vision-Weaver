@@ -1,19 +1,13 @@
 import sharp from "sharp";
 import { logger } from "./logger.js";
 
-const SCENE_TITLES = [
-  "The Portrait",
-  "Quiet Moment",
-  "Grand Venue",
-  "Forever Begins",
-];
-
 /**
- * Editorial polish: gentle vignette, subtle texture, optional couple name caption.
+ * Editorial polish: gentle vignette, light sharpening and a small lift in
+ * brightness and saturation. No text is ever drawn on a gallery still.
  */
 export async function polishGalleryFrame(
   raw: Buffer,
-  options: { coupleName?: string | null; sceneIndex: number },
+  options: { sceneIndex: number },
 ): Promise<Buffer> {
   try {
     const meta = await sharp(raw).metadata();

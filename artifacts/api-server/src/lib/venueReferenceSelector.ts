@@ -10,8 +10,8 @@ import {
 
 type ImageRef = { buffer: Buffer; mimeType: string; coverage?: VenueMediaCoverage | null };
 
-const GEMINI_API_BASE =
-  process.env.GEMINI_API_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const SELECTOR_TIMEOUT_MS = 45_000;
 const VENUE_SELECTOR_MODEL =
   process.env.GEMINI_VENUE_SELECTOR_MODEL ??
   process.env.GEMINI_QUALITY_MODEL ??
@@ -28,12 +28,27 @@ interface GeminiSelectorResponse {
   error?: { message?: string; code?: number; status?: string };
 }
 
-async function normalizeVenueReference(ref: ImageRef): Promise<Buffer> {
-  return sharp(ref.buffer)
+function geminiApiBase(): string {
+  return (process.env.GEMINI_API_BASE_URL ?? DEFAULT_GEMINI_API_BASE).replace(/\/$/, "");
+}
+
+/*
+ * Each venue photo is re-encoded for the selector once per buffer and reused
+ * by every scene of the session (the four scene rankings share one upload set).
+ */
+const selectorReferenceCache = new WeakMap<Buffer, Promise<Buffer>>();
+
+function normalizeVenueReference(ref: ImageRef): Promise<Buffer> {
+  const cached = selectorReferenceCache.get(ref.buffer);
+  if (cached) return cached;
+  const pending = sharp(ref.buffer)
     .rotate()
     .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 86, mozjpeg: true })
     .toBuffer();
+  selectorReferenceCache.set(ref.buffer, pending);
+  pending.catch(() => selectorReferenceCache.delete(ref.buffer));
+  return pending;
 }
 
 function extractText(json: GeminiSelectorResponse): string {
@@ -77,7 +92,7 @@ function legacyFallbackIndexes(sceneId: string, count: number): number[] {
   return preferred.filter((index) => index < count);
 }
 
-function fallbackIndexes(sceneId: string, refs: ImageRef[]): number[] {
+export function fallbackIndexes(sceneId: string, refs: ImageRef[]): number[] {
   const byCoverage = preferredVenueCoveragesForScene(sceneId).flatMap((coverage) =>
     refs.flatMap((ref, index) => (ref.coverage === coverage ? [index] : [])),
   );
@@ -96,6 +111,7 @@ function venueCoverageLabel(coverage: unknown): string | null {
 export async function rankVenueReferencesForScene(
   scene: WeddingScene,
   venueRefs: ImageRef[],
+  signal?: AbortSignal,
 ): Promise<number[]> {
   if (venueRefs.length <= 1) return venueRefs.map((_, index) => index);
 
@@ -131,10 +147,11 @@ export async function rankVenueReferencesForScene(
       );
     });
 
-    const url = `${GEMINI_API_BASE}/models/${VENUE_SELECTOR_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
+    const timeout = AbortSignal.timeout(SELECTOR_TIMEOUT_MS);
+    const res = await fetch(`${geminiApiBase()}/models/${VENUE_SELECTOR_MODEL}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       body: JSON.stringify({
         contents: [{ role: "user", parts }],
         generationConfig: {
@@ -162,6 +179,8 @@ export async function rankVenueReferencesForScene(
       return ranked;
     }
   } catch (err) {
+    // The session deadline is not a ranking problem: let the abort propagate.
+    if (signal?.aborted) throw err;
     logger.warn({ err, sceneId: scene.id }, "Venue reference ranking failed; using fallback order");
   }
 
