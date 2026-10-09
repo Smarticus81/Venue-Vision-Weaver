@@ -88,13 +88,23 @@ export async function aiSpendTodayUsd(now: Date = new Date()): Promise<number> {
   return estimateRunCostUsd(row?.prompt ?? 0, row?.completion ?? 0, aiTokenPricesUsd());
 }
 
-export async function agentRunGate(now: Date = new Date()): Promise<StartDecision> {
+/**
+ * May agents run right now? `inFlight` adds the tokens of a run still in
+ * progress (not yet recorded on its row), so the budget also stops a run
+ * mid-way, not only the next one.
+ */
+export async function agentRunGate(
+  now: Date = new Date(),
+  inFlight: { promptTokens: number; completionTokens: number } | null = null,
+): Promise<StartDecision> {
   const [agentsEnabled, capUsd] = await Promise.all([
     getPolicyBoolean("agents_enabled", "enabled", true),
     getPolicyNumber("max_daily_ai_usd", "usd", 25),
   ]);
   if (!agentsEnabled) return { ok: false, reason: "agents_disabled" };
-  const spentTodayUsd = await aiSpendTodayUsd(now);
+  const spentTodayUsd =
+    (await aiSpendTodayUsd(now)) +
+    (inFlight ? estimateRunCostUsd(inFlight.promptTokens, inFlight.completionTokens, aiTokenPricesUsd()) : 0);
   return shouldStartAgentRuns({ agentsEnabled, spentTodayUsd, capUsd });
 }
 

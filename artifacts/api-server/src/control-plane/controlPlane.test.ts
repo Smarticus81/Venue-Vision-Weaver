@@ -405,3 +405,86 @@ test("an agent's upsert_prospect never moves a prospect out of disqualified", as
     assert.ok((AGENT_LOCKED_PROSPECT_STATUSES as readonly string[]).includes(status));
   }
 });
+
+test("a run that fails mid-loop still reports the tokens it spent, and an aborted run makes no further calls", async (t) => {
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    delete process.env.XAI_API_KEY;
+  });
+  process.env.XAI_API_KEY = "xai-test-key";
+  const toolTurn = {
+    id: "resp_t",
+    output: [{ type: "function_call", call_id: "call_1", name: "get_business_metrics", arguments: "{}" }],
+    usage: { input_tokens: 200_000, output_tokens: 1_000 },
+  };
+  let fetches = 0;
+  globalThis.fetch = (async () => {
+    fetches += 1;
+    if (fetches === 1) return new Response(JSON.stringify(toolTurn), { status: 200 });
+    return new Response("upstream down", { status: 500 });
+  }) as typeof fetch;
+  const usage = { promptTokens: 0, completionTokens: 0 };
+  await assert.rejects(
+    grok.runAgentLoop({
+      systemPrompt: "s",
+      userMessage: "u",
+      tools: [{ name: "get_business_metrics", description: "KPIs" }],
+      executeTool: async () => ({ ok: true }),
+      usage,
+    }),
+    /\(500\)/,
+  );
+  assert.deepEqual(usage, { promptTokens: 200_000, completionTokens: 1_000 }, "tokens before the failure are not lost");
+
+  fetches = 0;
+  globalThis.fetch = (async () => {
+    fetches += 1;
+    return new Response(JSON.stringify(toolTurn), { status: 200 });
+  }) as typeof fetch;
+  const controller = new AbortController();
+  await assert.rejects(
+    grok.runAgentLoop({
+      systemPrompt: "s",
+      userMessage: "u",
+      tools: [{ name: "get_business_metrics", description: "KPIs" }],
+      executeTool: async () => {
+        controller.abort(new Error("agents_enabled was turned off"));
+        return { ok: true };
+      },
+      signal: controller.signal,
+    }),
+    /agents_enabled was turned off/,
+  );
+  assert.equal(fetches, 1, "no model request after the abort");
+});
+
+test("the mid-run kill-switch check is cached briefly", async () => {
+  const { createMidRunGate } = await import("./runner.js");
+  let now = 0;
+  let checks = 0;
+  let enabled = true;
+  const gate = createMidRunGate(
+    async () => {
+      checks += 1;
+      return enabled ? { ok: true } : { ok: false, reason: "agents_disabled" };
+    },
+    () => now,
+  );
+  assert.equal((await gate()).ok, true);
+  enabled = false;
+  now = 1_000;
+  assert.equal((await gate()).ok, true, "within the cache window");
+  now = 6_000;
+  assert.equal((await gate()).ok, false);
+  assert.equal(checks, 2);
+});
+
+test("growth rules run on their own clock: off-scheduler snapshots neither delay them nor shrink okDays", async () => {
+  const { growthRulesDue } = await import("./scheduler.js");
+  const t0 = new Date("2026-10-01T00:00:00Z");
+  assert.deepEqual(growthRulesDue(null, t0, 360), { due: true, hoursSinceLastRun: 6 });
+  assert.equal(growthRulesDue(t0, new Date("2026-10-01T05:00:00Z"), 360).due, false);
+  const later = growthRulesDue(t0, new Date("2026-10-01T11:00:00Z"), 360);
+  assert.equal(later.due, true);
+  assert.equal(later.hoursSinceLastRun, 11, "measured from the last rules run, not the newest snapshot");
+});

@@ -183,10 +183,18 @@ export class RunDeadlineError extends Error {
   }
 }
 
-/** Race the reasoning loop against the wall-clock deadline; the late result is discarded by the caller. */
-function withDeadline<T>(work: Promise<T>, deadlineMs: number): Promise<T> {
+/**
+ * Race the reasoning loop against the wall-clock deadline; the late result is
+ * discarded by the caller. On the deadline the loop is aborted (onDeadline),
+ * so an abandoned run makes no further model or tool calls.
+ */
+function withDeadline<T>(work: Promise<T>, deadlineMs: number, onDeadline?: (err: RunDeadlineError) => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new RunDeadlineError(deadlineMs)), deadlineMs);
+    const timer = setTimeout(() => {
+      const err = new RunDeadlineError(deadlineMs);
+      onDeadline?.(err);
+      reject(err);
+    }, deadlineMs);
     work.then(
       (value) => {
         clearTimeout(timer);
@@ -236,14 +244,26 @@ async function finishRun(runId: number, definition: AgentDefinition, result: Age
   logger.info({ agentKey: definition.key, runId, toolCalls: result.toolCallCount }, "Control-plane agent run succeeded");
 }
 
-async function failRun(runId: number, definition: AgentDefinition, err: unknown): Promise<void> {
+async function failRun(
+  runId: number,
+  definition: AgentDefinition,
+  err: unknown,
+  usage: { promptTokens: number; completionTokens: number } = { promptTokens: 0, completionTokens: 0 },
+): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
   const retryable = isRetryableProviderError(message);
   const deadline = err instanceof RunDeadlineError;
   logger.error({ err, agentKey: definition.key, runId, retryable, deadline }, "Control-plane agent run failed");
+  // Tokens spent before the failure count toward max_daily_ai_usd.
   await db
     .update(agentRunsTable)
-    .set({ status: "failed", error: message.slice(0, 2000), finishedAt: new Date() })
+    .set({
+      status: "failed",
+      error: message.slice(0, 2000),
+      finishedAt: new Date(),
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+    })
     .where(and(eq(agentRunsTable.id, runId), eq(agentRunsTable.status, "running")));
 
   if (retryable) {
@@ -270,9 +290,37 @@ async function failRun(runId: number, definition: AgentDefinition, err: unknown)
   });
 }
 
+export class RunHaltedError extends Error {
+  constructor(reason: string) {
+    super(`Run stopped mid-way: ${reason}.`);
+    this.name = "RunHaltedError";
+  }
+}
+
+/** Kill-switch check between tool calls, cached briefly so a run does not hit the DB per call. */
+const GATE_RECHECK_MS = 5_000;
+
+export function createMidRunGate(check: () => Promise<{ ok: boolean; reason?: string }>, now: () => number = Date.now) {
+  let cached: { at: number; ok: boolean; reason?: string } | null = null;
+  return async (): Promise<{ ok: boolean; reason?: string }> => {
+    if (cached && now() - cached.at < GATE_RECHECK_MS) return cached;
+    const result = await check();
+    cached = { at: now(), ok: result.ok, reason: result.reason };
+    return cached;
+  };
+}
+
 async function executeRun(runId: number, definition: AgentDefinition): Promise<void> {
   const deadlineMs = runDeadlineMs();
   const startedAt = Date.now();
+  const usage = { promptTokens: 0, completionTokens: 0 };
+  const controller = new AbortController();
+  // agents_enabled and max_daily_ai_usd are enforced between tool calls too,
+  // not only when a run starts: an operator's kill switch stops a run.
+  const midRunGate = createMidRunGate(async () => {
+    const gate = await agentRunGate(new Date(), usage);
+    return gate.ok ? { ok: true } : { ok: false, reason: gate.reason };
+  });
   try {
     const briefing = await buildRunBriefing(definition, new Date());
     const result = await withDeadline(
@@ -281,22 +329,32 @@ async function executeRun(runId: number, definition: AgentDefinition): Promise<v
         userMessage: briefing,
         tools: toolDeclarations(definition.tools, definition.key),
         enableWebSearch: definition.webSearch === true,
-        executeTool: (name, args) => {
+        usage,
+        signal: controller.signal,
+        executeTool: async (name, args) => {
           if (!definition.tools.includes(name)) {
-            return Promise.reject(new Error(`Tool "${name}" is not granted to ${definition.key}.`));
+            throw new Error(`Tool "${name}" is not granted to ${definition.key}.`);
           }
           if (Date.now() - startedAt > deadlineMs) {
-            return Promise.reject(new RunDeadlineError(deadlineMs));
+            throw new RunDeadlineError(deadlineMs);
+          }
+          const gate = await midRunGate();
+          if (!gate.ok) {
+            const halted = new RunHaltedError(gate.reason === "agents_disabled" ? "agents_enabled was turned off" : `${gate.reason ?? "kill switch"}`);
+            controller.abort(halted);
+            throw halted;
           }
           return executeControlPlaneTool(name, args, { agentKey: definition.key, runId });
         },
       }),
       deadlineMs,
+      (err) => controller.abort(err),
     );
     await finishRun(runId, definition, result);
   } catch (err) {
+    const cause = controller.signal.aborted && controller.signal.reason instanceof Error ? controller.signal.reason : err;
     try {
-      await failRun(runId, definition, err);
+      await failRun(runId, definition, cause, usage);
     } catch (inner) {
       logger.error({ err: inner, runId }, "Failed to record the agent run failure");
     }

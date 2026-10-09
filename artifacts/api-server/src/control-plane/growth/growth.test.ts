@@ -588,8 +588,12 @@ test("adaptation R3: variant reweight and pause keep the control safe and at lea
   assert.equal(paused.after.active, false);
   assert.match(paused.reason, /paused by rule R3/);
   assert.equal(changes.find((c) => c.subjectId === "tours_to_bookings" && c.action === "pause"), undefined, "control is never paused");
-  assert.equal(changes.find((c) => c.subjectId === "open_dates"), undefined, "below variantMinSent keeps its weight");
   const reweighted = changes.find((c) => c.subjectId === "couple_in_the_room")!;
+  // Below variantMinSent: put on the measured scale (mean of the measured
+  // arms still active), never left at its seeded 0.2 above the best arm.
+  const unmeasured = changes.find((c) => c.subjectId === "open_dates")!;
+  assert.match(unmeasured.reason, /mean smoothed positive-reply rate of the measured variants/);
+  assert.ok(unmeasured.after.weight <= Math.max(reweighted.after.weight, changes.find((c) => c.subjectId === "tours_to_bookings")?.after.weight ?? 1) + 1e-9);
   assert.equal(reweighted.action, "reweight");
   const controlWeight = changes.find((c) => c.subjectId === "tours_to_bookings")?.after.weight ?? 0.4;
   const activeWeights = [controlWeight, reweighted.after.weight];
@@ -1127,4 +1131,25 @@ test("evaluator readout is limited to data since the experiment started", async 
   assert.equal((await scoped.emails(daysAgo(30))).length, 2);
   assert.equal(await scoped.legacySends(daysAgo(30)), 0);
   assert.equal((await scoped.venueCreatedAts(daysAgo(30))).length, 1);
+});
+
+test("adaptation R1: after an operator reset, only sends since the reset can pause again", async () => {
+  const resetGuard = { status: "ok" as const, since: daysAgo(1).toISOString(), reason: null, okDays: 0, resetAt: daysAgo(1).toISOString() };
+  // The 14-day window still holds the bounces that caused the pause.
+  const kpis = withWindow(await fixtureKpis({}), 100, 10);
+  const stale = adaptation.deriveGuardChange(adaptationInput(kpis, { guard: resetGuard }));
+  assert.equal(stale?.action, "pause", "without the since-reset window the old bounces re-pause");
+  const quiet = adaptation.deriveGuardChange(
+    adaptationInput(kpis, { guard: resetGuard, guardWindow: { sent: 5, bounced: 0, complained: 0, bounceRate: 0, complaintRate: 0 } }),
+  );
+  assert.equal(quiet, null, "fewer than minSendsForGuard sends since the reset: R1 waits");
+  const badAgain = adaptation.deriveGuardChange(
+    adaptationInput(kpis, { guard: resetGuard, guardWindow: { sent: 60, bounced: 6, complained: 0, bounceRate: 0.1, complaintRate: 0 } }),
+  );
+  assert.equal(badAgain?.action, "pause", "new bounces after the reset still pause");
+  assert.match(badAgain!.reason, /since the operator reset/);
+
+  assert.ok(adaptation.guardWindowSinceReset(resetGuard, NOW));
+  assert.equal(adaptation.guardWindowSinceReset({ resetAt: daysAgo(20).toISOString() }, NOW), null, "older than 14 days: the normal window applies");
+  assert.equal(adaptation.guardWindowSinceReset({ resetAt: null }, NOW), null);
 });

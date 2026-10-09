@@ -29,6 +29,13 @@ export interface GuardState {
   since: string | null;
   reason: string | null;
   okDays: number;
+  /**
+   * When an operator last reset the guard. Rule R1 then judges only sends
+   * made after the reset (the pre-reset bounces that caused the pause stay
+   * in the 14-day window and would re-pause it at once). Kept across rule
+   * transitions until the next pause.
+   */
+  resetAt?: string | null;
 }
 
 export interface SendingHealth {
@@ -69,6 +76,7 @@ export function normalizeGuard(raw: unknown): GuardState {
     since: typeof value.since === "string" && value.since ? value.since : null,
     reason: typeof value.reason === "string" && value.reason ? value.reason : null,
     okDays: Number.isFinite(okDays) && okDays >= 0 ? okDays : 0,
+    resetAt: typeof value.resetAt === "string" && value.resetAt ? value.resetAt : null,
   };
 }
 
@@ -142,6 +150,11 @@ export async function computeSendingHealth(
 ): Promise<SendingHealth> {
   const days = Math.max(1, Math.floor(windowDays));
   const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return computeSendingHealthSince(since, days);
+}
+
+/** Sent / bounced / complained for studio emails sent at or after `since`. */
+export async function computeSendingHealthSince(since: Date, days: number = HEALTH_WINDOW_DAYS): Promise<SendingHealth> {
   const emails = controlOutreachEmailsTable;
   const bouncedEvent = sql`exists (select 1 from control_email_events ev where ev.email_id = ${emails.id} and ev.event_type = 'bounced')`;
   const complainedEvent = sql`exists (select 1 from control_email_events ev where ev.email_id = ${emails.id} and ev.event_type = 'complained')`;
@@ -250,7 +263,7 @@ export async function resetGuard(note: string, operatorEmail: string): Promise<G
   const previous = await loadGuard();
   const base = await baseDailyCap();
   await setPolicy(DAILY_CAP_POLICY_KEY, { emails: base });
-  const next = await writeGuard({ status: "ok", since: now, reason: null, okDays: 0 });
+  const next = await writeGuard({ status: "ok", since: now, reason: null, okDays: 0, resetAt: now });
   await recordAuditEvent({
     actorType: "operator",
     actor: operatorEmail,
