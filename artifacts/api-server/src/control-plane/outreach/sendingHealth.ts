@@ -4,7 +4,7 @@ import {
   agentTasksTable,
   controlOutreachEmailsTable,
 } from "@workspace/db";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { recordAuditEvent } from "../audit.js";
 import { startOfUtcDay } from "../actionCounts.js";
@@ -53,9 +53,6 @@ export const HEALTH_WINDOW_DAYS = 14;
 /** Below this cap a throttled guard would starve warm-up entirely. */
 export const MIN_THROTTLED_CAP = 5;
 export const PAUSE_TASK_TITLE = "Outreach sending paused by the deliverability guard";
-
-/** Both action types count toward the prospect cap so historical legacy sends still count. */
-const PROSPECT_SEND_ACTION_TYPES = ["send_prospect_email", "send_outreach_email"] as const;
 
 const GUARD_STATUSES: readonly GuardStatus[] = ["ok", "warn", "throttled", "paused"];
 
@@ -107,19 +104,30 @@ export function computeEffectiveCap(guard: Pick<GuardState, "status">, baseCap: 
   }
 }
 
-/** Prospect emails sent today (UTC) via the governed send actions. */
+/**
+ * Prospect emails delivered today (UTC): studio rows with sentAt today plus
+ * any legacy plain-text sends executed today. This is the one count the
+ * sender's daily cap enforces AND the number /control shows; counting
+ * delivered rows (not executed actions) keeps a send whose action ended
+ * failed after delivery, or one in flight, visible to the next cap check.
+ */
 export async function prospectSendsToday(now: Date = new Date()): Promise<number> {
-  const [row] = await db
+  const since = startOfUtcDay(now);
+  const [studio] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(controlOutreachEmailsTable)
+    .where(and(isNotNull(controlOutreachEmailsTable.sentAt), gte(controlOutreachEmailsTable.sentAt, since)));
+  const [legacy] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(agentActionsTable)
     .where(
       and(
-        inArray(agentActionsTable.actionType, [...PROSPECT_SEND_ACTION_TYPES]),
+        eq(agentActionsTable.actionType, "send_prospect_email"),
         eq(agentActionsTable.status, "executed"),
-        gte(agentActionsTable.executedAt, startOfUtcDay(now)),
+        gte(agentActionsTable.executedAt, since),
       ),
     );
-  return row?.total ?? 0;
+  return (studio?.total ?? 0) + (legacy?.total ?? 0);
 }
 
 /**

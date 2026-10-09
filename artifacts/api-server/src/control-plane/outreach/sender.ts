@@ -11,11 +11,11 @@ import {
   type ControlProspectFact,
   type ControlProspectVetting,
 } from "@workspace/db";
-import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { sendRawEmail } from "../../lib/emailService.js";
+import { logger } from "../../lib/logger.js";
 import { getPolicyBoolean, getPolicyNumber } from "../policies.js";
 import { recordAuditEvent } from "../audit.js";
-import { startOfUtcDay } from "../actionCounts.js";
 import { isFreeMail, splitEmail } from "../vetting/domain.js";
 import { citableFacts, citedFactsIn, loadFacts } from "../vetting/facts.js";
 import { VettingGateError, assertVettingAllowsOutreach, ensureVetted, loadVetting, vettingIsFresh } from "../vetting/vet.js";
@@ -39,7 +39,7 @@ import {
 import { COPY_RULES } from "./copywriter.js";
 import { renderOutreachEmail, splitParagraphs, type TemplateImage } from "./emailTemplate.js";
 import { DeferredSendError, isDeferredSendError } from "./sendErrors.js";
-import { loadGuard, type GuardState } from "./sendingHealth.js";
+import { loadGuard, prospectSendsToday, type GuardState } from "./sendingHealth.js";
 
 /**
  * The only code path that delivers a studio email. It runs inside the
@@ -69,6 +69,21 @@ export interface DeliverMessage {
   replyTo: string | null;
   /** Resend tags; webhook events also match on the provider message id. */
   tags: Array<{ name: string; value: string }>;
+  /** One provider message per key: a retry after an unclear failure can never deliver twice. */
+  idempotencyKey: string;
+}
+
+/** Idempotency key for a studio email (stable across retries of the same row). */
+export function outreachIdempotencyKey(emailId: number): string {
+  return `outreach-email-${emailId}`;
+}
+
+export interface DeliveryRecord {
+  providerId: string | null;
+  html: string;
+  text: string;
+  to: string;
+  at: Date;
 }
 
 export interface SendConfig {
@@ -105,14 +120,27 @@ export interface OutreachSendDeps {
   policyFlags(): Promise<SendPolicyFlags>;
   /** Status of the campaign the email belongs to (null when missing). */
   campaignStatus(campaignId: number): Promise<string | null>;
-  /** Serialize cap check + delivery across concurrent approvals. */
+  /**
+   * Serialize the contact re-check, cap check and delivery across concurrent
+   * approvals. Waits a bounded time for the lock; on contention it throws a
+   * DeferredSendError (the draft is kept) instead of pinning a connection.
+   */
   withSendLock<T>(fn: () => Promise<T>): Promise<T>;
+  /**
+   * Deliver one message. Throws DeferredSendError when the provider gave no
+   * definite answer (timeout, 429, 5xx): the idempotency key makes a retry
+   * safe. Any other failure is a rejection.
+   */
   deliver(message: DeliverMessage): Promise<{ id: string | null }>;
-  markSent(emailId: number, record: { providerId: string | null; html: string; text: string; to: string; at: Date }): Promise<void>;
+  /**
+   * After a delivery: mark the email sent and record the contact on the
+   * prospect (count incremented in SQL, status moved to contacted only from
+   * new/qualified/contacted) in one transaction.
+   */
+  recordDelivery(emailId: number, record: DeliveryRecord, prospectId: number, step: number | null): Promise<void>;
   markFailed(emailId: number, error: string): Promise<void>;
   /** Keep the draft (status stays "draft") and record why it could not go out yet. */
   markDeferred(emailId: number, error: string): Promise<void>;
-  bumpProspect(prospect: ControlProspect, step: number | null, at: Date): Promise<void>;
   config(): SendConfig;
   imageUrl(objectKey: string): string;
   now(): Date;
@@ -200,11 +228,15 @@ export async function sendOutreachEmail(
     );
   }
 
-  const prospect = await deps.loadProspect(email.prospectId);
-  if (!prospect) throw new Error(`Prospect ${email.prospectId} not found.`);
+  const initial = await deps.loadProspect(email.prospectId);
+  if (!initial) throw new Error(`Prospect ${email.prospectId} not found.`);
 
   const now = deps.now();
-  try {
+  // Recipient rules: suppression list, status, gap, lifetime cap, existing
+  // customer. Checked once up front (cheap refusal) and again under the send
+  // lock on a freshly loaded row, because an unsubscribe, a reply or another
+  // send can land while this approval waits for the lock.
+  const assertContactable = async (prospect: ControlProspect): Promise<void> => {
     const [policy, suppressed, customerSlug] = await Promise.all([
       deps.loadPolicy(),
       deps.isSuppressed(prospect.email),
@@ -215,8 +247,28 @@ export async function sendOutreachEmail(
     } catch (err) {
       throw contactGuardFailure(err);
     }
+  };
+
+  let delivered = false;
+  try {
+    await assertContactable(initial);
+
+    // Vetting may re-run over the network; it happens before the lock so a
+    // slow site never holds up other sends.
+    let vetting = await deps.loadVetting(initial.id);
+    if (vetting && vetting.status === "passed" && !vettingIsFresh(vetting, now)) vetting = await deps.revet(initial);
+    try {
+      assertVettingAllowsOutreach(vetting, initial.id, now);
+    } catch (err) {
+      if (err instanceof VettingGateError && err.reason !== "failed") throw new DeferredSendError(err.message);
+      throw err;
+    }
 
     return await deps.withSendLock(async () => {
+      const prospect = await deps.loadProspect(email.prospectId);
+      if (!prospect) throw new Error(`Prospect ${email.prospectId} not found.`);
+      await assertContactable(prospect);
+
       const cap = await deps.dailyCap();
       if (cap.sentToday >= cap.cap) throw new DeferredSendError(dailyCapMessage(cap));
 
@@ -228,15 +280,6 @@ export async function sendOutreachEmail(
       }
       if (!flags.sendsEnabled) {
         throw new DeferredSendError("Outbound prospect email is frozen (policy outreach_sends_enabled = false); the draft is kept.");
-      }
-
-      let vetting = await deps.loadVetting(prospect.id);
-      if (vetting && vetting.status === "passed" && !vettingIsFresh(vetting, now)) vetting = await deps.revet(prospect);
-      try {
-        assertVettingAllowsOutreach(vetting, prospect.id, now);
-      } catch (err) {
-        if (err instanceof VettingGateError && err.reason !== "failed") throw new DeferredSendError(err.message);
-        throw err;
       }
 
       const cited = citedFactsIn(email, citableFacts(await deps.loadFacts(prospect.id)));
@@ -294,16 +337,19 @@ export async function sendOutreachEmail(
           { name: "category", value: "outreach" },
           { name: "email_id", value: String(emailId) },
         ],
+        idempotencyKey: outreachIdempotencyKey(emailId),
       });
+      delivered = true;
 
-      await deps.markSent(emailId, {
+      // The message is out: from here on nothing may mark it failed (that
+      // would let it be drafted and sent again). Bookkeeping is retried.
+      await recordDeliveryWithRetry(deps, emailId, {
         providerId: delivery.id,
         html: rendered.html,
         text: rendered.text,
         to: prospect.email,
         at: now,
-      });
-      await deps.bumpProspect(prospect, email.step, now);
+      }, prospect.id, email.step);
       return {
         sent: true as const,
         emailId,
@@ -313,6 +359,7 @@ export async function sendOutreachEmail(
       };
     });
   } catch (err) {
+    if (delivered) throw err;
     const message = err instanceof Error ? err.message : String(err);
     if (isDeferredSendError(err)) await deps.markDeferred(emailId, message);
     else await deps.markFailed(emailId, message);
@@ -320,30 +367,61 @@ export async function sendOutreachEmail(
   }
 }
 
-/* ————— Default (database + Resend) dependencies ————— */
+const RECORD_DELIVERY_ATTEMPTS = 3;
 
 /**
- * Prospect emails delivered today (UTC): studio rows with sentAt today plus
- * any legacy plain-text sends executed today. Counting delivered rows (not
- * executed actions) keeps an in-flight send visible to the next cap check.
+ * Record a delivered email. A failure here never turns into "failed" (the
+ * message went out); it is retried, and if the database stays unavailable
+ * the send still reports success with the error logged for an operator.
  */
+async function recordDeliveryWithRetry(
+  deps: OutreachSendDeps,
+  emailId: number,
+  record: DeliveryRecord,
+  prospectId: number,
+  step: number | null,
+): Promise<void> {
+  for (let attempt = 1; attempt <= RECORD_DELIVERY_ATTEMPTS; attempt += 1) {
+    try {
+      await deps.recordDelivery(emailId, record, prospectId, step);
+      return;
+    } catch (err) {
+      logger.error(
+        { err, emailId, prospectId, attempt, providerId: record.providerId },
+        attempt < RECORD_DELIVERY_ATTEMPTS
+          ? "Recording a delivered outreach email failed; retrying"
+          : "Delivered outreach email could not be recorded; reconcile it by hand (it was sent)",
+      );
+      if (attempt < RECORD_DELIVERY_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+    }
+  }
+}
+
+/** Column updates recording one more contact; status only moves forward from new/qualified/contacted. */
+export function prospectContactBump(step: number | null, at: Date) {
+  return {
+    status: sql<string>`case when ${controlProspectsTable.status} in ('new', 'qualified', 'contacted') then 'contacted' else ${controlProspectsTable.status} end`,
+    contactCount: sql<number>`${controlProspectsTable.contactCount} + 1`,
+    lastContactedAt: at,
+    campaignStep: step == null ? sql<number>`${controlProspectsTable.campaignStep}` : step,
+    updatedAt: at,
+  };
+}
+
+/** Postgres lock_not_available (lock_timeout expired), possibly wrapped by the driver. */
+function isLockTimeout(err: unknown): boolean {
+  const candidate = err as { code?: string; cause?: { code?: string } } | null;
+  return candidate?.code === "55P03" || candidate?.cause?.code === "55P03";
+}
+
+/** How long an approval waits for another send to finish before it is deferred. */
+const SEND_LOCK_TIMEOUT = "5s";
+
+/* ————— Default (database + Resend) dependencies ————— */
+
+/** Prospect emails delivered today (UTC); the same count /control shows (sendingHealth.prospectSendsToday). */
 export async function prospectEmailsSentToday(now: Date = new Date()): Promise<number> {
-  const since = startOfUtcDay(now);
-  const [studio] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(controlOutreachEmailsTable)
-    .where(and(isNotNull(controlOutreachEmailsTable.sentAt), gte(controlOutreachEmailsTable.sentAt, since)));
-  const [legacy] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(agentActionsTable)
-    .where(
-      and(
-        eq(agentActionsTable.actionType, "send_prospect_email"),
-        eq(agentActionsTable.status, "executed"),
-        gte(agentActionsTable.executedAt, since),
-      ),
-    );
-  return (studio?.total ?? 0) + (legacy?.total ?? 0);
+  return prospectSendsToday(now);
 }
 
 export function defaultSendConfig(): SendConfig {
@@ -406,10 +484,20 @@ export function defaultSendDeps(): OutreachSendDeps {
       return row?.status ?? null;
     },
     async withSendLock(fn) {
-      return db.transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(${SEND_LOCK_KEY})`);
-        return fn();
-      });
+      let acquired = false;
+      try {
+        return await db.transaction(async (tx) => {
+          await tx.execute(sql.raw(`set local lock_timeout = '${SEND_LOCK_TIMEOUT}'`));
+          await tx.execute(sql`select pg_advisory_xact_lock(${SEND_LOCK_KEY})`);
+          acquired = true;
+          return fn();
+        });
+      } catch (err) {
+        if (!acquired && isLockTimeout(err)) {
+          throw new DeferredSendError("Another prospect email is being sent right now; the draft is kept. Approve it again in a minute.");
+        }
+        throw err;
+      }
     },
     async deliver(message) {
       const result = await sendRawEmail({
@@ -420,24 +508,35 @@ export function defaultSendDeps(): OutreachSendDeps {
         headers: message.headers,
         replyTo: message.replyTo,
         tags: message.tags,
+        idempotencyKey: message.idempotencyKey,
       });
-      if (!result.sent) throw new Error(result.reason);
+      if (!result.sent) {
+        if (result.transient) {
+          throw new DeferredSendError(
+            `The email provider did not confirm the send (${result.reason}). The draft is kept; approving it again is safe because the provider delivers one message per idempotency key.`,
+          );
+        }
+        throw new Error(result.reason);
+      }
       return { id: result.id };
     },
-    async markSent(emailId, record) {
-      await db
-        .update(controlOutreachEmailsTable)
-        .set({
-          status: "sent",
-          providerMessageId: record.providerId,
-          htmlSnapshot: record.html,
-          textSnapshot: record.text,
-          sentTo: record.to,
-          sentAt: record.at,
-          lastError: null,
-          updatedAt: record.at,
-        })
-        .where(eq(controlOutreachEmailsTable.id, emailId));
+    async recordDelivery(emailId, record, prospectId, step) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(controlOutreachEmailsTable)
+          .set({
+            status: "sent",
+            providerMessageId: record.providerId,
+            htmlSnapshot: record.html,
+            textSnapshot: record.text,
+            sentTo: record.to,
+            sentAt: record.at,
+            lastError: null,
+            updatedAt: record.at,
+          })
+          .where(eq(controlOutreachEmailsTable.id, emailId));
+        await tx.update(controlProspectsTable).set(prospectContactBump(step, record.at)).where(eq(controlProspectsTable.id, prospectId));
+      });
       await recordAuditEvent({
         actorType: "system",
         actor: "outreach-studio",
@@ -445,7 +544,7 @@ export function defaultSendDeps(): OutreachSendDeps {
         subjectType: "outreach_email",
         subjectId: emailId,
         detail: { to: record.to, providerId: record.providerId },
-      });
+      }).catch((err) => logger.warn({ err, emailId }, "outreach_email_sent audit not recorded"));
     },
     async markFailed(emailId, error) {
       await db
@@ -458,18 +557,6 @@ export function defaultSendDeps(): OutreachSendDeps {
         .update(controlOutreachEmailsTable)
         .set({ lastError: error.slice(0, 1000), updatedAt: new Date() })
         .where(and(eq(controlOutreachEmailsTable.id, emailId), eq(controlOutreachEmailsTable.status, "draft")));
-    },
-    async bumpProspect(prospect, step, at) {
-      await db
-        .update(controlProspectsTable)
-        .set({
-          status: "contacted",
-          contactCount: prospect.contactCount + 1,
-          lastContactedAt: at,
-          campaignStep: step ?? prospect.campaignStep,
-          updatedAt: at,
-        })
-        .where(eq(controlProspectsTable.id, prospect.id));
     },
     config: defaultSendConfig,
     imageUrl: publicObjectUrl,
