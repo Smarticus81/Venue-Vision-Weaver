@@ -1059,6 +1059,7 @@
 }
 /* Scoped under .plan-card so it outranks `.plan-card p` below. */
 .plan-card .plan-price {
+  color: var(--dm-text);
   font-family: var(--dm-font-display);
   font-size: 30px;
   font-weight: 600;

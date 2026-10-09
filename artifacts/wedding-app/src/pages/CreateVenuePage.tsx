@@ -10,7 +10,7 @@ import {
   useOrganizationList,
   useUser,
 } from "@clerk/clerk-react";
-import { ArrowRight, Building2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import {
   useCreateVenue,
   useGetOrganization,
@@ -287,7 +287,6 @@ function VenueForm() {
               Venue name
             </Label>
             <div className="relative">
-              <Building2 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id={nameId}
                 required
@@ -296,7 +295,7 @@ function VenueForm() {
                   touched.current.name = true;
                   setForm((prev) => ({ ...prev, name: e.target.value }));
                 }}
-                className="h-12 pl-11 rounded-md border-input bg-background focus-visible:ring-ring"
+                className="h-12 rounded-md border-input bg-background focus-visible:ring-ring"
                 placeholder="The Willow House"
                 data-testid="venue-name-input"
                 autoComplete="organization"
