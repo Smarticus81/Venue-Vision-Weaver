@@ -6,7 +6,7 @@ import {
   controlProspectAssetsTable,
   controlProspectsTable,
 } from "@workspace/db";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { recordFunnelEvent } from "../../lib/funnelEvents.js";
 import { recordAuditEvent } from "../audit.js";
 import { publicObjectUrl } from "./config.js";
@@ -65,10 +65,26 @@ export async function resolveClaim(token: string, now: Date = new Date()): Promi
     .filter((key): key is string => Boolean(key))
     .map((key) => publicObjectUrl(key));
 
-  await db
+  // Only the first resolution counts as engagement: reloads of the claim page
+  // must not inflate clicks or the funnel.
+  const firstClick = await db
     .update(controlOutreachEmailsTable)
-    .set({ clickedAt: sql`coalesce(${controlOutreachEmailsTable.clickedAt}, ${now})`, updatedAt: now })
-    .where(eq(controlOutreachEmailsTable.id, row.emailId));
+    .set({
+      clickedAt: now,
+      openedAt: sql`coalesce(${controlOutreachEmailsTable.openedAt}, ${now})`,
+      updatedAt: now,
+    })
+    .where(and(eq(controlOutreachEmailsTable.id, row.emailId), isNull(controlOutreachEmailsTable.clickedAt)))
+    .returning({ id: controlOutreachEmailsTable.id });
+  if (firstClick.length === 0) {
+    return {
+      venueName: row.venueName,
+      website: row.website ?? null,
+      region: row.region ?? null,
+      photoUrls,
+      prospectId: row.prospectId,
+    };
+  }
   await db.insert(controlEmailEventsTable).values({
     emailId: row.emailId,
     providerEventId: null,
@@ -81,7 +97,7 @@ export async function resolveClaim(token: string, now: Date = new Date()): Promi
     eventType: "outreach_claim_opened",
     subjectType: "outreach_email",
     subjectId: row.emailId,
-    detail: { prospectId: row.prospectId, firstClick: row.clickedAt === null },
+    detail: { prospectId: row.prospectId },
   });
   await recordFunnelEvent({
     event: "cta_click",
