@@ -24,8 +24,11 @@ export function CoupleChrome({
   mainRef,
   mainClassName,
   footerNote,
+  fallbackName = "Your gallery",
 }: {
   venue: CoupleChromeVenue | null;
+  /** Header title when no venue is known (loading, broken link, find-my-gallery). */
+  fallbackName?: string;
   /** Small label above the venue name. */
   eyebrow?: string;
   /** Optional right-hand header slot (the gallery's compact date CTA). */
@@ -58,9 +61,9 @@ export function CoupleChrome({
               <span className="cc-venue__thumb cc-venue__thumb--empty" aria-hidden />
             )}
             <span className="cc-venue__text">
-              <span className="cc-venue__eyebrow">{eyebrow}</span>
+              {venue ? <span className="cc-venue__eyebrow">{eyebrow}</span> : null}
               <span className="cc-venue__name" data-testid="couple-venue-name">
-                {venue?.name ?? "Your venue"}
+                {venue?.name ?? fallbackName}
               </span>
             </span>
           </div>

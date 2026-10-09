@@ -627,7 +627,7 @@ export default function CouplePage() {
   if (venueQuery.isError || !venue) {
     const notFound = (venueQuery.error as { status?: number } | null)?.status === 404;
     return (
-      <CoupleChrome venue={null} eyebrow="Venue preview">
+      <CoupleChrome venue={null} fallbackName="Venue preview">
         <section className="cp-message">
           <p className="eyebrow">{notFound ? "Link not found" : "Connection"}</p>
           <h1>{notFound ? "We couldn't find this venue." : "We couldn't open this venue just now."}</h1>
