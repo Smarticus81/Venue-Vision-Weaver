@@ -41,21 +41,6 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
   return message.replace(/^HTTP \d{3}[^:]*:\s*/, "") || fallback;
 }
 
-export function isNotImplemented(err: unknown): boolean {
-  return describeApiError(err).status === 501;
-}
-
-/**
- * True when the server does not offer an endpoint at all: 501, or the API's
- * catch-all `{ error: "Not found" }` 404 for an unmatched /api path. A 404
- * about a specific record ("Session not found") is a real answer, not this.
- */
-export function isFeatureUnavailable(err: unknown): boolean {
-  const { status, message, code } = describeApiError(err);
-  if (status === 501) return true;
-  return status === 404 && !code && (message === "Not found" || message === null);
-}
-
 export interface OwnerSpendCopy {
   title: string;
   body: string;

@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeWebsiteInput } from "@/lib/venueSlug";
 import { isCoverage, type Coverage } from "./activation";
-import { apiErrorMessage, describeApiError, isFeatureUnavailable } from "./errors";
+import { apiErrorMessage, describeApiError } from "./errors";
 import { COVERAGE_TILES, coverageLabel, groupByCoverage, planUploads, ACCEPTED_IMAGE_TYPES } from "./photoQueue";
 import { objectKeyFileName, venueReferenceUrl } from "./storageUrls";
 import type { DashboardContext } from "./types";
@@ -39,6 +39,8 @@ let queueSeq = 0;
 export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; importRequested: boolean }) {
   const { toast } = useToast();
   const { slug, media, venue, readiness } = ctx;
+  // The server lets organization admins import (it adds photos and saves the website).
+  const canImport = ctx.billing.isAdmin;
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -234,20 +236,19 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
       if (result.warnings.length > 0) setImportNote((n) => `${n ?? ""} ${result.warnings[0]}`.trim());
     } catch (err) {
       const failure = describeApiError(err);
-      if (isFeatureUnavailable(err)) setImportNote("Website import is not switched on for this server yet. Add photos by hand for now.");
-      else if (failure.status === 429) setImportNote("The import already ran recently. Try again in a little while.");
+      if (failure.status === 429) setImportNote("The import already ran recently. Try again in a little while.");
       else setImportNote(apiErrorMessage(err, "The import did not run."));
     }
   };
 
   const importOnce = useRef(false);
   useEffect(() => {
-    if (!importRequested || importOnce.current) return;
+    if (!importRequested || importOnce.current || !canImport) return;
     if (!venue.websiteUrl || venue.websiteImportedAt) return;
     importOnce.current = true;
     void runImport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importRequested, venue.websiteUrl, venue.websiteImportedAt]);
+  }, [importRequested, canImport, venue.websiteUrl, venue.websiteImportedAt]);
 
   const activeQueue = queue.filter((q) => q.status !== "done");
   const uploadable = activeQueue.filter((q) => q.status === "queued" || q.status === "error").length;
@@ -268,7 +269,7 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
             <Button type="button" variant="outline" onClick={() => openPicker(null)} disabled={uploading} data-testid="venue-photos-add">
               <ImagePlus className="h-4 w-4" /> Add photos
             </Button>
-            {venue.websiteUrl ? (
+            {venue.websiteUrl && canImport ? (
               <Button type="button" variant="ghost" onClick={() => void runImport()} disabled={importMedia.isPending} data-testid="venue-photos-import">
                 {importMedia.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                 Import from website
@@ -297,7 +298,7 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
         <Note role="status">Reading {venue.websiteUrl?.replace(/^https?:\/\//, "")} for photos of your spaces…</Note>
       ) : null}
 
-      {!venue.websiteUrl && media.length < 5 ? (
+      {!venue.websiteUrl && media.length < 5 && canImport ? (
         <form
           className="dash-card dash-card-tight flex flex-col gap-3 sm:flex-row sm:items-end"
           onSubmit={(e) => {

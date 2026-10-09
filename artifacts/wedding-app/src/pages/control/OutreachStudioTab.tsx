@@ -324,7 +324,7 @@ function EmailReview({ emailId }: { emailId: number }) {
         if (!detail.action) return;
         // `reviewed` marks an approval made here, after the rendered email was on screen;
         // the server refuses send_outreach_email approvals without it.
-        const data: ControlActionDecisionBody & { reviewed: true } = { decision, note: note || undefined, reviewed: true };
+        const data: ControlActionDecisionBody = { decision, note: note || undefined, reviewed: true };
         decide.mutate({ id: detail.action.id, data });
       }}
     />

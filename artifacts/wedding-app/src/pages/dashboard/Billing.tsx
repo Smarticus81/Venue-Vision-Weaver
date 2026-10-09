@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { billingGuard, buildBillingCards, creditReasonLabel, type BillingCard } from "./billing";
 import { shortDate } from "./galleryStats";
 import { isSubscriptionPlan, planLabel } from "./plans";
-import { readOrgExtras, type DashboardContext } from "./types";
+import type { DashboardContext } from "./types";
 import { Note, SectionHead } from "./ui";
 
 /**
@@ -16,7 +16,7 @@ import { Note, SectionHead } from "./ui";
  */
 export function Billing({ ctx }: { ctx: DashboardContext }) {
   const { organization, publicConfig, billing } = ctx;
-  const extras = readOrgExtras(organization);
+  const cancelAtPeriodEnd = organization.cancelAtPeriodEnd === true;
   const cards = buildBillingCards(publicConfig);
   const subscribed = isSubscriptionPlan(organization.plan);
   const label = publicConfig.pricing.label;
@@ -29,7 +29,7 @@ export function Billing({ ctx }: { ctx: DashboardContext }) {
     summary = `Free trial: ${trial.daysLeft ?? publicConfig.trial.days} ${trial.daysLeft === 1 ? "day" : "days"} left, no card on file.`;
   } else if (organization.plan === "payg") {
     summary = "Pay as you go: credit packs only, no monthly fee. Credits never expire.";
-  } else if (subscribed && extras.cancelAtPeriodEnd && organization.billingPeriodEnd) {
+  } else if (subscribed && cancelAtPeriodEnd && organization.billingPeriodEnd) {
     summary = `${planLabel(organization.plan)} ends on ${shortDate(organization.billingPeriodEnd)}. Resume it any time before then.`;
   } else if (subscribed && organization.billingPeriodEnd) {
     summary = `${planLabel(organization.plan)} renews on ${shortDate(organization.billingPeriodEnd)} and tops up your credits.`;
@@ -70,7 +70,7 @@ export function Billing({ ctx }: { ctx: DashboardContext }) {
         <p className="text-sm leading-relaxed">{summary}</p>
       </div>
 
-      {extras.subscriptionStatus === "past_due" ? (
+      {organization.subscriptionStatus === "past_due" ? (
         <Note
           tone="danger"
           role="alert"
@@ -94,7 +94,7 @@ export function Billing({ ctx }: { ctx: DashboardContext }) {
 
       <div className="plan-cards" data-testid="plan-cards">
         {cards.map((card) => (
-          <PlanCard key={card.id} card={card} ctx={ctx} cancelAtPeriodEnd={extras.cancelAtPeriodEnd} />
+          <PlanCard key={card.id} card={card} ctx={ctx} cancelAtPeriodEnd={cancelAtPeriodEnd} />
         ))}
       </div>
       <p className="field-hint">

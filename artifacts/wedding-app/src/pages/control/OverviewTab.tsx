@@ -1,32 +1,19 @@
-import { type BusinessMetrics, type ControlOverviewResponse } from "@workspace/api-client-react";
+import {
+  type BusinessMetrics,
+  type ControlOverviewFunnel,
+  type ControlOverviewResponse,
+  type ControlTrendSeries,
+} from "@workspace/api-client-react";
 import { Card } from "./shared";
 import { AgentsTab } from "./AgentsTab";
-import { FunnelBars, StatTile, TrendTable, type TrendPoint } from "./Charts";
+import { FunnelBars, StatTile, TrendTable } from "./Charts";
 import { PolicyCards, policyBoolean, usePolicies } from "./Policies";
-import { byUnit, count, pctPoints, ratio, type TrendUnit } from "./format";
+import { byUnit, count, pctPoints, ratio } from "./format";
 
-/* ————— Overview extras (served by GET /control/overview; not yet in the OpenAPI shape) ————— */
+/* ————— Overview funnel and trends (GET /control/overview) ————— */
 
-export interface OverviewFunnel {
-  owners: { signups: number; signups30d: number; activated: number; paid: number; churned: number };
-  prospects: { total: number; vetted: number; contacted: number; replied: number; converted: number; unsubscribed: number };
-}
-
-export interface OverviewTrendSeries {
-  key: string;
-  label: string;
-  unit: TrendUnit;
-  betterWhen: "higher" | "lower";
-  points: TrendPoint[];
-  current: number | null;
-  previous7d: number | null;
-  delta7d: number | null;
-}
-
-export type OverviewWithExtras = ControlOverviewResponse & {
-  funnel?: OverviewFunnel | null;
-  trends?: { windowDays: number; series: OverviewTrendSeries[] } | null;
-};
+export type OverviewFunnel = ControlOverviewFunnel;
+export type OverviewTrendSeries = ControlTrendSeries;
 
 /* ————— Business pulse (the live KPI wall) ————— */
 
@@ -162,7 +149,7 @@ export function TrendTiles({ series, windowDays }: { series: OverviewTrendSeries
 
 /* ————— Overview tab ————— */
 
-export function OverviewTab({ overview }: { overview: OverviewWithExtras }) {
+export function OverviewTab({ overview }: { overview: ControlOverviewResponse }) {
   const policiesQuery = usePolicies();
   const agentsEnabled = policyBoolean(policiesQuery.data?.policies, "agents_enabled");
   const funnel = overview.funnel ?? null;

@@ -11,7 +11,7 @@ import { CoupleLinkCard } from "./CoupleLinkCard";
 import { apiErrorMessage } from "./errors";
 import { TourCardButton } from "./TourCardButton";
 import type { DashboardContext } from "./types";
-import { Field, Note, SectionHead, Toggle } from "./ui";
+import { Field, SectionHead, Toggle } from "./ui";
 
 /** Matches UpdateVenueBody.incentiveText maxLength in the API contract. */
 export const INCENTIVE_MAX = 160;
@@ -44,7 +44,6 @@ export function Settings({ ctx }: { ctx: DashboardContext }) {
   const { venue, slug } = ctx;
   const updateVenue = useUpdateVenue();
   const [form, setForm] = useState<VenueForm>(() => formFromVenue(venue));
-  const [incentiveNotStored, setIncentiveNotStored] = useState(false);
 
   useEffect(() => {
     setForm(formFromVenue(venue));
@@ -65,7 +64,7 @@ export function Settings({ ctx }: { ctx: DashboardContext }) {
     event.preventDefault();
     if (invalid) return;
     try {
-      const updated = await updateVenue.mutateAsync({
+      await updateVenue.mutateAsync({
         slug,
         data: {
           name: form.name.trim(),
@@ -75,8 +74,6 @@ export function Settings({ ctx }: { ctx: DashboardContext }) {
           incentiveText: incentive || null,
         },
       });
-      // An API that does not store the incentive line yet answers without it.
-      setIncentiveNotStored((updated.incentiveText ?? "") !== incentive);
       toast({ title: "Venue details saved" });
       void ctx.refreshDashboard();
     } catch (err) {
@@ -155,11 +152,6 @@ export function Settings({ ctx }: { ctx: DashboardContext }) {
               data-testid="settings-incentive"
             />
           </Field>
-          {incentiveNotStored ? (
-            <Note tone="warn" role="status">
-              The other details saved, but this server does not store the line for couples yet.
-            </Note>
-          ) : null}
           <Button type="submit" variant="outline" disabled={invalid || updateVenue.isPending} data-testid="settings-save">
             {updateVenue.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save details
@@ -168,6 +160,7 @@ export function Settings({ ctx }: { ctx: DashboardContext }) {
 
         <div className="grid content-start gap-6">
           <CoupleLinkCard url={ctx.coupleUrl} venueReady={ctx.readiness.ready} />
+          <DeliverySettings ctx={ctx} />
           <div className="dash-card grid gap-3">
             <h3 className="text-base font-semibold">At the tour</h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -187,6 +180,51 @@ export function Settings({ ctx }: { ctx: DashboardContext }) {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * How ready galleries reach the couple: emailed automatically (default) or
+ * held under Galleries until someone at the venue sends them.
+ */
+function DeliverySettings({ ctx }: { ctx: DashboardContext }) {
+  const { toast } = useToast();
+  const updateVenue = useUpdateVenue();
+  const reviewFirst = ctx.venue.reviewBeforeSend;
+
+  const toggle = async (next: boolean) => {
+    try {
+      await updateVenue.mutateAsync({ slug: ctx.slug, data: { reviewBeforeSend: next } });
+      toast({
+        title: next ? "Galleries will wait for you" : "Galleries go straight to couples",
+        description: next
+          ? "Ready galleries stay under Galleries until you send them."
+          : "Each couple gets their link by email as soon as the gallery is ready.",
+      });
+      void ctx.refreshDashboard();
+    } catch (err) {
+      toast({ title: "Not saved", description: apiErrorMessage(err, "Try again."), variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="dash-card grid gap-2" aria-labelledby="delivery-settings-title">
+      <h3 id="delivery-settings-title" className="text-base font-semibold">
+        Sending galleries
+      </h3>
+      <Toggle
+        title="Review each gallery before the couple gets it"
+        body={
+          reviewFirst
+            ? "On: ready galleries wait under Galleries until you press Send."
+            : "Off: the couple gets their link by email as soon as the gallery is ready, with your “Check your date” button."
+        }
+        checked={reviewFirst}
+        onChange={(next) => void toggle(next)}
+        disabled={updateVenue.isPending}
+        testId="settings-review-before-send"
+      />
+    </div>
   );
 }
 

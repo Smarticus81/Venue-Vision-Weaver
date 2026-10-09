@@ -23,25 +23,6 @@ export interface BillingActions {
   billingConfigured: boolean;
 }
 
-/**
- * GET /org already answers subscriptionStatus and cancelAtPeriodEnd (WS-A);
- * the OpenAPI schema does not list them yet, so they are read defensively.
- */
-export interface OrgExtras {
-  subscriptionStatus: "active" | "past_due" | "canceled" | "paused" | null;
-  cancelAtPeriodEnd: boolean;
-}
-
-export function readOrgExtras(org: OrganizationResponseOrganization | null | undefined): OrgExtras {
-  const raw = org as (OrganizationResponseOrganization & { subscriptionStatus?: unknown; cancelAtPeriodEnd?: unknown }) | null | undefined;
-  const status = raw?.subscriptionStatus;
-  return {
-    subscriptionStatus:
-      status === "active" || status === "past_due" || status === "canceled" || status === "paused" ? status : null,
-    cancelAtPeriodEnd: raw?.cancelAtPeriodEnd === true,
-  };
-}
-
 export interface DashboardContext {
   organization: OrganizationResponseOrganization;
   venue: VenueResponse;

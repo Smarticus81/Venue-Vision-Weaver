@@ -366,3 +366,24 @@ export function processingPollInterval(elapsedMs: number): number {
   if (elapsedMs < 20 * 60_000) return 10_000;
   return 30_000;
 }
+
+/* ————— Delivery copy ————— */
+
+/**
+ * What the processing view promises about the email, from the venue's
+ * reviewBeforeSend setting: straight to the couple when the gallery is
+ * ready, or after the venue has looked at it. Without an address on this
+ * device it only asks the couple to keep the link.
+ */
+export function processingDeliveryNote(input: {
+  email: string | null | undefined;
+  venueName: string;
+  reviewBeforeSend: boolean | null | undefined;
+}): string {
+  const email = input.email?.trim();
+  if (!email) return "Keep this link: it's how you come back to the gallery.";
+  if (input.reviewBeforeSend) {
+    return `Keep this link. When it's ready, ${input.venueName} takes a quick look and sends it to ${email}.`;
+  }
+  return `Keep this link. We'll email it to ${email} as soon as it's ready.`;
+}

@@ -29,6 +29,7 @@ import {
   dateCtaFor,
   formatWeddingMonth,
   postGalleryEvent,
+  processingDeliveryNote,
   processingPollInterval,
   realSpaceFor,
   reelAsset,
@@ -281,9 +282,11 @@ function ProcessingView({
           ) : null}
           <div className="gs-wait__keep">
             <p>
-              {creator?.email
-                ? `Keep this link. When it's ready, the link also comes to ${creator.email}.`
-                : "Keep this link: it's how you come back to the gallery."}
+              {processingDeliveryNote({
+                email: creator?.email,
+                venueName,
+                reviewBeforeSend: venue?.reviewBeforeSend,
+              })}
             </p>
             <button type="button" className="cp-textbutton" onClick={() => void copy()}>
               <Link2 size={15} /> Copy link

@@ -23,7 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiErrorMessage, isFeatureUnavailable } from "./errors";
+import { apiErrorMessage } from "./errors";
 import {
   formatWeddingMonth,
   galleryStage,
@@ -103,7 +103,6 @@ function ProofStrip({ stats }: { stats: ReturnType<typeof summarizeGalleries> })
 function EmptyGalleries({ ctx }: { ctx: DashboardContext }) {
   const { toast } = useToast();
   const sample = useCreateSampleGallery();
-  const [sampleUnavailable, setSampleUnavailable] = useState(false);
 
   const runSample = async () => {
     try {
@@ -111,10 +110,6 @@ function EmptyGalleries({ ctx }: { ctx: DashboardContext }) {
       toast({ title: "Sample started", description: "A gallery of our demo couple at your venue. It does not use a credit." });
       void ctx.refreshDashboard();
     } catch (err) {
-      if (isFeatureUnavailable(err)) {
-        setSampleUnavailable(true);
-        return;
-      }
       toast({ title: "The sample did not start", description: apiErrorMessage(err, "Try again."), variant: "destructive" });
     }
   };
@@ -132,25 +127,19 @@ function EmptyGalleries({ ctx }: { ctx: DashboardContext }) {
         <Button type="button" variant="outline" onClick={() => ctx.goTo("new")}>
           <Sparkles className="h-4 w-4" /> Create a gallery
         </Button>
-        {!sampleUnavailable ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void runSample()}
-            disabled={sample.isPending || !ctx.readiness.ready}
-            title={ctx.readiness.ready ? undefined : "Add your five venue photos first"}
-            data-testid="galleries-sample"
-          >
-            {sample.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Render a sample
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void runSample()}
+          disabled={sample.isPending || !ctx.readiness.ready}
+          title={ctx.readiness.ready ? undefined : "Add your five venue photos first"}
+          data-testid="galleries-sample"
+        >
+          {sample.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Render a sample
+        </Button>
       </div>
-      {sampleUnavailable ? (
-        <p className="field-hint" role="status">
-          Samples are not switched on for this server yet.
-        </p>
-      ) : !ctx.readiness.ready ? (
+      {!ctx.readiness.ready ? (
         <p className="field-hint">Add your five venue photos first; every gallery is built from them.</p>
       ) : null}
     </div>
@@ -199,9 +188,7 @@ function GalleryRow({
     } catch (err) {
       toast({
         title: next ? "Could not mark as booked" : "Could not undo",
-        description: isFeatureUnavailable(err)
-          ? "Booking marks are not switched on for this server yet."
-          : apiErrorMessage(err, "Try again."),
+        description: apiErrorMessage(err, "Try again."),
         variant: "destructive",
       });
     }

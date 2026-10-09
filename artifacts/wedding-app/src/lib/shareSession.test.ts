@@ -7,6 +7,7 @@ import {
   formatWeddingMonth,
   generationReferenceOrder,
   postGalleryEvent,
+  processingDeliveryNote,
   processingPollInterval,
   realSpaceFor,
   rememberCreatedGallery,
@@ -204,5 +205,22 @@ describe("processingPollInterval", () => {
     assert.equal(processingPollInterval(3 * 60_000), 5_000);
     assert.equal(processingPollInterval(5 * 60_000), 10_000);
     assert.equal(processingPollInterval(25 * 60_000), 30_000);
+  });
+});
+
+describe("processingDeliveryNote", () => {
+  it("promises the automatic email only when the venue does not review first", () => {
+    assert.equal(
+      processingDeliveryNote({ email: "a@b.co", venueName: "The Barn", reviewBeforeSend: false }),
+      "Keep this link. We'll email it to a@b.co as soon as it's ready.",
+    );
+    assert.match(
+      processingDeliveryNote({ email: "a@b.co", venueName: "The Barn", reviewBeforeSend: true }),
+      /The Barn takes a quick look and sends it to a@b\.co/,
+    );
+    assert.equal(
+      processingDeliveryNote({ email: " ", venueName: "The Barn", reviewBeforeSend: false }),
+      "Keep this link: it's how you come back to the gallery.",
+    );
   });
 });

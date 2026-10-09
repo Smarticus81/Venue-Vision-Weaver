@@ -164,7 +164,9 @@ function TourForm({ ctx }: { ctx: DashboardContext }) {
           </span>
           <h2>Their gallery is rendering</h2>
           <p>
-            It takes a few minutes. It shows under Couple galleries on your dashboard, ready to send to {done.email}
+            {venue.reviewBeforeSend
+              ? `It takes a few minutes, then waits under Couple galleries on your dashboard for you to send to ${done.email}`
+              : `It takes a few minutes. We email it to ${done.email} as soon as it's ready, and it shows under Couple galleries too`}
             {month ? `, with ${month} on their “Check your date” button` : ""}.
           </p>
           <Button

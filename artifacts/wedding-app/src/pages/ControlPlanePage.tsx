@@ -18,7 +18,7 @@ import { ClerkSetupNotice } from "@/components/auth/OrgGate";
 import { clerkConfigured } from "@/lib/clerk";
 import { cn } from "@/lib/utils";
 import { Card, EmptyState, Pill, TabLoading, apiErrorMessage, fmt } from "./control/shared";
-import { OverviewTab, type OverviewWithExtras } from "./control/OverviewTab";
+import { OverviewTab } from "./control/OverviewTab";
 import { KillSwitches } from "./control/Policies";
 import { GrowthTab } from "./control/GrowthTab";
 import { PipelineTab } from "./control/PipelineTab";
@@ -198,7 +198,7 @@ function ControlConsole() {
     },
   });
 
-  const overview = overviewQuery.data as OverviewWithExtras | undefined;
+  const overview = overviewQuery.data;
   const errorStatus = (overviewQuery.error as { status?: number } | null)?.status;
 
   const badgeCounts = useMemo(

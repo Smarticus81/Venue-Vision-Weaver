@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { planLabel } from "./plans";
 import { summarizeGalleries } from "./galleryStats";
-import { readOrgExtras, type DashboardContext } from "./types";
+import type { DashboardContext } from "./types";
 
 /**
  * The first screen: venue name, readiness, credits (the one coral figure),
@@ -11,7 +11,7 @@ import { readOrgExtras, type DashboardContext } from "./types";
 export function OverviewHeader({ ctx }: { ctx: DashboardContext }) {
   const { organization, venue, sessions, readiness, publicConfig, billing } = ctx;
   const trial = organization.trial;
-  const extras = readOrgExtras(organization);
+  const cancelAtPeriodEnd = organization.cancelAtPeriodEnd === true;
   const stats = summarizeGalleries(sessions);
   const trialDays = publicConfig.trial.days;
   const daysLeft = trial.daysLeft ?? null;
@@ -32,13 +32,13 @@ export function OverviewHeader({ ctx }: { ctx: DashboardContext }) {
     planNote = trial.expired
       ? "Credits stay on the account."
       : `${daysLeft} ${daysLeft === 1 ? "day" : "days"} left of ${trialDays}`;
-  } else if (extras.cancelAtPeriodEnd && organization.billingPeriodEnd) {
+  } else if (cancelAtPeriodEnd && organization.billingPeriodEnd) {
     planNote = `Ends ${new Date(organization.billingPeriodEnd).toLocaleDateString()}`;
   } else if (organization.billingPeriodEnd) {
     planNote = `Renews ${new Date(organization.billingPeriodEnd).toLocaleDateString()}`;
   } else if (organization.plan === "payg") {
     planNote = "Credit packs, no monthly fee.";
-  } else if (extras.subscriptionStatus === "past_due") {
+  } else if (organization.subscriptionStatus === "past_due") {
     planNote = "Last payment failed. Update your card in Stripe.";
   } else {
     planNote = "No plan yet.";

@@ -3,8 +3,7 @@ import { Download, Loader2 } from "lucide-react";
 import { useMarkTourCardDownloaded } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { apiErrorMessage, isFeatureUnavailable } from "./errors";
-import { track } from "@/lib/track";
+import { apiErrorMessage } from "./errors";
 import { buildTourCardSvg, extractQrSvg, tourCardFileName, TOUR_CARD_HEIGHT, TOUR_CARD_WIDTH } from "./tourCard";
 import type { DashboardContext } from "./types";
 
@@ -49,16 +48,14 @@ export function TourCardButton({
       a.remove();
       if (png.startsWith("blob:")) window.setTimeout(() => URL.revokeObjectURL(png), 10_000);
 
-      track("tour_card_downloaded", { venueId: ctx.venue.id, slug: ctx.slug });
+      // The server ticks the checklist and logs the funnel event once per venue.
       try {
         await mark.mutateAsync({ slug: ctx.slug });
         void ctx.refreshDashboard();
-      } catch (err) {
+      } catch {
         // The checklist tick is a nicety; the card itself already downloaded.
-        if (!isFeatureUnavailable(err)) {
-          toast({ title: "Card downloaded", description: "We could not record it on your checklist yet." });
-          return;
-        }
+        toast({ title: "Card downloaded", description: "We could not record it on your checklist yet." });
+        return;
       }
       toast({ title: "Tour card downloaded", description: "Print it at A6 or larger. The QR opens your couple link." });
     } catch (err) {
