@@ -186,6 +186,10 @@ async function guarded(step: string, fn: () => Promise<unknown>): Promise<void> 
 }
 
 async function tick(now: Date = new Date()): Promise<void> {
+  await guarded("stale_executing_actions", async () => {
+    const interrupted = await recoverStaleExecutingActions(15, now);
+    if (interrupted > 0) logger.warn({ interrupted }, "Failed actions left executing by an interrupted process");
+  });
   await drainApprovedActions(now);
   const snapshot = await maybeSnapshotMetrics();
   if (snapshot?.metrics.growth) {

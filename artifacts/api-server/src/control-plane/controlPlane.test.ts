@@ -378,3 +378,30 @@ test("prospecting agent is research-only: no governed actions, no email tools", 
   assert.ok(!prospecting.tools.includes("propose_action"));
   assert.equal(prospecting.webSearch, true);
 });
+
+test("stale executing actions are measured from execution start, and in-flight venue emails count toward the cap", async () => {
+  const actions = await import("./actions.js");
+  const { db, agentActionsTable } = await import("@workspace/db");
+  const stale = db
+    .select({ id: agentActionsTable.id })
+    .from(agentActionsTable)
+    .where(actions.staleExecutingWhere(new Date("2026-10-01T00:00:00Z")))
+    .toSQL();
+  assert.match(stale.sql, /coalesce\("agent_actions"\."executed_at", "agent_actions"\."decided_at", "agent_actions"\."created_at"\)/);
+
+  const cap = db
+    .select({ id: agentActionsTable.id })
+    .from(agentActionsTable)
+    .where(actions.venueEmailCapWhere(77, new Date("2026-10-01T00:00:00Z")))
+    .toSQL();
+  assert.match(cap.sql, /"agent_actions"\."status" = 'executing' and "agent_actions"\."id" < \$\d/);
+  assert.ok(cap.params.includes(77));
+});
+
+test("an agent's upsert_prospect never moves a prospect out of disqualified", async () => {
+  const { AGENT_LOCKED_PROSPECT_STATUSES } = await import("./tools.js");
+  assert.ok((AGENT_LOCKED_PROSPECT_STATUSES as readonly string[]).includes("disqualified"));
+  for (const status of ["contacted", "replied", "converted", "unsubscribed"]) {
+    assert.ok((AGENT_LOCKED_PROSPECT_STATUSES as readonly string[]).includes(status));
+  }
+});

@@ -7,9 +7,10 @@ import type { VettingCheck, VettingPolicy, VettingResult } from "./types.js";
  * - score = clamp(sum(points), 0, 100)
  * - hardFails = checks with hardFail, plus the composite "fresh domain" rule
  *   (registered < 90 days, a *confirmed* empty archive, no Google listing)
- * - failed when any hard fail or score < reviewScore; error when the site
- *   check errored or three or more checks errored (an outage, not a verdict);
- *   review when score < passScore; passed otherwise.
+ * - failed when any hard fail; otherwise error when the site check errored
+ *   or three or more checks errored (an outage, not a verdict, so it wins
+ *   over a low score); otherwise failed when score < reviewScore, review
+ *   when score < passScore, passed otherwise.
  */
 export function computeLegitimacy(
   checks: VettingCheck[],
@@ -37,9 +38,13 @@ export function computeLegitimacy(
   const errored = checks.filter((check) => check.outcome === "error");
   const siteErrored = byKey.get("site_reachable")?.outcome === "error";
 
+  // An outage is checked before the score: when the site could not be read
+  // (timeout, bot wall, 5xx) every site-derived check scores 0, so a low
+  // score then says nothing about the venue. Only a real hard fail beats it.
   let status: VettingResult["status"];
-  if (hardFails.length > 0 || score < policy.reviewScore) status = "failed";
+  if (hardFails.length > 0) status = "failed";
   else if (siteErrored || errored.length >= 3) status = "error";
+  else if (score < policy.reviewScore) status = "failed";
   else if (score < policy.passScore) status = "review";
   else status = "passed";
 
