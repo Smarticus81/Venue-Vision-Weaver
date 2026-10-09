@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ClerkLoaded, ClerkLoading, useUser } from "@clerk/clerk-react";
 import {
@@ -8,6 +8,8 @@ import {
   getListControlRunsQueryKey,
   useGetControlRun,
   getGetControlRunQueryKey,
+  useListControlOutreachEmails,
+  getListControlOutreachEmailsQueryKey,
   type ControlRun,
 } from "@workspace/api-client-react";
 import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
@@ -16,7 +18,8 @@ import { ClerkSetupNotice } from "@/components/auth/OrgGate";
 import { clerkConfigured } from "@/lib/clerk";
 import { cn } from "@/lib/utils";
 import { Card, EmptyState, Pill, TabLoading, apiErrorMessage, fmt } from "./control/shared";
-import { OverviewTab } from "./control/OverviewTab";
+import { OverviewTab, type OverviewWithExtras } from "./control/OverviewTab";
+import { KillSwitches } from "./control/Policies";
 import { GrowthTab } from "./control/GrowthTab";
 import { PipelineTab } from "./control/PipelineTab";
 import { OutreachStudioTab } from "./control/OutreachStudioTab";
@@ -154,30 +157,57 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-function initialTab(): TabId {
-  const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
-  return TABS.some((entry) => entry.id === hash) ? (hash as TabId) : "overview";
+/**
+ * Tabs are addressed by URL hash so cross-tab links are plain anchors:
+ * `#outreach/42` opens the Outreach tab on email 42 (Approvals uses this for
+ * "Review in Outreach").
+ */
+export function parseConsoleHash(hash: string): { tab: TabId; emailId: number | null } {
+  const [head, sub] = hash.replace(/^#/, "").split("/");
+  const tab = TABS.some((entry) => entry.id === head) ? (head as TabId) : "overview";
+  const id = Number(sub);
+  return { tab, emailId: tab === "outreach" && Number.isInteger(id) && id > 0 ? id : null };
 }
 
+function currentHash(): string {
+  return typeof window !== "undefined" ? window.location.hash : "";
+}
+
+const AWAITING_PARAMS = { awaiting: true, limit: 200 } as const;
+
 function ControlConsole() {
-  const [tab, setTabState] = useState<TabId>(initialTab);
+  const [route, setRoute] = useState(() => parseConsoleHash(currentHash()));
+  const tab = route.tab;
   const setTab = (next: TabId) => {
-    setTabState(next);
+    setRoute({ tab: next, emailId: null });
     if (typeof window !== "undefined") window.history.replaceState(null, "", `#${next}`);
   };
+  useEffect(() => {
+    const onHash = () => setRoute(parseConsoleHash(currentHash()));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const overviewQuery = useGetControlOverview({
     query: { queryKey: getGetControlOverviewQueryKey(), refetchInterval: 30000, retry: 1 },
   });
+  const awaitingQuery = useListControlOutreachEmails(AWAITING_PARAMS, {
+    query: {
+      queryKey: getListControlOutreachEmailsQueryKey(AWAITING_PARAMS),
+      refetchInterval: 30000,
+      enabled: overviewQuery.isSuccess,
+    },
+  });
 
-  const overview = overviewQuery.data;
+  const overview = overviewQuery.data as OverviewWithExtras | undefined;
   const errorStatus = (overviewQuery.error as { status?: number } | null)?.status;
 
   const badgeCounts = useMemo(
     () => ({
       approvals: overview?.counts.pendingActions ?? 0,
       tasks: overview?.counts.openTasks ?? 0,
+      outreach: awaitingQuery.data?.emails.length ?? 0,
     }),
-    [overview],
+    [overview, awaitingQuery.data],
   );
 
   if (overviewQuery.isLoading) {
@@ -219,7 +249,7 @@ function ControlConsole() {
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
+      <header className="relative top-0 z-40 border-b border-border sm:sticky bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <DreemerLogo href="/" className="text-[1.1rem] sm:text-[1.2rem]" />
@@ -239,6 +269,9 @@ function ControlConsole() {
             </span>
           </div>
         </div>
+        <div className="mx-auto max-w-6xl px-4 pb-2 sm:px-6">
+          <KillSwitches />
+        </div>
         <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-2 sm:px-6">
           {TABS.map((entry) => {
             const badge =
@@ -246,14 +279,16 @@ function ControlConsole() {
                 ? badgeCounts.approvals
                 : entry.id === "tasks"
                   ? badgeCounts.tasks
-                  : 0;
+                  : entry.id === "outreach"
+                    ? badgeCounts.outreach
+                    : 0;
             return (
               <button
                 key={entry.id}
                 type="button"
                 onClick={() => setTab(entry.id)}
                 className={cn(
-                  "mono-label flex h-8 shrink-0 items-center gap-1.5 border-b-2 px-3 transition-colors",
+                  "mono-label relative flex h-8 shrink-0 items-center gap-1.5 border-b-2 px-3 transition-colors",
                   tab === entry.id
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -261,7 +296,10 @@ function ControlConsole() {
               >
                 {entry.label}
                 {badge > 0 ? (
-                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                  <span className="sr-only">({badge} waiting)</span>
+                ) : null}
+                {badge > 0 ? (
+                  <span aria-hidden className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
                     {badge}
                   </span>
                 ) : null}
@@ -279,7 +317,7 @@ function ControlConsole() {
         ) : tab === "pipeline" ? (
           <PipelineTab />
         ) : tab === "outreach" ? (
-          <OutreachStudioTab />
+          <OutreachStudioTab key={route.emailId ?? "list"} initialEmailId={route.emailId} />
         ) : tab === "approvals" ? (
           <ApprovalsTab />
         ) : tab === "tasks" ? (
