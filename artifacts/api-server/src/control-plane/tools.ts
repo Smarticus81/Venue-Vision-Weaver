@@ -12,6 +12,7 @@ import {
   AGENT_TASK_PRIORITIES,
   PROSPECT_STATUSES,
   PROSPECT_SOURCES,
+  VETTING_STATUSES,
 } from "@workspace/db";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { computeBusinessMetrics } from "./metrics.js";
@@ -23,12 +24,66 @@ import { createDraft, ensureResearch, loadProspectAssets, loadProspectById, load
 import { publicObjectUrl } from "./outreach/config.js";
 import { daysAgo, num, str, type ControlPlaneTool, type ToolContext } from "./toolTypes.js";
 import { vettingTools } from "./vetting/tools.js";
-import { vetProspect } from "./vetting/vet.js";
+import { ensureVetted, loadVetting, vettingIsFresh } from "./vetting/vet.js";
+import { citableFacts, isHttpUrl, loadFacts, upsertFacts } from "./vetting/facts.js";
+import type { DiscoveredFact, FactKind } from "./vetting/types.js";
+import { getAgentDefinition } from "./agents.js";
 import { growthTools } from "./growth/tools.js";
 import { listOrganizationsQuery, listVenuesQuery } from "./growth/queries.js";
 import { classifyVenueType } from "./growth/segments.js";
 
 export type { ControlPlaneTool, ToolContext } from "./toolTypes.js";
+
+/** Fact kinds an agent may cite when saving a prospect (vetting.md 3.1). */
+const AGENT_FACT_KINDS: ReadonlySet<string> = new Set(["space", "location", "capacity", "style", "owner_name", "marketplace", "social"]);
+
+/**
+ * Pure: the sourced, unverified facts an upsert_prospect call records (email,
+ * owner name, and the optional facts array), plus the entries refused with a
+ * reason. Vetting and research later verify them or leave them unverified.
+ */
+export function agentFacts(input: {
+  email: string;
+  emailSourceUrl: string | null;
+  contactName: string | null;
+  contactNameSourceUrl: string | null;
+  facts: unknown;
+}): { facts: DiscoveredFact[]; rejectedFacts: Array<{ kind: unknown; value: unknown; reason: string }> } {
+  const facts: DiscoveredFact[] = [];
+  const rejectedFacts: Array<{ kind: unknown; value: unknown; reason: string }> = [];
+  if (input.emailSourceUrl && isHttpUrl(input.emailSourceUrl)) {
+    facts.push({ kind: "email", value: input.email, sourceUrl: input.emailSourceUrl.trim(), sourceKind: "agent_research", status: "unverified" });
+  }
+  if (input.contactName && input.contactNameSourceUrl && isHttpUrl(input.contactNameSourceUrl)) {
+    facts.push({
+      kind: "owner_name",
+      value: input.contactName,
+      sourceUrl: input.contactNameSourceUrl.trim(),
+      sourceKind: "agent_research",
+      status: "unverified",
+    });
+  }
+  const entries = Array.isArray(input.facts) ? input.facts : [];
+  for (const entry of entries.slice(0, 30)) {
+    const record = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const kind = record.kind;
+    const value = typeof record.value === "string" ? record.value.replace(/\s+/g, " ").trim() : "";
+    if (typeof kind !== "string" || !AGENT_FACT_KINDS.has(kind)) {
+      rejectedFacts.push({ kind, value: record.value, reason: `kind must be one of ${[...AGENT_FACT_KINDS].join(", ")}` });
+      continue;
+    }
+    if (value.length < 2 || value.length > 160) {
+      rejectedFacts.push({ kind, value: record.value, reason: "value must be 2-160 characters" });
+      continue;
+    }
+    if (!isHttpUrl(record.sourceUrl)) {
+      rejectedFacts.push({ kind, value, reason: "sourceUrl must be the http(s) page where the fact appears" });
+      continue;
+    }
+    facts.push({ kind: kind as FactKind, value, sourceUrl: (record.sourceUrl as string).trim(), sourceKind: "agent_research", status: "unverified" });
+  }
+  return { facts, rejectedFacts };
+}
 
 /**
  * Core tools every agent registry builds on. Vetting (vetting/tools.ts) and
@@ -289,7 +344,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "list_prospects",
       description:
-        "Prospect pipeline rows (potential venue customers) with score, status, campaign membership, and contact history. Set dueFollowUp=true to get contacted prospects who are past the minimum contact gap, under the lifetime contact cap, and have not replied or opted out.",
+        "Prospect pipeline rows (potential venue customers) with score, status, campaign membership, and contact history, plus summary.byVettingStatus over the whole pipeline. Set dueFollowUp=true to get contacted prospects who are past the minimum contact gap, under the lifetime contact cap, and have not replied or opted out. Rows carry vettingStatus (unvetted/passed/review/failed/error) and legitimacyScore; only vettingStatus=passed prospects can be drafted for.",
       parameters: {
         type: "object",
         properties: {
@@ -298,6 +353,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
             enum: [...PROSPECT_STATUSES],
             description: "Optional status filter.",
           },
+          vettingStatus: { type: "string", enum: [...VETTING_STATUSES], description: "Optional legitimacy vetting filter." },
           campaignId: { type: "integer", description: "Only prospects enrolled in this campaign." },
           dueFollowUp: {
             type: "boolean",
@@ -318,6 +374,10 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
       if (Number.isInteger(campaignId) && campaignId > 0) {
         conditions.push(eq(controlProspectsTable.campaignId, campaignId));
       }
+      const vettingStatus = str(args.vettingStatus);
+      if (vettingStatus && VETTING_STATUSES.includes(vettingStatus as (typeof VETTING_STATUSES)[number])) {
+        conditions.push(eq(controlProspectsTable.vettingStatus, vettingStatus));
+      }
       if (args.dueFollowUp === true) {
         const minGapHours = await getPolicyNumber("min_hours_between_prospect_contacts", "hours", 72);
         const maxContacts = await getPolicyNumber("max_contacts_per_prospect", "contacts", 3);
@@ -333,7 +393,14 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(controlProspectsTable.score), desc(controlProspectsTable.updatedAt))
         .limit(limit);
-      return { prospects: rows };
+      const byVetting = await db
+        .select({ vettingStatus: controlProspectsTable.vettingStatus, total: sql<number>`count(*)::int` })
+        .from(controlProspectsTable)
+        .groupBy(controlProspectsTable.vettingStatus);
+      return {
+        prospects: rows,
+        summary: { byVettingStatus: Object.fromEntries(byVetting.map((row) => [row.vettingStatus, row.total])) },
+      };
     },
   },
 
@@ -341,13 +408,13 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "upsert_prospect",
       description:
-        "Create or update a prospect record (deduplicated by email). Only verifiable businesses with a publicly listed email belong here — cite where you found them in qualification. Agents may set status new, qualified, or disqualified; contacted/replied/converted/unsubscribed are managed by the send action and operators and cannot be changed here.",
+        "Create or update a prospect record (deduplicated by email). Only verifiable businesses with a publicly listed email belong here, and every address and name needs the URL it was found at (emailSourceUrl, contactNameSourceUrl). Saving runs legitimacy vetting automatically (site reachable, domain age, mail records, address/phone on site, marketplace presence, optional Google listing); a prospect that fails is disqualified and one that needs review stays 'new' regardless of the status you pass. Agents may set status new, qualified, or disqualified; contacted/replied/converted/unsubscribed are managed by the send action and operators and cannot be changed here.",
       parameters: {
         type: "object",
         properties: {
           email: { type: "string", description: "Public contact email; the dedupe key." },
           name: { type: "string", description: "Venue / business name." },
-          contactName: { type: "string", description: "Person to address, if known." },
+          contactName: { type: "string", description: "Person to address, if their name is published." },
           phone: { type: "string" },
           website: { type: "string" },
           region: { type: "string", description: "City/region, e.g. 'Austin, TX'." },
@@ -358,14 +425,32 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
             description: "Why they fit (or not), with the source of every claim.",
           },
           status: { type: "string", enum: ["new", "qualified", "disqualified"] },
+          emailSourceUrl: {
+            type: "string",
+            description:
+              "Exact page URL where this email address is published (the venue's own site preferred). Required when creating a prospect.",
+          },
+          contactNameSourceUrl: {
+            type: "string",
+            description: "Exact page URL where the contact's name and role are published. Required whenever contactName is given.",
+          },
+          facts: {
+            type: "array",
+            description:
+              "Optional additional facts with sources, e.g. [{kind:'space', value:'The Timber Barn', sourceUrl:'https://.../spaces'}]. Allowed kinds: space, location, capacity, style, owner_name, marketplace, social.",
+            items: {
+              type: "object",
+              properties: { kind: { type: "string" }, value: { type: "string" }, sourceUrl: { type: "string" } },
+              required: ["kind", "value", "sourceUrl"],
+            },
+          },
         },
         required: ["email", "name"],
       },
     },
     async execute(args, ctx) {
       const email = str(args.email)?.toLowerCase() ?? null;
-      const name = str(args.name);
-      if (!email || !name) throw new Error("email and name are required.");
+      if (!email) throw new Error("email is required.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
         throw new Error(`"${email}" is not a valid email address.`);
       }
@@ -383,8 +468,27 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
         };
       }
 
+      const [existing] = await db
+        .select()
+        .from(controlProspectsTable)
+        .where(eq(controlProspectsTable.email, email));
+
+      // Name falls back to the stored one so a partial update never blanks it.
+      const name = str(args.name) ?? existing?.name ?? null;
+      if (!name) throw new Error("name is required.");
+      const contactName = str(args.contactName);
+      const emailSourceUrl = str(args.emailSourceUrl);
+      const contactNameSourceUrl = str(args.contactNameSourceUrl);
+      if (!existing && !isHttpUrl(emailSourceUrl)) {
+        throw new Error(`emailSourceUrl is required: cite the page where ${email} is published.`);
+      }
+      if (emailSourceUrl && !isHttpUrl(emailSourceUrl)) throw new Error("emailSourceUrl must be an http(s) URL.");
+      if (contactName && !isHttpUrl(contactNameSourceUrl)) {
+        throw new Error("contactNameSourceUrl is required when contactName is given.");
+      }
+
       const statusRaw = str(args.status);
-      const status =
+      const requestedStatus =
         statusRaw && ["new", "qualified", "disqualified"].includes(statusRaw) ? statusRaw : null;
       const sourceRaw = str(args.source);
       const source =
@@ -394,31 +498,32 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
       const scoreRaw = Number(args.score);
       const score =
         Number.isFinite(scoreRaw) && scoreRaw >= 0 ? Math.min(Math.floor(scoreRaw), 100) : null;
-
-      const [existing] = await db
-        .select()
-        .from(controlProspectsTable)
-        .where(eq(controlProspectsTable.email, email));
-
       const qualification = str(args.qualification);
 
+      let saved: typeof controlProspectsTable.$inferSelect;
+      let created = false;
+      let statusLocked = false;
+      let websiteChanged = false;
       if (existing) {
         const lockedStatuses = ["contacted", "replied", "converted", "unsubscribed"];
-        const statusLocked = lockedStatuses.includes(existing.status);
+        statusLocked = lockedStatuses.includes(existing.status);
         const nextQualification = qualification ?? existing.qualification;
         const segmentChanged = name !== existing.name || nextQualification !== existing.qualification;
         const website = str(args.website) ?? existing.website;
+        websiteChanged = website !== existing.website;
+        const nextStatus = statusLocked ? existing.status : (requestedStatus ?? existing.status);
         const [updated] = await db
           .update(controlProspectsTable)
           .set({
             name,
-            contactName: str(args.contactName) ?? existing.contactName,
+            contactName: contactName ?? existing.contactName,
             phone: str(args.phone) ?? existing.phone,
             website,
             region: str(args.region) ?? existing.region,
             score: score ?? existing.score,
             qualification: nextQualification,
-            status: statusLocked ? existing.status : (status ?? existing.status),
+            status: nextStatus,
+            ...(nextStatus !== existing.status ? { statusChangedBy: ctx.agentKey } : {}),
             ...(segmentChanged || !existing.venueType
               ? { venueType: classifyVenueType({ name, qualification: nextQualification }) }
               : {}),
@@ -427,56 +532,89 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
           .where(eq(controlProspectsTable.id, existing.id))
           .returning();
         if (!updated) throw new Error(`Prospect ${existing.id} vanished during update.`);
+        saved = updated;
         await recordAuditEvent({
           actorType: "agent",
           actor: ctx.agentKey,
           eventType: "prospect_updated",
           subjectType: "prospect",
           subjectId: existing.id,
-          detail: { email, score: score ?? existing.score, statusLocked },
+          detail: { email, score: score ?? existing.score, statusLocked, websiteChanged },
         });
-        // Vetting seam: re-vet when the website changed (verdict freshness is the vetting module's call).
-        const vetting = await vetProspect(updated, {
-          force: website !== existing.website,
-          requestedBy: ctx.agentKey,
+      } else {
+        const [prospect] = await db
+          .insert(controlProspectsTable)
+          .values({
+            name,
+            contactName,
+            email,
+            phone: str(args.phone),
+            website: str(args.website),
+            region: str(args.region),
+            source,
+            score: score ?? 0,
+            qualification,
+            status: requestedStatus ?? "new",
+            venueType: classifyVenueType({ name, qualification }),
+            createdByAgent: ctx.agentKey,
+          })
+          .returning();
+        if (!prospect) throw new Error("Failed to persist prospect.");
+        saved = prospect;
+        created = true;
+        await recordAuditEvent({
+          actorType: "agent",
+          actor: ctx.agentKey,
+          eventType: "prospect_created",
+          subjectType: "prospect",
+          subjectId: prospect.id,
+          detail: { email, name, score: score ?? 0 },
         });
-        return {
-          saved: true,
-          created: false,
-          statusLocked,
-          prospect: updated,
-          vetting,
-        };
       }
 
-      const [prospect] = await db
-        .insert(controlProspectsTable)
-        .values({
-          name,
-          contactName: str(args.contactName),
-          email,
-          phone: str(args.phone),
-          website: str(args.website),
-          region: str(args.region),
-          source,
-          score: score ?? 0,
-          qualification,
-          status: status ?? "new",
-          venueType: classifyVenueType({ name, qualification }),
-          createdByAgent: ctx.agentKey,
-        })
-        .returning();
-      if (!prospect) throw new Error("Failed to persist prospect.");
-      await recordAuditEvent({
-        actorType: "agent",
-        actor: ctx.agentKey,
-        eventType: "prospect_created",
-        subjectType: "prospect",
-        subjectId: prospect.id,
-        detail: { email, name, score: score ?? 0 },
+      // Facts with sources, written before vetting (which reads the cited URLs).
+      const { facts, rejectedFacts } = agentFacts({
+        email,
+        emailSourceUrl,
+        contactName,
+        contactNameSourceUrl,
+        facts: args.facts,
       });
-      const vetting = await vetProspect(prospect, { force: true, requestedBy: ctx.agentKey });
-      return { saved: true, created: true, prospect, vetting };
+      await upsertFacts(saved.id, facts, ctx.agentKey);
+
+      const existingVetting = created ? null : await loadVetting(saved.id);
+      const needsVetting = created || !existingVetting || !vettingIsFresh(existingVetting) || websiteChanged;
+      const vetting = needsVetting
+        ? (await ensureVetted(saved, { force: true, requestedBy: ctx.agentKey })).vetting
+        : existingVetting;
+
+      // ensureVetted demotes failed/review prospects; an agent may also never
+      // leave a prospect qualified before vetting has passed.
+      let fresh = (await loadProspectById(saved.id)) ?? saved;
+      if (fresh.status === "qualified" && fresh.vettingStatus !== "passed") {
+        const [demoted] = await db
+          .update(controlProspectsTable)
+          .set({ status: "new", statusChangedBy: "system:vetting", updatedAt: new Date() })
+          .where(and(eq(controlProspectsTable.id, saved.id), eq(controlProspectsTable.status, "qualified")))
+          .returning();
+        if (demoted) fresh = demoted;
+      }
+      return {
+        saved: true,
+        created,
+        statusLocked,
+        prospect: fresh,
+        vetting: vetting
+          ? { status: vetting.status, score: vetting.score, hardFails: vetting.hardFails, summary: vetting.summary }
+          : null,
+        statusApplied: fresh.status,
+        statusOverridden: requestedStatus != null && fresh.status !== requestedStatus,
+        rejectedFacts,
+        note:
+          fresh.vettingStatus === "passed"
+            ? undefined
+            : "This prospect is not eligible for outreach until vetting passes. Do not try to qualify it again without new evidence.",
+      };
     },
   },
 
@@ -633,15 +771,27 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
       if (!prospect) throw new Error(`Prospect ${prospectId} not found.`);
       if (args.refresh === true) {
         const refreshed = await ensureResearch(prospect, { force: true, actor: ctx.agentKey });
+        const [vetting, facts] = await Promise.all([loadVetting(prospectId), loadFacts(prospectId)]);
         return {
           research: refreshed.research,
           images: refreshed.assets.map((asset) => ({ ...asset, url: publicObjectUrl(asset.objectKey) })),
+          vetting,
+          facts,
+          citable: citableFacts(facts),
         };
       }
-      const [research, assets] = await Promise.all([loadResearch(prospectId), loadProspectAssets(prospectId)]);
+      const [research, assets, vetting, facts] = await Promise.all([
+        loadResearch(prospectId),
+        loadProspectAssets(prospectId),
+        loadVetting(prospectId),
+        loadFacts(prospectId),
+      ]);
       return {
         research,
         images: assets.map((asset) => ({ ...asset, url: publicObjectUrl(asset.objectKey) })),
+        vetting,
+        facts,
+        citable: citableFacts(facts),
         hint: research ? undefined : "No research yet; draft_outreach_email runs it automatically.",
       };
     },
@@ -651,7 +801,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "draft_outreach_email",
       description:
-        "Produce a studio outreach email for one prospect and queue it for operator approval. Researches the venue's own website (facts + real photos), writes a short personal note in plain words that names their actual spaces and makes one ask, and proposes the governed send_outreach_email action. Nothing is sent until an operator approves it in /control. Fails for prospects who replied, converted, unsubscribed, bounced, are disqualified, already have a pending email, or are inside the contact gap.",
+        "Produce a studio outreach email for one prospect and queue it for operator approval. Requires vettingStatus=passed and at least two verified venue facts. Researches the venue's own website (facts + real photos), writes a short personal note in plain words that cites at least two verified facts and makes one ask, adds a tracked claim link, and proposes the governed send_outreach_email action. Nothing is sent until an operator approves it in /control. Fails for prospects who replied, converted, unsubscribed, bounced, are disqualified, are not vetted, already have a pending email, or are inside the contact gap.",
       parameters: {
         type: "object",
         properties: {
@@ -691,7 +841,8 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
         images: result.email.imageAssetIds.length,
         copy: result.copy,
         warnings: result.warnings,
-        note: "Queued for operator review in /control → Outreach. Do not propose send_prospect_email for the same prospect.",
+        citedFacts: result.email.citedFacts,
+        note: "Queued for operator review in /control → Outreach. send_prospect_email is retired; never propose it.",
       };
     },
   },
@@ -788,7 +939,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
           params: {
             type: "object",
             description:
-              "Action parameters. send_outreach_email: {emailId} (use draft_outreach_email instead, which proposes this for you). send_prospect_email (legacy plain text): {prospectId, subject, message, campaignId?, step?}. enroll_prospects_in_campaign: {campaignId, prospectIds}. launch_campaign/pause_campaign/complete_campaign: {campaignId}. send_venue_email: {venueSlug, subject, message}. grant_promo_credits: {organizationId, amount, note}. requeue_failed_session: {sessionId}. pause_agent/resume_agent: {agentKey}. update_policy: {key, value, note}.",
+              "Action parameters. send_outreach_email: {emailId} (use draft_outreach_email instead, which proposes this for you). enroll_prospects_in_campaign: {campaignId, prospectIds}. launch_campaign/pause_campaign/complete_campaign: {campaignId}. send_venue_email: {venueSlug, subject, message}. grant_promo_credits: {organizationId, amount, note}. requeue_failed_session: {sessionId}. pause_agent: {agentKey}. update_policy: {key, value, note} (value fields and bounds are validated per policy).",
           },
         },
         required: ["actionType", "title", "reasoning", "params"],
@@ -830,11 +981,46 @@ const TOOLS: Record<string, ControlPlaneTool> = { ...CORE_TOOLS, ...vettingTools
 
 export const TOOL_NAMES = Object.keys(TOOLS) as Array<keyof typeof TOOLS & string>;
 
-export function toolDeclarations(names: string[]): ToolDeclaration[] {
+/**
+ * Pure: the action types one agent may propose — the non-retired catalog
+ * narrowed by its AgentDefinition.actions allowlist (no allowlist or no
+ * definition = the whole proposable catalog).
+ */
+export function proposableActionTypesFor(agentKey: string | null | undefined): string[] {
+  const all = proposableActionTypes();
+  if (!agentKey) return all;
+  const allow = getAgentDefinition(agentKey)?.actions;
+  return allow === undefined ? all : all.filter((type) => allow.includes(type));
+}
+
+/**
+ * Declarations for an agent's granted tools. With agentKey, propose_action's
+ * actionType enum and description list only the actions that agent may
+ * propose, so the model never sees options the action layer would refuse.
+ */
+export function toolDeclarations(names: string[], agentKey?: string): ToolDeclaration[] {
   return names
-    .map((name) => TOOLS[name]?.declaration)
+    .map((name) => {
+      const declaration = TOOLS[name]?.declaration;
+      if (!declaration || name !== "propose_action" || !agentKey) return declaration;
+      const allowed = proposableActionTypesFor(agentKey);
+      const parameters = structuredClone(declaration.parameters) as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      parameters.properties.actionType = { ...parameters.properties.actionType, enum: allowed };
+      const offered = Object.values(ACTION_CATALOG)
+        .filter((a) => allowed.includes(a.type))
+        .map((a) => `${a.type} (${a.riskLevel}): ${a.description}`)
+        .join(" | ");
+      return {
+        ...declaration,
+        description: `Propose a governed side effect. Medium/high risk actions enter the operator approval queue. You may propose: ${offered || "nothing (your role takes no governed actions)"}`,
+        parameters: parameters as unknown as ToolDeclaration["parameters"],
+      };
+    })
     .filter((decl): decl is ToolDeclaration => Boolean(decl));
 }
+
 
 export async function executeControlPlaneTool(
   name: string,
