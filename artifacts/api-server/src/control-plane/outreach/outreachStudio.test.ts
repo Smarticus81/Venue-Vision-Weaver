@@ -531,6 +531,10 @@ test("an approved email sends once with unsubscribe headers, reply-to, images, a
   assert.match(message.html, /alt="Willow House barn"/);
   assert.match(message.text, /came across Willow House/);
   assert.match(message.text, /publicly lists this address/);
+  assert.deepEqual(message.tags, [
+    { name: "category", value: "outreach" },
+    { name: "email_id", value: "42" },
+  ]);
   assert.equal(calls.lock.length, 1, "cap check and delivery run under the send lock");
   assert.equal(calls.markSent.length, 1);
   assert.equal(calls.bumpProspect.length, 1);

@@ -279,7 +279,7 @@ async function executeRun(runId: number, definition: AgentDefinition): Promise<v
       runAgentLoop({
         systemPrompt: definition.mission,
         userMessage: briefing,
-        tools: toolDeclarations(definition.tools),
+        tools: toolDeclarations(definition.tools, definition.key),
         enableWebSearch: definition.webSearch === true,
         executeTool: (name, args) => {
           if (!definition.tools.includes(name)) {

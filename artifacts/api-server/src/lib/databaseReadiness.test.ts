@@ -595,6 +595,36 @@ test("HSTS applies only to TLS traffic in production", () => {
   assert.equal(httpSecurity.servedOverTls({ secure: true, headers: {} }, { NODE_ENV: "development" } as NodeJS.ProcessEnv), false);
 });
 
+function cspFor(env: Record<string, string | undefined>): string {
+  const saved = { ...process.env };
+  for (const key of ["CLERK_PUBLISHABLE_KEY", "VITE_CLERK_PUBLISHABLE_KEY", "TURNSTILE_SECRET_KEY", "TURNSTILE_SITE_KEY"]) {
+    delete process.env[key];
+  }
+  Object.assign(process.env, env);
+  const headers: Record<string, string> = {};
+  try {
+    httpSecurity.securityHeaders(
+      { secure: false, headers: {} } as never,
+      { setHeader: (name: string, value: string) => { headers[name] = value; } } as never,
+      () => {},
+    );
+  } finally {
+    process.env = saved;
+  }
+  return headers["Content-Security-Policy"] ?? "";
+}
+
+test("CSP allows the Turnstile widget whenever both Turnstile keys are set, even without Clerk", () => {
+  const withTurnstile = cspFor({ TURNSTILE_SECRET_KEY: "0x4AAA-secret", TURNSTILE_SITE_KEY: "0x4AAA-site" });
+  assert.match(withTurnstile, /script-src 'self'[^;]*https:\/\/challenges\.cloudflare\.com/);
+  assert.match(withTurnstile, /frame-src 'self' https:\/\/challenges\.cloudflare\.com/);
+  const without = cspFor({});
+  assert.doesNotMatch(without, /challenges\.cloudflare\.com/);
+  assert.doesNotMatch(without, /frame-src/);
+  const siteKeyOnly = cspFor({ TURNSTILE_SITE_KEY: "0x4AAA-site" });
+  assert.doesNotMatch(siteKeyOnly, /challenges\.cloudflare\.com/, "the widget only renders when the secret is set too");
+});
+
 test("upload-intent knobs clamp to safe ranges", () => {
   assert.equal(cleanupConfig.uploadIntentCleanupIntervalMinutes({} as NodeJS.ProcessEnv), 15);
   assert.equal(cleanupConfig.uploadIntentCleanupIntervalMinutes({ UPLOAD_INTENT_CLEANUP_INTERVAL_MINUTES: "0" } as NodeJS.ProcessEnv), 1);

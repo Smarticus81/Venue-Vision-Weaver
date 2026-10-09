@@ -420,10 +420,10 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     riskLevel: "medium",
     retired: true,
     description:
-      "RETIRED. Agents no longer resume agents; operators resume a paused agent from /control → Agents (POST /control/agents/{key}/status).",
+      "RETIRED. Agents no longer resume agents; operators resume a paused agent from /control → Overview agent cards (POST /control/agents/{key}/status).",
     paramsSchema: agentKeySchema as z.ZodType<Record<string, unknown>>,
     async execute() {
-      throw new Error("resume_agent is retired: an operator resumes paused agents from /control → Agents.");
+      throw new Error("resume_agent is retired: an operator resumes paused agents from /control → Overview (agent cards).");
     },
   },
   update_policy: {

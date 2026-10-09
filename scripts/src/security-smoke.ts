@@ -151,11 +151,10 @@ const { trustProxySetting } = trustProxyModule;
 const sessionCleanupModule = (await import(
   new URL("../../artifacts/api-server/src/lib/sessionCleanupConfig.ts", import.meta.url).href
 )) as {
-  staleProcessingSessionMinutes: (env?: NodeJS.ProcessEnv) => number;
   uploadIntentCleanupBatchSize: (env?: NodeJS.ProcessEnv) => number;
 };
 
-const { staleProcessingSessionMinutes, uploadIntentCleanupBatchSize } = sessionCleanupModule;
+const { uploadIntentCleanupBatchSize } = sessionCleanupModule;
 
 const sessionVisibilityModule = (await import(
   new URL("../../artifacts/api-server/src/lib/sessionVisibility.ts", import.meta.url).href
@@ -767,26 +766,6 @@ try {
     trustProxySetting({ TRUST_PROXY: "2" } as NodeJS.ProcessEnv),
     2,
     "TRUST_PROXY can override proxy hop count explicitly",
-  );
-  assert.equal(
-    staleProcessingSessionMinutes({} as NodeJS.ProcessEnv),
-    90,
-    "processing-session cleanup defaults to a gallery-safe stale window",
-  );
-  assert.equal(
-    staleProcessingSessionMinutes({ STALE_PROCESSING_SESSION_MINUTES: "2" } as NodeJS.ProcessEnv),
-    15,
-    "processing-session cleanup refuses dangerously short stale windows",
-  );
-  assert.equal(
-    staleProcessingSessionMinutes({ STALE_PROCESSING_SESSION_MINUTES: "99999" } as NodeJS.ProcessEnv),
-    1440,
-    "processing-session cleanup caps stale windows at one day",
-  );
-  assert.equal(
-    staleProcessingSessionMinutes({ STALE_PROCESSING_SESSION_MINUTES: "not-a-number" } as NodeJS.ProcessEnv),
-    90,
-    "processing-session cleanup ignores invalid stale window config",
   );
   assert.equal(
     uploadIntentCleanupBatchSize({} as NodeJS.ProcessEnv),
@@ -1533,11 +1512,62 @@ try {
     /cleanupExpiredUploadIntents[\s\S]*uploadIntentCleanupBatchSize\(\)[\s\S]*isNull\(uploadIntentsTable\.consumedAt\)[\s\S]*lt\(uploadIntentsTable\.expiresAt, new Date\(\)\)[\s\S]*deleteObjectEntity\(intent\.objectKey\)[\s\S]*delete\(uploadIntentsTable\)[\s\S]*cleanupExpiredUploadIntents\(\)/s,
     "server startup deletes expired unconsumed upload intents and their orphaned storage objects",
   );
-  assert.match(
+  // Stale processing sessions are failed and refunded by the session
+  // worker's reaper through the guarded failSession path. Accepted frames are
+  // kept (a retry renders only the failed scenes) and stay private because the
+  // share page only exposes a ready session's complete bundle.
+  assert.doesNotMatch(
     serverIndex,
-    /cleanupGeneratedAssetsForSession\(sessionId: number\)[\s\S]*generatedAssetsTable\.objectKey[\s\S]*delete\(generatedAssetsTable\)[\s\S]*deleteObjectEntity\(asset\.objectKey\)[\s\S]*cleanupOrphanedSessions[\s\S]*cleanupGeneratedAssetsForSession\(row\.id\)[\s\S]*refundCreditsForSession\(row\.id\)/s,
-    "server startup deletes partial generated gallery assets before refunding stale processing sessions",
+    /cleanupOrphanedSessions|delete\(generatedAssetsTable\)/,
+    "server startup no longer deletes generated assets or fails sessions outside the guarded reaper path",
   );
+  {
+    const sessionWorkerModule = (await import(
+      new URL("../../artifacts/api-server/src/lib/sessionWorker.ts", import.meta.url).href
+    )) as {
+      REAPER_GRACE_MS: number;
+      createSessionWorker: (
+        deps: {
+          listPendingIds: (limit: number) => Promise<number[]>;
+          processSession: (id: number, opts: { signal: AbortSignal }) => Promise<void>;
+          failSession: (id: number, err: Error) => Promise<void>;
+          reapStale: (cutoff: Date, excludeIds: number[], err: Error) => Promise<number[]>;
+          now: () => number;
+        },
+        config: { maxConcurrent: number; deadlineMs: number; reapIntervalMs?: number },
+      ) => { tick: () => Promise<void> };
+    };
+    const reapCutoffs: number[] = [];
+    const bootNow = Date.parse("2026-10-09T12:00:00Z");
+    const worker = sessionWorkerModule.createSessionWorker(
+      {
+        listPendingIds: async () => [],
+        processSession: async () => {},
+        failSession: async () => {},
+        reapStale: async (cutoff) => {
+          reapCutoffs.push(cutoff.getTime());
+          return [];
+        },
+        now: () => bootNow,
+      },
+      { maxConcurrent: 2, deadlineMs: 900_000 },
+    );
+    await worker.tick();
+    assert.deepEqual(
+      reapCutoffs,
+      [bootNow - 900_000 - sessionWorkerModule.REAPER_GRACE_MS],
+      "the first worker tick after boot reaps sessions stuck in processing past the deadline plus grace",
+    );
+    const pipelineSource = fs.readFileSync(
+      new URL("../../artifacts/api-server/src/lib/gallerySessionPipeline.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(
+      pipelineSource,
+      /export async function reapStaleSessions[\s\S]*coalesce\(\$\{coupleSessionsTable\.startedAt\}, \$\{coupleSessionsTable\.createdAt\}\)[\s\S]*await failSession\(row, err\)/,
+      "the reaper keys on started_at and fails and refunds through the guarded failSession path",
+    );
+  }
   assert.doesNotMatch(
     serverIndex,
     /ownerLoginTokensTable|ownerSessionsTable|cleanupExpiredOwnerAuth/,

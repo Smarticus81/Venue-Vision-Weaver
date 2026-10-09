@@ -1,6 +1,3 @@
-const DEFAULT_STALE_PROCESSING_MINUTES = 90;
-const MIN_STALE_PROCESSING_MINUTES = 15;
-const MAX_STALE_PROCESSING_MINUTES = 24 * 60;
 const DEFAULT_UPLOAD_INTENT_CLEANUP_BATCH_SIZE = 100;
 const MIN_UPLOAD_INTENT_CLEANUP_BATCH_SIZE = 10;
 const MAX_UPLOAD_INTENT_CLEANUP_BATCH_SIZE = 1000;
@@ -25,15 +22,6 @@ function clampedInteger(
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.floor(parsed)));
-}
-
-export function staleProcessingSessionMinutes(env: NodeJS.ProcessEnv = process.env): number {
-  return clampedInteger(
-    env.STALE_PROCESSING_SESSION_MINUTES,
-    DEFAULT_STALE_PROCESSING_MINUTES,
-    MIN_STALE_PROCESSING_MINUTES,
-    MAX_STALE_PROCESSING_MINUTES,
-  );
 }
 
 export function uploadIntentCleanupBatchSize(env: NodeJS.ProcessEnv = process.env): number {

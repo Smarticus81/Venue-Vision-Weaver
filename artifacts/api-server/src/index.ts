@@ -1,14 +1,8 @@
 import "./loadEnv.js";
 import app from "./app";
 import { logger } from "./lib/logger";
-import {
-  db,
-  coupleSessionsTable,
-  generatedAssetsTable,
-  uploadIntentsTable,
-} from "@workspace/db";
-import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
-import { refundCreditsForSession } from "./lib/credits.js";
+import { db, uploadIntentsTable } from "@workspace/db";
+import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import { startSessionWorker } from "./lib/sessionWorker.js";
 import { startPhotoRetentionSweep } from "./lib/photoRetention.js";
 import { startControlPlaneWorker } from "./control-plane/scheduler.js";
@@ -18,66 +12,12 @@ import {
   productionEnvironmentWarnings,
 } from "./lib/envValidation.js";
 import {
-  staleProcessingSessionMinutes,
   uploadIntentCleanupBatchSize,
   uploadIntentCleanupIntervalMinutes,
 } from "./lib/sessionCleanupConfig.js";
 import { ObjectStorageService } from "./lib/objectStorage.js";
 
 const objectStorageService = new ObjectStorageService();
-
-async function cleanupGeneratedAssetsForSession(sessionId: number): Promise<void> {
-  const assets = await db
-    .select({ objectKey: generatedAssetsTable.objectKey })
-    .from(generatedAssetsTable)
-    .where(eq(generatedAssetsTable.sessionId, sessionId));
-
-  await db.delete(generatedAssetsTable).where(eq(generatedAssetsTable.sessionId, sessionId));
-
-  for (const asset of assets) {
-    try {
-      await objectStorageService.deleteObjectEntity(asset.objectKey);
-    } catch (err) {
-      logger.warn(
-        { err, sessionId, objectKey: asset.objectKey },
-        "Failed to delete partial generated asset during startup recovery",
-      );
-    }
-  }
-}
-
-async function cleanupOrphanedSessions(): Promise<void> {
-  const staleMinutes = staleProcessingSessionMinutes();
-  try {
-    const result = await db
-      .update(coupleSessionsTable)
-      .set({
-        status: "failed",
-        errorMessage: "Server was restarted during generation. Please try again.",
-        completedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(coupleSessionsTable.status, "processing"),
-          lt(coupleSessionsTable.createdAt, sql`NOW() - (${staleMinutes} * INTERVAL '1 minute')`),
-        ),
-      )
-      .returning({ id: coupleSessionsTable.id });
-
-    if (result.length > 0) {
-      for (const row of result) {
-        await cleanupGeneratedAssetsForSession(row.id);
-        await refundCreditsForSession(row.id);
-      }
-      logger.warn(
-        { count: result.length, ids: result.map((r) => r.id), staleMinutes },
-        "Marked orphaned in-flight sessions as failed on startup",
-      );
-    }
-  } catch (err) {
-    logger.error({ err }, "Failed to cleanup orphaned sessions on startup");
-  }
-}
 
 /**
  * Expired, never-consumed upload intents leave orphaned objects in the
@@ -160,7 +100,6 @@ const server = app.listen(port, (err) => {
   }
 
   logger.info({ port, appBaseUrl: getAppBaseUrl() }, "Server listening");
-  void cleanupOrphanedSessions();
   void cleanupExpiredUploadIntents();
   const sweepInterval = setInterval(
     () => void cleanupExpiredUploadIntents(),

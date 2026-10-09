@@ -202,7 +202,7 @@ export async function failSession(
     }
   }
   if (!failedRow) {
-    // Someone else (deadline, reaper, startup cleanup) already finished it,
+    // Someone else (the deadline or the reaper) already finished it,
     // or the forced update ran: refund is idempotent, so still try it.
     try {
       await deps.refund(session.id);

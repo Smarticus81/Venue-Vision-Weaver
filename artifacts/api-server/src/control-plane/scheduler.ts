@@ -4,7 +4,7 @@ import { logger } from "../lib/logger.js";
 import { AGENT_DEFINITIONS, AGENT_KEYS } from "./agents.js";
 import { ensurePolicyDefaults } from "./policies.js";
 import { snapshotMetrics, latestSnapshotAgeMinutes, type MetricsSnapshot } from "./metrics.js";
-import { ACTION_CATALOG, executeAction } from "./actions.js";
+import { ACTION_CATALOG, executeAction, recoverStaleExecutingActions } from "./actions.js";
 import { startAgentRun, isRunInProgress, providerBackoffRemainingMs } from "./runner.js";
 import { controlPlaneAiConfigured } from "./grok.js";
 import { runAdaptationRules } from "./growth/adaptation.js";
@@ -239,6 +239,10 @@ export function startControlPlaneWorker(): void {
       await failOrphanedRuns();
       // E8: pending/approved rows of retired action types can never execute; reject them with the retirement note.
       await retireLegacyActions(ACTION_CATALOG);
+      // Rows a crashed process left in "executing" are failed (never re-run:
+      // the side effect may already have happened) so an operator can check.
+      const interrupted = await recoverStaleExecutingActions();
+      if (interrupted > 0) logger.warn({ interrupted }, "Failed actions interrupted by a restart");
       // Growth backfills are idempotent and never throw.
       await runGrowthBackfills();
     } catch (err) {

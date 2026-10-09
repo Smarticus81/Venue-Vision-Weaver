@@ -67,6 +67,8 @@ export interface DeliverMessage {
   text: string;
   headers: Record<string, string>;
   replyTo: string | null;
+  /** Resend tags; webhook events also match on the provider message id. */
+  tags: Array<{ name: string; value: string }>;
 }
 
 export interface SendConfig {
@@ -288,6 +290,10 @@ export async function sendOutreachEmail(
         text: rendered.text,
         headers: rendered.headers,
         replyTo: config.replyTo,
+        tags: [
+          { name: "category", value: "outreach" },
+          { name: "email_id", value: String(emailId) },
+        ],
       });
 
       await deps.markSent(emailId, {
@@ -413,6 +419,7 @@ export function defaultSendDeps(): OutreachSendDeps {
         text: message.text,
         headers: message.headers,
         replyTo: message.replyTo,
+        tags: message.tags,
       });
       if (!result.sent) throw new Error(result.reason);
       return { id: result.id };

@@ -97,10 +97,17 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   // CAPTCHA runs in a Cloudflare Turnstile frame and session refresh uses a
   // blob worker.
   const clerkOrigin = clerkFrontendApiOrigin();
+  // The couple form loads the Turnstile widget (script + iframe from
+  // challenges.cloudflare.com) whenever the venue payload carries a site key,
+  // which is exactly when both Turnstile keys are set (venueResponse.ts).
+  const turnstileEnabled = Boolean(
+    process.env.TURNSTILE_SECRET_KEY?.trim() && process.env.TURNSTILE_SITE_KEY?.trim(),
+  );
+  const cloudflareChallenges = clerkOrigin || turnstileEnabled ? "https://challenges.cloudflare.com" : null;
   const connectSrc = ["connect-src 'self'", supabaseOrigin, clerkOrigin, clerkOrigin && "https://clerk-telemetry.com"]
     .filter(Boolean)
     .join(" ");
-  const scriptSrc = ["script-src 'self'", clerkOrigin, clerkOrigin && "https://challenges.cloudflare.com"]
+  const scriptSrc = ["script-src 'self'", clerkOrigin, cloudflareChallenges]
     .filter(Boolean)
     .join(" ");
   res.setHeader(
@@ -116,7 +123,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
       "media-src 'self' blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
       "worker-src 'self' blob:",
-      clerkOrigin && "frame-src 'self' https://challenges.cloudflare.com",
+      cloudflareChallenges && `frame-src 'self' ${cloudflareChallenges}`,
       connectSrc,
       "form-action 'self'",
     ]

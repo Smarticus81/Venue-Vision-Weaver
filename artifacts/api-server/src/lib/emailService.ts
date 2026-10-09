@@ -154,6 +154,8 @@ export async function sendRawEmail(message: {
   text: string;
   headers?: Record<string, string>;
   replyTo?: string | null;
+  /** Resend tags (ASCII letters, digits, _ and - only) for grouping delivery events. */
+  tags?: Array<{ name: string; value: string }>;
 }): Promise<RawEmailSendResult> {
   if (!resend) {
     logger.warn({ to: hashRecipient(message.to), subject: message.subject }, "RESEND_API_KEY not set - skipping email");
@@ -168,6 +170,7 @@ export async function sendRawEmail(message: {
       text: message.text,
       headers: message.headers,
       ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+      ...(message.tags?.length ? { tags: message.tags } : {}),
     });
     if (error) {
       logger.error({ error, to: hashRecipient(message.to), subject: message.subject, from: fromEmail }, "Resend email failed");
@@ -259,7 +262,7 @@ export async function sendSessionCreatedNotification(
     ? `<strong>${escapeHtml(session.coupleName)}</strong>`
     : "A couple";
   const body = `<p>${who} just started a gallery at <strong>${escapeHtml(venue.name)}</strong>.</p>
-    <p>It's session #${session.id}. We'll email you again when it's ready to review.</p>`;
+    <p>It's session #${session.id}. We'll email you again when it's ready.</p>`;
   await sendEmail(
     ownerEmail,
     `New couple at ${venue.name}`,
