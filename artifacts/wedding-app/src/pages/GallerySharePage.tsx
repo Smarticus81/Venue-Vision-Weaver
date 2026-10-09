@@ -66,12 +66,15 @@ export default function GallerySharePage() {
       enabled: !!shareToken,
       retry: (count, err) => errorStatus(err) !== 404 && count < 2,
       refetchOnWindowFocus: (query) => {
-        const status = query.state.data?.status;
-        return status === "pending" || status === "processing";
+        const data = query.state.data;
+        return data?.status === "pending" || data?.status === "processing" || data?.deliveryHeld === true;
       },
       refetchInterval: (query) => {
         const data = query.state.data;
-        if (!data || (data.status !== "pending" && data.status !== "processing")) return false;
+        if (!data) return false;
+        // Held for the venue's review: check back now and then until it is sent.
+        if (data.status === "ready" && data.deliveryHeld) return HELD_POLL_MS;
+        if (data.status !== "pending" && data.status !== "processing") return false;
         return processingPollInterval(elapsedSince(data.createdAt, Date.now()));
       },
     },
@@ -105,6 +108,10 @@ export default function GallerySharePage() {
 
   if (status === "pending" || status === "processing") {
     return <ProcessingView session={session} creator={creator} offline={tokenQuery.isError} />;
+  }
+
+  if (status === "ready" && session.deliveryHeld) {
+    return <HeldView session={session} />;
   }
 
   if (stills.length > 0) {
@@ -171,6 +178,27 @@ function FailureView({ session, creator }: { session: SessionDetailResponse; cre
             <RotateCcw /> Try again
           </Button>
         ) : null}
+      </section>
+    </CoupleChrome>
+  );
+}
+
+const HELD_POLL_MS = 60_000;
+
+/** Ready, but the venue looks at it first (review before send, or a frame the quality check could not judge). */
+function HeldView({ session }: { session: SessionDetailResponse }) {
+  const venue = session.venue ?? null;
+  const venueName = venue?.name ?? "The venue";
+  return (
+    <CoupleChrome venue={venue}>
+      <section className="cp-message" role="status" data-testid="held-screen">
+        <p className="eyebrow">Almost there</p>
+        <h1>Your gallery is made.</h1>
+        <p>
+          {venueName} takes a quick look before it goes out
+          {session.hasCoupleEmail ? ", then it is emailed to you" : ""}. Keep this link: the gallery appears here as soon
+          as it is sent.
+        </p>
       </section>
     </CoupleChrome>
   );

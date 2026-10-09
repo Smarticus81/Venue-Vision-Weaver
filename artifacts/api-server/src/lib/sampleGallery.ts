@@ -9,8 +9,13 @@ import { uploadBufferAsUploadObject } from "./websiteMediaImport.js";
  * "Render a sample" for venue onboarding (shared-contract 2.3
  * POST /venues/{slug}/sample-gallery). The demo couple's reference photos
  * come from DEMO_COUPLE_DIR (default lib/brand/assets/demo-couple). Per the
- * workstream plan a sample spends exactly one credit, and only when the demo
- * photos exist; otherwise the route answers 409 demo_not_configured.
+ * workstream plan a sample is offered only when the demo photos exist;
+ * otherwise the route answers 409 demo_not_configured.
+ * A sample does not debit a credit (the dashboard promises that), but the
+ * account must be fundable (trial clock and balance, 402 otherwise) and each
+ * organization has a lifetime allowance of MAX_SAMPLE_STARTS_PER_ORG starts
+ * counted from a persistent log (venueSetup.ts), so deleting samples, adding
+ * venues or opening more organizations never buys unlimited renders.
  */
 
 export const DEMO_NOT_CONFIGURED_CODE = "demo_not_configured";

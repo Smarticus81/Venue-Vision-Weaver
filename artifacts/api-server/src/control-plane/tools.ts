@@ -32,6 +32,13 @@ import { growthTools } from "./growth/tools.js";
 import { listOrganizationsQuery, listVenuesQuery } from "./growth/queries.js";
 import { classifyVenueType } from "./growth/segments.js";
 
+/**
+ * Prospect statuses an agent's upsert_prospect never changes. "disqualified"
+ * is included: an operator (or a failed vetting) disqualified the venue, and
+ * an agent must not make it contactable again.
+ */
+export const AGENT_LOCKED_PROSPECT_STATUSES = ["contacted", "replied", "converted", "unsubscribed", "disqualified"] as const;
+
 export type { ControlPlaneTool, ToolContext } from "./toolTypes.js";
 
 /** Fact kinds an agent may cite when saving a prospect (vetting.md 3.1). */
@@ -408,7 +415,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
     declaration: {
       name: "upsert_prospect",
       description:
-        "Create or update a prospect record (deduplicated by email). Only verifiable businesses with a publicly listed email belong here, and every address and name needs the URL it was found at (emailSourceUrl, contactNameSourceUrl). Saving runs legitimacy vetting automatically (site reachable, domain age, mail records, address/phone on site, marketplace presence, optional Google listing); a prospect that fails is disqualified and one that needs review stays 'new' regardless of the status you pass. Agents may set status new, qualified, or disqualified; contacted/replied/converted/unsubscribed are managed by the send action and operators and cannot be changed here.",
+        "Create or update a prospect record (deduplicated by email). Only verifiable businesses with a publicly listed email belong here, and every address and name needs the URL it was found at (emailSourceUrl, contactNameSourceUrl). Saving runs legitimacy vetting automatically (site reachable, domain age, mail records, address/phone on site, marketplace presence, optional Google listing); a prospect that fails is disqualified and one that needs review stays 'new' regardless of the status you pass. Agents may set status new, qualified, or disqualified; contacted/replied/converted/unsubscribed are managed by the send action and operators, and a disqualified prospect stays disqualified: none of these can be changed here.",
       parameters: {
         type: "object",
         properties: {
@@ -505,8 +512,7 @@ const CORE_TOOLS: Record<string, ControlPlaneTool> = {
       let statusLocked = false;
       let websiteChanged = false;
       if (existing) {
-        const lockedStatuses = ["contacted", "replied", "converted", "unsubscribed"];
-        statusLocked = lockedStatuses.includes(existing.status);
+        statusLocked = (AGENT_LOCKED_PROSPECT_STATUSES as readonly string[]).includes(existing.status);
         const nextQualification = qualification ?? existing.qualification;
         const segmentChanged = name !== existing.name || nextQualification !== existing.qualification;
         const website = str(args.website) ?? existing.website;

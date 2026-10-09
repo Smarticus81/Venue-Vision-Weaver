@@ -9,6 +9,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import VenueLandingPage from "@/pages/VenueLandingPage";
+import { dashboardPathForVenue } from "@/pages/dashboard/dashboardRoute";
 
 const queryClient = new QueryClient();
 
@@ -114,7 +115,7 @@ function LazyRoutes() {
         <Route path="/dashboard">{() => <VenueOwnerPage />}</Route>
         <Route path="/dashboard/tour/:slug">{() => <TourDayPage />}</Route>
         <Route path="/dashboard/:slug">
-          {() => <Redirect to="/dashboard" />}
+          {(params) => <Redirect to={dashboardPathForVenue(params.slug)} />}
         </Route>
         <Route path="/profile/:slug">
           {() => <Redirect to="/dashboard" />}

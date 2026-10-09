@@ -14,6 +14,7 @@ const template = await import("./emailTemplate.js");
 const copywriter = await import("./copywriter.js");
 const guards = await import("./contactGuards.js");
 const sender = await import("./sender.js");
+const sendErrors = await import("./sendErrors.js");
 const grok = await import("../grok.js");
 const { ACTION_CATALOG } = await import("../actions.js");
 const { AGENT_DEFINITIONS } = await import("../agents.js");
@@ -349,6 +350,11 @@ interface SendWorldOverrides {
   campaignStatus?: string | null;
   lastContactedAt?: Date | null;
   deliverError?: string;
+  /** Deferred (unclear provider answer) instead of a rejection. */
+  deliverDeferred?: boolean;
+  /** The prospect row as reloaded under the send lock (an unsubscribe or reply landed meanwhile). */
+  prospectUnderLock?: Partial<ProspectRow>;
+  recordDeliveryFailures?: { count: number };
 }
 
 function fakeSendWorld(overrides: SendWorldOverrides = {}) {
@@ -438,7 +444,7 @@ function fakeSendWorld(overrides: SendWorldOverrides = {}) {
   } as AssetRow;
   const deps: import("./sender.js").OutreachSendDeps = {
     loadEmail: async () => email,
-    loadProspect: async () => prospect,
+    loadProspect: async () => (calls.lock.length > 0 && overrides.prospectUnderLock ? { ...prospect, ...overrides.prospectUnderLock } : prospect),
     loadActionStatus: async () => (overrides.actionStatus === undefined ? "executing" : overrides.actionStatus),
     loadAssets: async () => [asset],
     isSuppressed: async () => overrides.suppressed ?? false,
@@ -463,21 +469,24 @@ function fakeSendWorld(overrides: SendWorldOverrides = {}) {
       return fn();
     },
     deliver: async (message) => {
+      if (overrides.deliverDeferred) throw new sendErrors.DeferredSendError("provider timed out");
       if (overrides.deliverError) throw new Error(overrides.deliverError);
       calls.deliver.push(message);
       return { id: "re_123" };
     },
-    markSent: async (...args) => {
-      calls.markSent.push(args);
+    recordDelivery: async (emailId, record, prospectId, step) => {
+      if (overrides.recordDeliveryFailures && overrides.recordDeliveryFailures.count > 0) {
+        overrides.recordDeliveryFailures.count -= 1;
+        throw new Error("connection reset");
+      }
+      calls.markSent.push([emailId, record]);
+      calls.bumpProspect.push([prospectId, step]);
     },
     markFailed: async (...args) => {
       calls.markFailed.push(args);
     },
     markDeferred: async (...args) => {
       calls.markDeferred.push(args);
-    },
-    bumpProspect: async (...args) => {
-      calls.bumpProspect.push(args);
     },
     config: () => ({
       postalAddress: "Dreemer · 1 Main St",
@@ -539,6 +548,56 @@ test("an approved email sends once with unsubscribe headers, reply-to, images, a
   assert.equal(calls.markSent.length, 1);
   assert.equal(calls.bumpProspect.length, 1);
   assert.equal(calls.markFailed.length, 0);
+});
+
+test("sender: the recipient is re-checked under the send lock (an unsubscribe or reply while waiting stops the send)", async () => {
+  for (const status of ["unsubscribed", "replied"]) {
+    const world = fakeSendWorld({ prospectUnderLock: { status } });
+    await assert.rejects(sender.sendOutreachEmail(42, world.deps), new RegExp(`"${status}"`));
+    assert.equal(world.calls.deliver.length, 0, `no delivery once the prospect is ${status}`);
+    assert.equal(world.calls.markFailed.length, 1);
+  }
+  const raced = fakeSendWorld({ prospectUnderLock: { lastContactedAt: new Date(SEND_NOW.getTime() - 60_000), contactCount: 1 } });
+  await assert.rejects(sender.sendOutreachEmail(42, raced.deps), /gap/);
+  assert.equal(raced.calls.deliver.length, 0, "a concurrent send for the same prospect is seen under the lock");
+});
+
+test("sender: an unclear provider answer keeps the draft, and every delivery carries a stable idempotency key", async () => {
+  const unclear = fakeSendWorld({ deliverDeferred: true });
+  const err = await sender.sendOutreachEmail(42, unclear.deps).catch((e: unknown) => e);
+  assert.ok(sendErrors.isDeferredSendError(err));
+  assert.equal(unclear.calls.markDeferred.length, 1);
+  assert.equal(unclear.calls.markFailed.length, 0);
+
+  const ok = fakeSendWorld();
+  await sender.sendOutreachEmail(42, ok.deps);
+  assert.equal((ok.calls.deliver[0] as import("./sender.js").DeliverMessage).idempotencyKey, "outreach-email-42");
+});
+
+test("sender: once delivered, a bookkeeping failure is retried and never marks the email failed", async () => {
+  const flaky = fakeSendWorld({ recordDeliveryFailures: { count: 2 } });
+  const result = await sender.sendOutreachEmail(42, flaky.deps);
+  assert.equal(result.sent, true);
+  assert.equal(flaky.calls.markSent.length, 1);
+  assert.equal(flaky.calls.markFailed.length, 0);
+
+  const down = fakeSendWorld({ recordDeliveryFailures: { count: 10 } });
+  const stillSent = await sender.sendOutreachEmail(42, down.deps);
+  assert.equal(stillSent.sent, true, "the message went out; it is not reported as failed");
+  assert.equal(down.calls.markFailed.length, 0);
+  assert.equal(down.calls.markDeferred.length, 0);
+});
+
+test("sender: the contact bump increments in SQL and never overwrites replied/unsubscribed", async () => {
+  const { db, controlProspectsTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const query = db
+    .update(controlProspectsTable)
+    .set(sender.prospectContactBump(null, SEND_NOW))
+    .where(eq(controlProspectsTable.id, 1))
+    .toSQL();
+  assert.match(query.sql, /"contact_count" = "control_prospects"\."contact_count" \+ 1/);
+  assert.match(query.sql, /case when "control_prospects"\."status" in \('new', 'qualified', 'contacted'\) then 'contacted' else "control_prospects"\."status" end/);
 });
 
 test("the send action is high risk and only reachable through the governed catalog", () => {
@@ -810,4 +869,27 @@ test("venue email: operational notes carry a why-line, the postal address and Li
     venueEmail.renderVenueEmail({ subject: "s", paragraphs: ["x"], venueName: "V", postalAddress: "a", unsubscribeMailbox: null }).headers,
     {},
   );
+});
+
+test("an unlinked draft another createDraft just inserted counts as open (no second sendable draft)", async () => {
+  const { db, controlOutreachEmailsTable, agentActionsTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const query = db
+    .select({ id: controlOutreachEmailsTable.id })
+    .from(controlOutreachEmailsTable)
+    .leftJoin(agentActionsTable, eq(controlOutreachEmailsTable.actionId, agentActionsTable.id))
+    .where(studioModule.openDraftWhere(7, SEND_NOW))
+    .toSQL();
+  assert.match(query.sql, /left join "agent_actions"/);
+  assert.match(query.sql, /in \('pending', 'approved', 'executing'\)/);
+  assert.match(query.sql, /"control_outreach_emails"\."action_id" is null and "control_outreach_emails"\."status" = 'draft'/);
+  assert.ok(query.params.includes(7));
+});
+
+test("operator edits only land on a draft whose action is still pending (never on a sent record)", async () => {
+  const { db, controlOutreachEmailsTable } = await import("@workspace/db");
+  const query = db.update(controlOutreachEmailsTable).set({ subject: "x" }).where(studioModule.editableEmailWhere(42)).toSQL();
+  assert.match(query.sql, /"control_outreach_emails"\."status" = \$\d/);
+  assert.ok(query.params.includes("draft"));
+  assert.match(query.sql, /"agent_actions"\."status" = 'pending'/);
 });

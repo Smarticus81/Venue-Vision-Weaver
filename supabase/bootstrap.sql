@@ -52,6 +52,21 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS attribution_campaign_id INTEGER,
   ADD COLUMN IF NOT EXISTS share_aggregates BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- An earlier build's not-exists guard could record the same grantee on two
+-- organizations provisioned at once. Keep it on the earliest organization and
+-- clear it on the later ones (their balances and trial_grant ledger rows are
+-- untouched, and that ledger row stops them claiming again) so the unique
+-- index below can be created. A no-op when there are no duplicates.
+UPDATE organizations later_org
+   SET trial_granted_by_clerk_user_id = NULL
+ WHERE later_org.trial_granted_by_clerk_user_id IS NOT NULL
+   AND EXISTS (
+     SELECT 1
+       FROM organizations earlier_org
+      WHERE earlier_org.trial_granted_by_clerk_user_id = later_org.trial_granted_by_clerk_user_id
+        AND (earlier_org.created_at, earlier_org.id) < (later_org.created_at, later_org.id)
+   );
+
 -- Trial once per Clerk user, even when two organizations are provisioned at once.
 CREATE UNIQUE INDEX IF NOT EXISTS organizations_trial_grantee_unique
   ON organizations (trial_granted_by_clerk_user_id)
@@ -161,6 +176,7 @@ CREATE TABLE IF NOT EXISTS couple_sessions (
   booked_at TIMESTAMP,
   booked_by TEXT,
   source_photos_deleted_at TIMESTAMP,
+  delivery_hold_reason TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMP
 );
@@ -177,7 +193,8 @@ ALTER TABLE couple_sessions
   ADD COLUMN IF NOT EXISTS consent_at TIMESTAMP,
   ADD COLUMN IF NOT EXISTS booked_at TIMESTAMP,
   ADD COLUMN IF NOT EXISTS booked_by TEXT,
-  ADD COLUMN IF NOT EXISTS source_photos_deleted_at TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS source_photos_deleted_at TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS delivery_hold_reason TEXT;
 
 ALTER TABLE couple_sessions
   ALTER COLUMN couple_email SET NOT NULL,
@@ -812,6 +829,14 @@ ALTER TABLE control_prospect_facts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE control_copy_variants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE control_adaptations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE control_digests ENABLE ROW LEVEL SECURITY;
+
+-- Retired owner-auth tables: still present until
+-- migrations/2026-10-08-drop-owner-auth.sql runs after the new build is live.
+-- Close them to PostgREST meanwhile (the previous build reads them as the
+-- table owner, which RLS does not affect), so /api/readyz can pass first.
+ALTER TABLE IF EXISTS owner_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS owner_login_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS owner_credentials ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;

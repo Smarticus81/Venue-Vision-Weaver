@@ -2,8 +2,8 @@ import { db, controlAgentsTable, agentRunsTable, agentActionsTable } from "@work
 import { and, asc, eq, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { AGENT_DEFINITIONS, AGENT_KEYS } from "./agents.js";
-import { ensurePolicyDefaults } from "./policies.js";
-import { snapshotMetrics, latestSnapshotAgeMinutes, type MetricsSnapshot } from "./metrics.js";
+import { ensurePolicyDefaults, getPolicy, setPolicy } from "./policies.js";
+import { snapshotMetrics, latestSnapshotAgeMinutes, latestGrowthSnapshot, type MetricsSnapshot } from "./metrics.js";
 import { ACTION_CATALOG, executeAction, recoverStaleExecutingActions } from "./actions.js";
 import { startAgentRun, isRunInProgress, providerBackoffRemainingMs } from "./runner.js";
 import { controlPlaneAiConfigured } from "./grok.js";
@@ -14,7 +14,6 @@ import { growthLoopEnabled } from "./growth/config.js";
 import { maybeGenerateWeeklyDigest, maybeSendAgingApprovalsNudge } from "./growth/digest.js";
 import { runExperimentDecisions, type ExperimentSnapshot } from "./growth/experiments.js";
 import { agentRunGate, drainCutoff, retireLegacyActions, runRetention } from "./growth/governance.js";
-import type { GrowthKpis } from "./growth/kpiTypes.js";
 import { runTrialClock } from "./growth/trialClock.js";
 
 /*
@@ -185,16 +184,57 @@ async function guarded(step: string, fn: () => Promise<unknown>): Promise<void> 
   }
 }
 
+/** Policy row holding when the experiment evaluator + adaptation rules last ran. */
+export const GROWTH_RULES_LAST_RUN_KEY = "growth_rules_last_run";
+
+/**
+ * Pure: are the evaluator and rules due, and how many hours count toward
+ * okDays? Measured from the last RULES run, never from the newest snapshot
+ * (agent or operator snapshots must not push the rules out or shrink okDays).
+ */
+export function growthRulesDue(
+  lastRunAt: Date | null,
+  now: Date,
+  intervalMinutes: number = SNAPSHOT_INTERVAL_MINUTES,
+): { due: boolean; hoursSinceLastRun: number } {
+  if (!lastRunAt || Number.isNaN(lastRunAt.getTime())) return { due: true, hoursSinceLastRun: intervalMinutes / 60 };
+  const elapsedMinutes = (now.getTime() - lastRunAt.getTime()) / 60_000;
+  return { due: elapsedMinutes >= intervalMinutes, hoursSinceLastRun: Math.max(0, elapsedMinutes / 60) };
+}
+
+async function maybeRunGrowthRules(fresh: MetricsSnapshot | null, now: Date): Promise<void> {
+  const raw = await getPolicy(GROWTH_RULES_LAST_RUN_KEY);
+  const lastAt = typeof raw?.at === "string" ? new Date(raw.at) : null;
+  const { due, hoursSinceLastRun } = growthRulesDue(lastAt, now);
+  if (!due) return;
+  let snapshotId: number;
+  let metrics: ExperimentSnapshot;
+  if (fresh?.metrics.growth) {
+    snapshotId = fresh.snapshotId;
+    metrics = fresh.metrics as ExperimentSnapshot;
+  } else {
+    // An off-scheduler snapshot (agent tool, guard reset, digest) reset the
+    // snapshot clock; the rules still run on schedule against the newest one.
+    const latest = await latestGrowthSnapshot();
+    if (!latest) return;
+    snapshotId = latest.snapshotId;
+    metrics = latest.metrics as ExperimentSnapshot;
+  }
+  await guarded("experiment_decisions", () => runExperimentDecisions(metrics, snapshotId, now));
+  if (growthLoopEnabled()) {
+    await guarded("adaptation_rules", () => runAdaptationRules(metrics.growth, snapshotId, now, { hoursSinceLastRun }));
+  }
+  await setPolicy(GROWTH_RULES_LAST_RUN_KEY, { at: now.toISOString(), snapshotId });
+}
+
 async function tick(now: Date = new Date()): Promise<void> {
+  await guarded("stale_executing_actions", async () => {
+    const interrupted = await recoverStaleExecutingActions(15, now);
+    if (interrupted > 0) logger.warn({ interrupted }, "Failed actions left executing by an interrupted process");
+  });
   await drainApprovedActions(now);
   const snapshot = await maybeSnapshotMetrics();
-  if (snapshot?.metrics.growth) {
-    const growth: GrowthKpis = snapshot.metrics.growth;
-    await guarded("experiment_decisions", () => runExperimentDecisions(snapshot.metrics as ExperimentSnapshot, snapshot.snapshotId, now));
-    if (growthLoopEnabled()) {
-      await guarded("adaptation_rules", () => runAdaptationRules(growth, snapshot.snapshotId, now));
-    }
-  }
+  await guarded("growth_rules", () => maybeRunGrowthRules(snapshot, now));
   if (growthLoopEnabled()) {
     await guarded("trial_clock", () => runTrialClock(now)); // hourly inside
     await guarded("attribution", () => maybeRunAttribution(now)); // hourly inside

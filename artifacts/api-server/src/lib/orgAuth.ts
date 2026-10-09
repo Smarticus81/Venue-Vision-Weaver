@@ -121,7 +121,7 @@ export function pickVerifiedEmail(
   return value ? value : null;
 }
 
-/** Verified Clerk email for a user (billing email, legacy venue adoption, lifecycle contact). */
+/** Verified Clerk email for a user (billing email, lifecycle contact). */
 export async function fetchClerkUserEmail(clerkUserId: string): Promise<string | null> {
   try {
     const user = await clerkClient.users.getUser(clerkUserId);
@@ -348,58 +348,10 @@ export async function ensureOrganizationByClerkId(
   return row;
 }
 
-/* ————— Legacy venue adoption + contact email (once per process per org) ————— */
-
-/**
- * Adopt pre-Clerk venues into the caller's organization: any venue with no
- * organization whose owner email matches the signed-in user moves under the
- * org, and its remaining venue-level credits are folded into the org balance.
- */
-async function adoptLegacyVenues(org: Organization, userEmail: string): Promise<void> {
-  const adopted = await db.transaction(async (tx) => {
-    const rows = await tx
-      .update(venuesTable)
-      .set({ organizationId: org.id })
-      .where(
-        and(
-          isNull(venuesTable.organizationId),
-          sql`lower(${venuesTable.ownerEmail}) = ${userEmail}`,
-        ),
-      )
-      .returning({ id: venuesTable.id, creditsBalance: venuesTable.creditsBalance });
-
-    if (!rows.length) return rows;
-
-    const carried = rows.reduce((sum, row) => sum + Math.max(0, row.creditsBalance), 0);
-    if (carried > 0) {
-      await tx
-        .update(venuesTable)
-        .set({ creditsBalance: 0 })
-        .where(eq(venuesTable.organizationId, org.id));
-      await tx
-        .update(organizationsTable)
-        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} + ${carried}` })
-        .where(eq(organizationsTable.id, org.id));
-      await tx.insert(creditTransactionsTable).values({
-        organizationId: org.id,
-        delta: carried,
-        reason: "admin_adjust",
-      });
-    }
-    return rows;
-  });
-
-  if (adopted.length) {
-    logger.info(
-      { orgId: org.id, venueIds: adopted.map((v) => v.id) },
-      "Adopted legacy venues into organization",
-    );
-  }
-}
+/* ————— Contact email (once per process per org) ————— */
 
 // Per-process memo so requireOrg does not call the Clerk Users API on every
-// request while an org has no venues yet (the whole create-venue step).
-const adoptionAttempted = new Set<string>();
+// request while an org has no contact email yet.
 const contactEmailAttempted = new Set<number>();
 const trialClaimAttempted = new Set<string>();
 
@@ -415,57 +367,49 @@ function trialClaimantOnce(clerkOrgId: string, clerkUserId: string): string | nu
   return clerkUserId;
 }
 
+/**
+ * Run fn with the acting user offered as trial claimant (once per org+user
+ * per process). The memo is only kept when fn completes: a claim that threw
+ * (a DB timeout, a reset connection) is offered again on the next request,
+ * so a transient error never leaves the org without its trial.
+ */
+export async function withTrialClaimantOnce<T>(
+  clerkOrgId: string,
+  clerkUserId: string,
+  fn: (claimant: string | null) => Promise<T>,
+): Promise<T> {
+  const claimant = trialClaimantOnce(clerkOrgId, clerkUserId);
+  try {
+    return await fn(claimant);
+  } catch (err) {
+    if (claimant) trialClaimAttempted.delete(`${clerkOrgId}:${clerkUserId}`);
+    throw err;
+  }
+}
+
 /** Test hook: forget the per-process memos. */
 export function resetOrgAuthMemos(): void {
-  adoptionAttempted.clear();
   contactEmailAttempted.clear();
   trialClaimAttempted.clear();
 }
 
 async function runFirstTouchPasses(org: Organization, clerkUserId: string): Promise<Organization> {
-  let current = org;
-  const needsEmail =
-    (!contactEmailAttempted.has(org.id) && org.contactEmail == null) ||
-    !adoptionAttempted.has(`${org.id}:${clerkUserId}`);
-  if (!needsEmail) return current;
-
+  if (contactEmailAttempted.has(org.id) || org.contactEmail != null) return org;
+  contactEmailAttempted.add(org.id);
   const email = await fetchClerkUserEmail(clerkUserId);
-
-  if (!adoptionAttempted.has(`${org.id}:${clerkUserId}`)) {
-    adoptionAttempted.add(`${org.id}:${clerkUserId}`);
-    const [anyVenue] = await db
-      .select({ id: venuesTable.id })
-      .from(venuesTable)
-      .where(eq(venuesTable.organizationId, org.id))
-      .limit(1);
-    if (!anyVenue && email) {
-      try {
-        await adoptLegacyVenues(org, email);
-      } catch (err) {
-        logger.warn({ err, orgId: org.id }, "Legacy venue adoption failed");
-      }
-    }
+  if (!email) return org;
+  try {
+    await db
+      .update(organizationsTable)
+      .set({ contactEmail: email })
+      .where(and(eq(organizationsTable.id, org.id), isNull(organizationsTable.contactEmail)));
+  } catch (err) {
+    logger.warn({ err, orgId: org.id }, "Could not record organization contact email");
+    return org;
   }
-
-  if (!contactEmailAttempted.has(org.id) && org.contactEmail == null) {
-    contactEmailAttempted.add(org.id);
-    if (email) {
-      try {
-        await db
-          .update(organizationsTable)
-          .set({ contactEmail: email })
-          .where(and(eq(organizationsTable.id, org.id), isNull(organizationsTable.contactEmail)));
-      } catch (err) {
-        logger.warn({ err, orgId: org.id }, "Could not record organization contact email");
-      }
-    }
-  }
-
   const [fresh] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, org.id));
-  if (fresh) current = fresh;
-  return current;
+  return fresh ?? org;
 }
-
 export type OrgContext = {
   org: Organization;
   clerkUserId: string;
@@ -485,8 +429,7 @@ export function requireOrgAdmin(ctx: Pick<OrgContext, "orgRole">): boolean {
 /**
  * Require a signed-in Clerk user with an active organization. Provisions the
  * local organization row (trial clock + once-per-user trial grant) on first
- * touch, records the contact email, and adopts any legacy venues owned by the
- * user's verified email.
+ * touch and records the contact email.
  */
 export async function requireOrg(req: Request, res: Response): Promise<OrgContext | null> {
   if (!clerkEnabled()) {
@@ -510,9 +453,10 @@ export async function requireOrg(req: Request, res: Response): Promise<OrgContex
     return null;
   }
 
-  let org = await ensureOrganizationByClerkId(auth.orgId, undefined, {
-    clerkUserId: trialClaimantOnce(auth.orgId, auth.userId),
-  });
+  const clerkOrgId = auth.orgId;
+  let org = await withTrialClaimantOnce(clerkOrgId, auth.userId, (claimant) =>
+    ensureOrganizationByClerkId(clerkOrgId, undefined, { clerkUserId: claimant }),
+  );
 
   org = await runFirstTouchPasses(org, auth.userId);
 
@@ -532,9 +476,10 @@ export async function getCallerOrgDbId(req: Request): Promise<number | null> {
   if (!clerkEnabled()) return null;
   const auth = getAuth(req);
   if (!auth.userId || !auth.orgId) return null;
-  const org = await ensureOrganizationByClerkId(auth.orgId, undefined, {
-    clerkUserId: trialClaimantOnce(auth.orgId, auth.userId),
-  });
+  const clerkOrgId = auth.orgId;
+  const org = await withTrialClaimantOnce(clerkOrgId, auth.userId, (claimant) =>
+    ensureOrganizationByClerkId(clerkOrgId, undefined, { clerkUserId: claimant }),
+  );
   return org.id;
 }
 

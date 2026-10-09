@@ -139,7 +139,23 @@ async function sendEmail(to: string, subject: string, html: string): Promise<Ema
   }
 }
 
-export type RawEmailSendResult = { sent: true; id: string | null } | { sent: false; reason: string };
+/**
+ * transient: the provider did not give a definite answer (timeout, connection
+ * reset, rate limit, 5xx), so the message may or may not have gone out. With
+ * an idempotency key a retry is safe; callers must not treat it as rejected.
+ */
+export type RawEmailSendResult = { sent: true; id: string | null } | { sent: false; reason: string; transient?: boolean };
+
+const TRANSIENT_RESEND_ERRORS = new Set([
+  "rate_limit_exceeded",
+  "application_error",
+  "internal_server_error",
+  "concurrent_idempotent_requests",
+]);
+
+export function isTransientResendError(name: string | null | undefined): boolean {
+  return name != null && TRANSIENT_RESEND_ERRORS.has(name);
+}
 
 /**
  * Fully rendered message with its own HTML, plain-text twin, and headers —
@@ -156,6 +172,8 @@ export async function sendRawEmail(message: {
   replyTo?: string | null;
   /** Resend tags (ASCII letters, digits, _ and - only) for grouping delivery events. */
   tags?: Array<{ name: string; value: string }>;
+  /** Sent as the Idempotency-Key header: Resend delivers one message per key (24h). */
+  idempotencyKey?: string;
 }): Promise<RawEmailSendResult> {
   if (!resend) {
     logger.warn({ to: hashRecipient(message.to), subject: message.subject }, "RESEND_API_KEY not set - skipping email");
@@ -171,11 +189,15 @@ export async function sendRawEmail(message: {
       headers: message.headers,
       ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       ...(message.tags?.length ? { tags: message.tags } : {}),
-    });
+    }, message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : undefined);
     if (error) {
       logger.error({ error, to: hashRecipient(message.to), subject: message.subject, from: fromEmail }, "Resend email failed");
       const providerMessage = error.message || "The email provider rejected the send.";
-      return { sent: false, reason: `${providerMessage}${usingSandboxSender ? SANDBOX_HINT : ""}` };
+      return {
+        sent: false,
+        reason: `${providerMessage}${usingSandboxSender ? SANDBOX_HINT : ""}`,
+        transient: isTransientResendError(error.name),
+      };
     }
     return { sent: true, id: data?.id ?? null };
   } catch (err) {
@@ -183,6 +205,7 @@ export async function sendRawEmail(message: {
     return {
       sent: false,
       reason: "The email provider request failed. Check server connectivity and RESEND_API_KEY.",
+      transient: true,
     };
   }
 }

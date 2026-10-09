@@ -944,11 +944,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "402":
+          description: >-
+            The account cannot render a sample: trial_expired or
+            insufficient_credits (a sample is free but needs a fundable account)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "409":
           description: >-
             The sample cannot start: venue_not_ready (space photos missing),
-            sample_in_progress, sample_limit, or demo_not_configured (no demo
-            couple photos on this server)
+            sample_in_progress, sample_limit, sample_org_limit (the
+            organization used its lifetime sample allowance), or
+            demo_not_configured (no demo couple photos on this server)
           content:
             application/json:
               schema:
@@ -2959,6 +2968,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GeneratedAsset"
+        deliveryHeld:
+          type: boolean
+          description: >-
+            True while a ready gallery waits for the venue's review (review
+            before send, or a frame the quality check could not judge). The
+            share link serves no assets until the owner sends it.
 
     OwnerSessionDetailResponse:
       allOf:

@@ -527,9 +527,3 @@ export async function maybeSendAgingApprovalsNudge(now: Date = new Date()): Prom
   });
   return true;
 }
-
-/** Test seam. */
-export function resetDigestClock(): void {
-  lastNudgeCheckAt = 0;
-  warnedNoOperators = false;
-}

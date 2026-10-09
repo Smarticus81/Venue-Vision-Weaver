@@ -4,7 +4,7 @@ import {
   agentTasksTable,
   controlOutreachEmailsTable,
 } from "@workspace/db";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { recordAuditEvent } from "../audit.js";
 import { startOfUtcDay } from "../actionCounts.js";
@@ -29,6 +29,13 @@ export interface GuardState {
   since: string | null;
   reason: string | null;
   okDays: number;
+  /**
+   * When an operator last reset the guard. Rule R1 then judges only sends
+   * made after the reset (the pre-reset bounces that caused the pause stay
+   * in the 14-day window and would re-pause it at once). Kept across rule
+   * transitions until the next pause.
+   */
+  resetAt?: string | null;
 }
 
 export interface SendingHealth {
@@ -54,9 +61,6 @@ export const HEALTH_WINDOW_DAYS = 14;
 export const MIN_THROTTLED_CAP = 5;
 export const PAUSE_TASK_TITLE = "Outreach sending paused by the deliverability guard";
 
-/** Both action types count toward the prospect cap so historical legacy sends still count. */
-const PROSPECT_SEND_ACTION_TYPES = ["send_prospect_email", "send_outreach_email"] as const;
-
 const GUARD_STATUSES: readonly GuardStatus[] = ["ok", "warn", "throttled", "paused"];
 
 export const DEFAULT_GUARD: GuardState = { status: "ok", since: null, reason: null, okDays: 0 };
@@ -72,6 +76,7 @@ export function normalizeGuard(raw: unknown): GuardState {
     since: typeof value.since === "string" && value.since ? value.since : null,
     reason: typeof value.reason === "string" && value.reason ? value.reason : null,
     okDays: Number.isFinite(okDays) && okDays >= 0 ? okDays : 0,
+    resetAt: typeof value.resetAt === "string" && value.resetAt ? value.resetAt : null,
   };
 }
 
@@ -107,19 +112,30 @@ export function computeEffectiveCap(guard: Pick<GuardState, "status">, baseCap: 
   }
 }
 
-/** Prospect emails sent today (UTC) via the governed send actions. */
+/**
+ * Prospect emails delivered today (UTC): studio rows with sentAt today plus
+ * any legacy plain-text sends executed today. This is the one count the
+ * sender's daily cap enforces AND the number /control shows; counting
+ * delivered rows (not executed actions) keeps a send whose action ended
+ * failed after delivery, or one in flight, visible to the next cap check.
+ */
 export async function prospectSendsToday(now: Date = new Date()): Promise<number> {
-  const [row] = await db
+  const since = startOfUtcDay(now);
+  const [studio] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(controlOutreachEmailsTable)
+    .where(and(isNotNull(controlOutreachEmailsTable.sentAt), gte(controlOutreachEmailsTable.sentAt, since)));
+  const [legacy] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(agentActionsTable)
     .where(
       and(
-        inArray(agentActionsTable.actionType, [...PROSPECT_SEND_ACTION_TYPES]),
+        eq(agentActionsTable.actionType, "send_prospect_email"),
         eq(agentActionsTable.status, "executed"),
-        gte(agentActionsTable.executedAt, startOfUtcDay(now)),
+        gte(agentActionsTable.executedAt, since),
       ),
     );
-  return row?.total ?? 0;
+  return (studio?.total ?? 0) + (legacy?.total ?? 0);
 }
 
 /**
@@ -134,6 +150,11 @@ export async function computeSendingHealth(
 ): Promise<SendingHealth> {
   const days = Math.max(1, Math.floor(windowDays));
   const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return computeSendingHealthSince(since, days);
+}
+
+/** Sent / bounced / complained for studio emails sent at or after `since`. */
+export async function computeSendingHealthSince(since: Date, days: number = HEALTH_WINDOW_DAYS): Promise<SendingHealth> {
   const emails = controlOutreachEmailsTable;
   const bouncedEvent = sql`exists (select 1 from control_email_events ev where ev.email_id = ${emails.id} and ev.event_type = 'bounced')`;
   const complainedEvent = sql`exists (select 1 from control_email_events ev where ev.email_id = ${emails.id} and ev.event_type = 'complained')`;
@@ -242,7 +263,7 @@ export async function resetGuard(note: string, operatorEmail: string): Promise<G
   const previous = await loadGuard();
   const base = await baseDailyCap();
   await setPolicy(DAILY_CAP_POLICY_KEY, { emails: base });
-  const next = await writeGuard({ status: "ok", since: now, reason: null, okDays: 0 });
+  const next = await writeGuard({ status: "ok", since: now, reason: null, okDays: 0, resetAt: now });
   await recordAuditEvent({
     actorType: "operator",
     actor: operatorEmail,

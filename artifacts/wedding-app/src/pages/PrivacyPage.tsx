@@ -139,8 +139,8 @@ export default function PrivacyPage() {
           <h2>Delete on request</h2>
           <p>
             A couple can ask for their gallery and anything we hold about them to be deleted at any
-            time. A venue can delete its photos, its galleries and its account from the dashboard,
-            or ask us to. Write to {contact} and we will confirm when it is done.
+            time. A venue can delete its photos and its galleries from the dashboard; to close the
+            account itself, ask us. Write to {contact} and we will confirm when it is done.
           </p>
         </section>
       </main>

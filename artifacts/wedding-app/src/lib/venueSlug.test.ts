@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeWebsiteInput, toVenueSlug } from "./venueSlug.ts";
+import { normalizeWebsiteInput, toVenueSlug, venueSlugOrFallback } from "./venueSlug.ts";
 
 test("toVenueSlug keeps word boundaries and folds accents", () => {
   assert.equal(toVenueSlug("The Willow House"), "the-willow-house");
@@ -22,4 +22,11 @@ test("normalizeWebsiteInput adds https and rejects non-web schemes", () => {
   assert.equal(normalizeWebsiteInput("javascript:alert(1)"), null);
   assert.equal(normalizeWebsiteInput("localhost"), null);
   assert.equal(normalizeWebsiteInput(""), null);
+});
+
+test("a venue name with no Latin letters still gets a slug instead of 'name required'", () => {
+  assert.equal(venueSlugOrFallback("Willow House"), "willow-house");
+  assert.match(venueSlugOrFallback("Κτήμα Λίμνη", () => 0.5), /^venue-[a-z0-9]{6}$/);
+  assert.match(venueSlugOrFallback("森の家"), /^venue-[a-z0-9]{6}$/);
+  assert.equal(venueSlugOrFallback("   "), "");
 });

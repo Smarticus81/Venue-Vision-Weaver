@@ -1,4 +1,3 @@
-import { Storage, File } from "@google-cloud/storage";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
@@ -12,12 +11,6 @@ type ObjectFileHandle = {
   createReadStream(options?: ReadStreamOptions): Promise<Readable>;
 };
 
-const objectStorageClient = new Storage();
-
-function useSupabaseStorage(): boolean {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
 let supabaseAdmin: SupabaseClient | null = null;
 
 function getSupabaseAdmin(): SupabaseClient {
@@ -25,7 +18,7 @@ function getSupabaseAdmin(): SupabaseClient {
     const url = process.env.SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) {
-      throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for Supabase storage.");
+      throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for object storage.");
     }
     supabaseAdmin = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -64,17 +57,6 @@ export function assertNormalizedUploadObjectPath(objectPath: string): void {
   ) {
     throw new Error("Storage returned an invalid private upload object path.");
   }
-}
-
-function gcsHandle(file: File): ObjectFileHandle {
-  return {
-    download: () => file.download() as Promise<[Buffer]>,
-    getMetadata: async () => {
-      const [metadata] = await file.getMetadata();
-      return metadata;
-    },
-    createReadStream: async (options) => file.createReadStream(options),
-  };
 }
 
 function supabaseHandle(
@@ -132,43 +114,8 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
+/** Object storage on Supabase Storage: a private uploads bucket and a public bucket. */
 export class ObjectStorageService {
-  constructor() {}
-
-  getPublicObjectSearchPaths(): Array<string> {
-    if (useSupabaseStorage()) {
-      return [`/${supabasePublicBucket()}/public`];
-    }
-    const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const paths = Array.from(
-      new Set(
-        pathsStr
-          .split(",")
-          .map((path) => path.trim())
-          .filter((path) => path.length > 0),
-      ),
-    );
-    if (paths.length === 0) {
-      throw new Error(
-        "PUBLIC_OBJECT_SEARCH_PATHS not set, or use SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.",
-      );
-    }
-    return paths;
-  }
-
-  getPrivateObjectDir(): string {
-    if (useSupabaseStorage()) {
-      return `/${supabasePrivateBucket()}/uploads`;
-    }
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set, or use SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.",
-      );
-    }
-    return dir;
-  }
-
   /**
    * Store a buffer as an unconditionally public object. Returns the path the
    * public-objects route serves it from (relative to /api/storage/public-objects/).
@@ -179,22 +126,12 @@ export class ObjectStorageService {
     if (!/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(cleanPath) || cleanPath.includes("..")) {
       throw new Error("Invalid public object path.");
     }
-    if (useSupabaseStorage()) {
-      const bucket = supabasePublicBucket();
-      const { error } = await getSupabaseAdmin()
-        .storage.from(bucket)
-        .upload(`public/${cleanPath}`, buffer, { contentType, upsert: true });
-      if (error) {
-        throw new Error(`Supabase public upload failed: ${error.message}`);
-      }
-      return cleanPath;
+    const { error } = await getSupabaseAdmin()
+      .storage.from(supabasePublicBucket())
+      .upload(`public/${cleanPath}`, buffer, { contentType, upsert: true });
+    if (error) {
+      throw new Error(`Supabase public upload failed: ${error.message}`);
     }
-    const [searchPath] = this.getPublicObjectSearchPaths();
-    const { bucketName, objectName } = parseObjectPath(`${searchPath}/${cleanPath}`);
-    await objectStorageClient.bucket(bucketName).file(objectName).save(buffer, {
-      contentType,
-      resumable: false,
-    });
     return cleanPath;
   }
 
@@ -204,40 +141,25 @@ export class ObjectStorageService {
    * images anonymously and a download-to-test-then-stream doubled the egress.
    */
   async searchPublicObject(filePath: string): Promise<ObjectFileHandle | null> {
-    if (useSupabaseStorage()) {
-      const bucket = supabasePublicBucket();
-      const objectPath = `public/${filePath}`;
-      const segments = objectPath.split("/");
-      const fileName = segments.pop() ?? "";
-      if (!fileName) return null;
-      try {
-        const { data: listed, error } = await getSupabaseAdmin()
-          .storage.from(bucket)
-          .list(segments.join("/"), { search: fileName, limit: 100 });
-        if (error) return null;
-        const meta = listed?.find((entry) => entry.name === fileName);
-        if (!meta) return null;
-        const m = (meta.metadata ?? {}) as Record<string, unknown>;
-        const storedType = typeof m.mimetype === "string" ? m.mimetype : null;
-        const storedSize =
-          typeof m.size === "string" || typeof m.size === "number" ? m.size : undefined;
-        return supabaseHandle(bucket, objectPath, storedType, storedSize);
-      } catch {
-        return null;
-      }
+    const bucket = supabasePublicBucket();
+    const objectPath = `public/${filePath}`;
+    const segments = objectPath.split("/");
+    const fileName = segments.pop() ?? "";
+    if (!fileName) return null;
+    try {
+      const { data: listed, error } = await getSupabaseAdmin()
+        .storage.from(bucket)
+        .list(segments.join("/"), { search: fileName, limit: 100 });
+      if (error) return null;
+      const meta = listed?.find((entry) => entry.name === fileName);
+      if (!meta) return null;
+      const m = (meta.metadata ?? {}) as Record<string, unknown>;
+      const storedType = typeof m.mimetype === "string" ? m.mimetype : null;
+      const storedSize = typeof m.size === "string" || typeof m.size === "number" ? m.size : undefined;
+      return supabaseHandle(bucket, objectPath, storedType, storedSize);
+    } catch {
+      return null;
     }
-
-    for (const searchPath of this.getPublicObjectSearchPaths()) {
-      const fullPath = `${searchPath}/${filePath}`;
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-      const [exists] = await file.exists();
-      if (exists) {
-        return gcsHandle(file);
-      }
-    }
-    return null;
   }
 
   async downloadObject(
@@ -308,29 +230,13 @@ export class ObjectStorageService {
     const objectId = randomUUID();
     const ext = fileExtension.startsWith(".") ? fileExtension : fileExtension ? `.${fileExtension}` : "";
 
-    if (useSupabaseStorage()) {
-      const bucket = supabasePrivateBucket();
-      const objectPath = `uploads/${objectId}${ext}`;
-      const { data, error } = await getSupabaseAdmin()
-        .storage.from(bucket)
-        .createSignedUploadUrl(objectPath);
-      if (error || !data?.signedUrl) {
-        throw new Error(`Supabase signed upload failed: ${error?.message ?? "unknown"}`);
-      }
-      return data.signedUrl;
+    const { data, error } = await getSupabaseAdmin()
+      .storage.from(supabasePrivateBucket())
+      .createSignedUploadUrl(`uploads/${objectId}${ext}`);
+    if (error || !data?.signedUrl) {
+      throw new Error(`Supabase signed upload failed: ${error?.message ?? "unknown"}`);
     }
-
-    const privateObjectDir = this.getPrivateObjectDir();
-    const fullPath = `${privateObjectDir}/uploads/${objectId}${ext}`;
-    const { bucketName, objectName } = parseObjectPath(
-      fullPath.startsWith("/") ? fullPath : `/${fullPath}`,
-    );
-    return signGcsObjectURL({
-      bucketName,
-      objectName,
-      method: "PUT",
-      ttlSec: 900,
-    });
+    return data.signedUrl;
   }
 
   async getObjectEntityFile(objectPath: string): Promise<ObjectFileHandle> {
@@ -345,45 +251,27 @@ export class ObjectStorageService {
 
     const entityId = parts.slice(1).join("/");
 
-    if (useSupabaseStorage()) {
-      const bucket = supabasePrivateBucket();
-      const storagePath = entityId.startsWith("uploads/")
-        ? entityId
-        : `uploads/${entityId}`;
-      let storedType: string | null = null;
-      let storedSize: string | number | undefined;
-      try {
-        const { data: listed, error } = await getSupabaseAdmin().storage.from(bucket).list(
-          storagePath.includes("/") ? storagePath.split("/").slice(0, -1).join("/") : "",
-          { search: storagePath.split("/").pop() },
-        );
-        if (error) throw error;
-        const meta = listed?.find((f) => f.name === storagePath.split("/").pop());
-        if (!meta) throw new ObjectNotFoundError();
-        if (meta?.metadata && typeof meta.metadata === "object") {
-          const m = meta.metadata as Record<string, unknown>;
-          if (typeof m.mimetype === "string") storedType = m.mimetype;
-          if (typeof m.size === "string" || typeof m.size === "number") storedSize = m.size;
-        }
-      } catch {
-        throw new ObjectNotFoundError();
+    const bucket = supabasePrivateBucket();
+    const storagePath = entityId.startsWith("uploads/") ? entityId : `uploads/${entityId}`;
+    let storedType: string | null = null;
+    let storedSize: string | number | undefined;
+    try {
+      const { data: listed, error } = await getSupabaseAdmin().storage.from(bucket).list(
+        storagePath.includes("/") ? storagePath.split("/").slice(0, -1).join("/") : "",
+        { search: storagePath.split("/").pop() },
+      );
+      if (error) throw error;
+      const meta = listed?.find((f) => f.name === storagePath.split("/").pop());
+      if (!meta) throw new ObjectNotFoundError();
+      if (meta?.metadata && typeof meta.metadata === "object") {
+        const m = meta.metadata as Record<string, unknown>;
+        if (typeof m.mimetype === "string") storedType = m.mimetype;
+        if (typeof m.size === "string" || typeof m.size === "number") storedSize = m.size;
       }
-      return supabaseHandle(bucket, storagePath, storedType, storedSize);
-    }
-
-    let entityDir = this.getPrivateObjectDir();
-    if (!entityDir.endsWith("/")) {
-      entityDir = `${entityDir}/`;
-    }
-    const objectEntityPath = `${entityDir}${entityId}`;
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const objectFile = bucket.file(objectName);
-    const [exists] = await objectFile.exists();
-    if (!exists) {
+    } catch {
       throw new ObjectNotFoundError();
     }
-    return gcsHandle(objectFile);
+    return supabaseHandle(bucket, storagePath, storedType, storedSize);
   }
 
   async deleteObjectEntity(objectPath: string): Promise<void> {
@@ -398,111 +286,24 @@ export class ObjectStorageService {
 
     const entityId = parts.slice(1).join("/");
 
-    if (useSupabaseStorage()) {
-      const bucket = supabasePrivateBucket();
-      const storagePath = entityId.startsWith("uploads/")
-        ? entityId
-        : `uploads/${entityId}`;
-      const { error } = await getSupabaseAdmin().storage.from(bucket).remove([storagePath]);
-      if (error) {
-        throw new Error(`Supabase object delete failed: ${error.message}`);
-      }
-      return;
+    const storagePath = entityId.startsWith("uploads/") ? entityId : `uploads/${entityId}`;
+    const { error } = await getSupabaseAdmin().storage.from(supabasePrivateBucket()).remove([storagePath]);
+    if (error) {
+      throw new Error(`Supabase object delete failed: ${error.message}`);
     }
-
-    let entityDir = this.getPrivateObjectDir();
-    if (!entityDir.endsWith("/")) {
-      entityDir = `${entityDir}/`;
-    }
-    const objectEntityPath = `${entityDir}${entityId}`;
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    await objectStorageClient.bucket(bucketName).file(objectName).delete({ ignoreNotFound: true });
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
-    if (useSupabaseStorage()) {
-      if (rawPath.startsWith("/objects/")) return rawPath;
-      const uploadsMatch = rawPath.match(/uploads\/([^/?#]+)/);
-      if (uploadsMatch) return `/objects/uploads/${uploadsMatch[1]}`;
-      const extMatch = rawPath.match(/uploads\/([a-f0-9-]+)(\.[a-z0-9]+)/i);
-      if (extMatch) return `/objects/uploads/${extMatch[1]}${extMatch[2]}`;
-      try {
-        const url = new URL(rawPath);
-        const pathMatch = url.pathname.match(/uploads\/([^/]+)/);
-        if (pathMatch) return `/objects/uploads/${pathMatch[1]}`;
-      } catch {
-        /* not a URL */
-      }
-      return rawPath;
+    if (rawPath.startsWith("/objects/")) return rawPath;
+    const uploadsMatch = rawPath.match(/uploads\/([^/?#]+)/);
+    if (uploadsMatch) return `/objects/uploads/${uploadsMatch[1]}`;
+    try {
+      const url = new URL(rawPath);
+      const pathMatch = url.pathname.match(/uploads\/([^/]+)/);
+      if (pathMatch) return `/objects/uploads/${pathMatch[1]}`;
+    } catch {
+      /* not a URL */
     }
-
-    if (!rawPath.startsWith("https://storage.googleapis.com/")) {
-      return rawPath;
-    }
-
-    const url = new URL(rawPath);
-    const rawObjectPath = url.pathname;
-
-    let objectEntityDir = this.getPrivateObjectDir();
-    if (!objectEntityDir.endsWith("/")) {
-      objectEntityDir = `${objectEntityDir}/`;
-    }
-
-    if (!rawObjectPath.startsWith(objectEntityDir)) {
-      return rawObjectPath;
-    }
-
-    const entityId = rawObjectPath.slice(objectEntityDir.length);
-    return `/objects/${entityId}`;
+    return rawPath;
   }
-}
-
-function parseObjectPath(path: string): {
-  bucketName: string;
-  objectName: string;
-} {
-  if (!path.startsWith("/")) {
-    path = `/${path}`;
-  }
-  const pathParts = path.split("/");
-  if (pathParts.length < 3) {
-    throw new Error("Invalid path: must contain at least a bucket name");
-  }
-
-  const bucketName = pathParts[1];
-  const objectName = pathParts.slice(2).join("/");
-
-  return {
-    bucketName,
-    objectName,
-  };
-}
-
-async function signGcsObjectURL({
-  bucketName,
-  objectName,
-  method,
-  ttlSec,
-}: {
-  bucketName: string;
-  objectName: string;
-  method: "GET" | "PUT" | "DELETE" | "HEAD";
-  ttlSec: number;
-}): Promise<string> {
-  const actionMap: Record<string, "read" | "write" | "delete"> = {
-    GET: "read",
-    PUT: "write",
-    DELETE: "delete",
-    HEAD: "read",
-  };
-  const action = actionMap[method] || "read";
-  const [url] = await objectStorageClient
-    .bucket(bucketName)
-    .file(objectName)
-    .getSignedUrl({
-      version: "v4",
-      action,
-      expires: Date.now() + ttlSec * 1000,
-    });
-  return url;
 }

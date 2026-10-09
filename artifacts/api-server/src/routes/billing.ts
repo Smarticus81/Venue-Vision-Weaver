@@ -31,7 +31,7 @@ import {
   invoiceSubscriptionMetadata,
   invoiceCustomerId,
   invoiceBillingReason,
-  invoiceLinePriceIds,
+  invoiceBilledPriceIds,
   invoicePeriodEnd,
   invoiceAmountPaid,
   invoiceAmountDue,
@@ -270,7 +270,26 @@ router.post("/org/billing/checkout", async (req, res): Promise<void> => {
     // One subscription per organization: a plan change goes through the
     // portal's subscription-update flow so Stripe prorates instead of opening
     // a second subscription (double billing).
-    if (isSubscription && hasLiveSubscription(ctx.org)) {
+    let subscribed = isSubscription && hasLiveSubscription(ctx.org);
+    if (subscribed) {
+      // Our row can lag Stripe (a lost or reordered deletion event). A plan
+      // change flow for a canceled subscription is refused by Stripe, so a
+      // subscription that is over sends the org to a fresh checkout instead.
+      const live = await stripe.subscriptions
+        .retrieve(ctx.org.stripeSubscriptionId as string)
+        .catch((err: unknown) => {
+          logger.warn({ err, orgId: ctx.org.id }, "Could not verify the Stripe subscription before checkout");
+          return null;
+        });
+      if (live && isCanceledStripeSubscription(live)) {
+        await db
+          .update(organizationsTable)
+          .set({ stripeSubscriptionId: null, subscriptionStatus: "canceled" })
+          .where(eq(organizationsTable.id, ctx.org.id));
+        subscribed = false;
+      }
+    }
+    if (subscribed) {
       const portal = await stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: `${base}/dashboard`,
@@ -564,7 +583,7 @@ async function resolveSubscriptionOrg(
     customerId: string | null;
     eventType: string;
   },
-): Promise<{ org: BillingOrg; subscription: unknown | null }> {
+): Promise<{ org: BillingOrg; subscription: unknown | null; deadAfterCancel: boolean }> {
   let subscription: unknown | null = null;
   let org: BillingOrg | null = null;
 
@@ -591,8 +610,23 @@ async function resolveSubscriptionOrg(
     );
   }
 
+  // Stripe does not order events and retries for days: an invoice.paid or
+  // subscription.updated for a subscription this org already saw deleted can
+  // arrive after customer.subscription.deleted. Ask Stripe for the live
+  // status before treating it as the org's subscription again.
+  let deadAfterCancel = false;
+  if (input.subscriptionId && org.subscriptionStatus === "canceled" && org.stripeSubscriptionId !== input.subscriptionId) {
+    subscription ??= await store.retrieveSubscription(input.subscriptionId);
+    deadAfterCancel = isCanceledStripeSubscription(subscription);
+  }
+
   const backfill: BillingOrgPatch = {};
-  if (input.subscriptionId && org.stripeSubscriptionId !== input.subscriptionId && !hasLiveSubscription(org)) {
+  if (
+    input.subscriptionId &&
+    !deadAfterCancel &&
+    org.stripeSubscriptionId !== input.subscriptionId &&
+    !hasLiveSubscription(org)
+  ) {
     backfill.stripeSubscriptionId = input.subscriptionId;
   }
   if (!org.stripeCustomerId) {
@@ -602,7 +636,12 @@ async function resolveSubscriptionOrg(
   if (Object.keys(backfill).length > 0) {
     org = (await store.updateOrg(org.id, backfill)) ?? { ...org, ...backfill };
   }
-  return { org, subscription };
+  return { org, subscription, deadAfterCancel };
+}
+
+/** True when a retrieved Stripe subscription is over (canceled or incomplete_expired). */
+export function isCanceledStripeSubscription(subscription: unknown): boolean {
+  return mapSubscriptionStatus(stringField(subscription, "status")) === "canceled";
 }
 
 async function auditPlanChange(
@@ -691,6 +730,16 @@ async function handleCheckoutCompleted(
   // (billing_reason subscription_create), whichever order Stripe delivers.
   const subscriptionId =
     stringField(session, "subscription") ?? stringField(asRecord(session).subscription, "id");
+  const paymentStatus = stringField(session, "payment_status");
+  if (paymentStatus !== "paid" && paymentStatus !== "no_payment_required") {
+    // Delayed methods (ACH, SEPA, Bacs) complete checkout before the money is
+    // in. Remember the subscription, but leave plan and status alone: an
+    // expired trial must not be lifted until invoice.paid confirms payment.
+    if (subscriptionId && !org.stripeSubscriptionId) {
+      await store.updateOrg(org.id, { stripeSubscriptionId: subscriptionId });
+    }
+    return { handled: "subscription_pending_payment", organizationId: org.id };
+  }
   const patch: BillingOrgPatch = {
     plan: product,
     subscriptionStatus: "active",
@@ -753,7 +802,7 @@ async function handleInvoicePaid(store: BillingStore, event: StripeEventLike): P
   if (!subscriptionId) return { handled: "ignored_non_subscription_invoice" };
 
   const metadata = invoiceSubscriptionMetadata(invoice);
-  const { org, subscription } = await resolveSubscriptionOrg(store, {
+  const { org, subscription, deadAfterCancel } = await resolveSubscriptionOrg(store, {
     subscriptionId,
     metadata,
     customerId: invoiceCustomerId(invoice),
@@ -761,6 +810,37 @@ async function handleInvoicePaid(store: BillingStore, event: StripeEventLike): P
   });
 
   const reason = invoiceBillingReason(invoice);
+  if (deadAfterCancel) {
+    // A late delivery for a subscription that is already deleted: the period
+    // was paid, so its credits are granted (additive and idempotent), but the
+    // canceled subscription is never brought back as the org's plan.
+    if (!reason || !GRANTING_BILLING_REASONS.has(reason)) {
+      return { handled: "ignored_invoice_for_canceled_subscription", organizationId: org.id };
+    }
+    const lateTier =
+      tierFromPriceIds(invoiceBilledPriceIds(invoice)) ??
+      tierFromPriceIds(subscriptionPriceIds(subscription)) ??
+      (isSubscriptionProduct(metadata.product) ? metadata.product : null);
+    if (!lateTier) {
+      throw new Error(
+        `invoice.paid for canceled subscription ${subscriptionId}: cannot map the billed price to a plan (check STRIPE_PRICE_* env)`,
+      );
+    }
+    const lateGrant = await store.grantPlanCredits(org.id, subscriptionQuota(lateTier), event.id);
+    if (org.plan === "none" && lateGrant.newBalance > 0) {
+      await store.updateOrg(org.id, { plan: "payg" });
+      await auditPlanChange(store, org, "payg", event.type, { billingReason: reason, subscriptionId });
+    }
+    await store.recordBillingEvent({
+      organizationId: org.id,
+      kind: "subscription_renewed",
+      plan: lateTier,
+      faceValueCredits: subscriptionQuota(lateTier),
+      amountCents: invoiceAmountPaid(invoice),
+      stripeEventId: event.id,
+    });
+    return { handled: "late_invoice_for_canceled_subscription", organizationId: org.id, grant: lateGrant };
+  }
   const periodEnd = invoicePeriodEnd(invoice);
   const patch: BillingOrgPatch = {
     subscriptionStatus: "active",
@@ -773,7 +853,7 @@ async function handleInvoicePaid(store: BillingStore, event: StripeEventLike): P
   // at checkout, then the plan we already know. Anything else is a
   // configuration problem (STRIPE_PRICE_* out of sync) that must retry.
   const tier =
-    tierFromPriceIds(invoiceLinePriceIds(invoice)) ??
+    tierFromPriceIds(invoiceBilledPriceIds(invoice)) ??
     (isSubscriptionProduct(metadata.product) ? metadata.product : null) ??
     (subscription ? tierFromPriceIds(subscriptionPriceIds(subscription)) : null) ??
     (isSubscriptionProduct(org.plan) ? org.plan : null);
@@ -825,12 +905,13 @@ async function handleInvoicePaymentFailed(
   const invoice = event.data.object;
   const subscriptionId = invoiceSubscriptionId(invoice);
   if (!subscriptionId) return { handled: "ignored_non_subscription_invoice" };
-  const { org } = await resolveSubscriptionOrg(store, {
+  const { org, deadAfterCancel } = await resolveSubscriptionOrg(store, {
     subscriptionId,
     metadata: invoiceSubscriptionMetadata(invoice),
     customerId: invoiceCustomerId(invoice),
     eventType: event.type,
   });
+  if (deadAfterCancel) return { handled: "ignored_payment_failed_for_canceled_subscription", organizationId: org.id };
   await store.updateOrg(org.id, { subscriptionStatus: "past_due" });
   await store.recordBillingEvent({
     organizationId: org.id,
@@ -860,12 +941,14 @@ async function handleSubscriptionUpdated(
   const sub = event.data.object;
   const subscriptionId = stringField(sub, "id");
   if (!subscriptionId) return { handled: "ignored_subscription_without_id" };
-  const { org } = await resolveSubscriptionOrg(store, {
+  const { org, deadAfterCancel } = await resolveSubscriptionOrg(store, {
     subscriptionId,
     metadata: subscriptionMetadata(sub),
     customerId: subscriptionCustomerId(sub),
     eventType: event.type,
   });
+  // An old snapshot of a subscription that is deleted now: never reactivate it.
+  if (deadAfterCancel) return { handled: "ignored_update_for_canceled_subscription", organizationId: org.id };
 
   const status = mapSubscriptionStatus(stringField(sub, "status"));
   const patch: BillingOrgPatch = {
@@ -903,12 +986,13 @@ async function handleSubscriptionPauseState(
   const sub = event.data.object;
   const subscriptionId = stringField(sub, "id");
   if (!subscriptionId) return { handled: "ignored_subscription_without_id" };
-  const { org } = await resolveSubscriptionOrg(store, {
+  const { org, deadAfterCancel } = await resolveSubscriptionOrg(store, {
     subscriptionId,
     metadata: subscriptionMetadata(sub),
     customerId: subscriptionCustomerId(sub),
     eventType: event.type,
   });
+  if (deadAfterCancel) return { handled: `ignored_${status}_for_canceled_subscription`, organizationId: org.id };
   await store.updateOrg(org.id, { subscriptionStatus: status });
   await store.recordAudit({
     eventType: status === "paused" ? "org_subscription_paused" : "org_subscription_resumed",
@@ -926,7 +1010,7 @@ async function handleSubscriptionDeleted(
   const subscriptionId = stringField(sub, "id");
   if (!subscriptionId) return { handled: "ignored_subscription_without_id" };
 
-  let resolved: { org: BillingOrg } | null = null;
+  let resolved: { org: BillingOrg; deadAfterCancel: boolean } | null = null;
   try {
     resolved = await resolveSubscriptionOrg(store, {
       subscriptionId,
@@ -942,6 +1026,10 @@ async function handleSubscriptionDeleted(
     throw err;
   }
   const { org } = resolved;
+  if (resolved.deadAfterCancel) {
+    // A second delivery of a deletion this org already applied.
+    return { handled: "ignored_repeat_subscription_deleted", organizationId: org.id };
+  }
 
   // Only act when this is the org's current subscription (a stale deletion
   // after a replacement subscription must not churn the new plan).

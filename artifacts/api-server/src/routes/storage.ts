@@ -178,7 +178,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
 /**
  * GET /storage/public-objects/*
  *
- * Serve public assets from PUBLIC_OBJECT_SEARCH_PATHS.
+ * Serve public assets from the public Supabase bucket (SUPABASE_PUBLIC_BUCKET).
  * These are unconditionally public - no authentication or ACL checks.
  * IMPORTANT: Always provide this endpoint when object storage is set up.
  */
@@ -297,6 +297,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
       .select({
         sessionId: generatedAssetsTable.sessionId,
         status: coupleSessionsTable.status,
+        deliveryHoldReason: coupleSessionsTable.deliveryHoldReason,
       })
       .from(generatedAssetsTable)
       .innerJoin(coupleSessionsTable, eq(generatedAssetsTable.sessionId, coupleSessionsTable.id))
@@ -315,7 +316,7 @@ async function canReadStoredObject(req: Request, objectPath: string): Promise<bo
         })
         .from(generatedAssetsTable)
         .where(eq(generatedAssetsTable.sessionId, generated.sessionId));
-      if (canReadGeneratedAssetWithShareToken(generated.status, sessionAssets)) return true;
+      if (canReadGeneratedAssetWithShareToken(generated.status, sessionAssets, generated.deliveryHoldReason)) return true;
     }
   }
 

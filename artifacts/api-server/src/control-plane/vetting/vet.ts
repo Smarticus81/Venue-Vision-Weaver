@@ -676,32 +676,3 @@ export function assertVettingAllowsOutreach(
     throw new VettingGateError("expired", `Vetting for prospect ${prospectId} expired on ${row.expiresAt.toISOString()}; re-run it.`);
   }
 }
-
-/* ————— Compatibility wrapper (step-0 seam) ————— */
-
-export interface VetProspectOptions {
-  force?: boolean;
-  requestedBy: string;
-  deps?: VettingDeps;
-}
-
-export interface VetProspectOutcome {
-  status: VettingStatus;
-  score: number | null;
-  hardFails: string[];
-  summary: string;
-  /** True when the checks actually ran (false for cache hits). */
-  refreshed: boolean;
-}
-
-/** Thin wrapper over ensureVetted returning the compact shape agents read. */
-export async function vetProspect(prospect: ControlProspect, options: VetProspectOptions): Promise<VetProspectOutcome> {
-  const { vetting, refreshed } = await ensureVetted(prospect, options);
-  return {
-    status: vetting.status as VettingStatus,
-    score: vetting.score,
-    hardFails: vetting.hardFails,
-    summary: vetting.summary,
-    refreshed,
-  };
-}

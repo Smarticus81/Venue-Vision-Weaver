@@ -66,6 +66,12 @@ export const coupleSessionsTable = pgTable("couple_sessions", {
   bookedBy: text("booked_by"),
   /** Couple source photos deleted after COUPLE_PHOTO_RETENTION_DAYS. */
   sourcePhotosDeletedAt: timestamp("source_photos_deleted_at"),
+  /**
+   * Set when the gallery turned ready but must wait for the owner
+   * ("review_before_send" or "unjudged_frames"): the share link shows a
+   * waiting view and serves no assets until the owner sends it, which clears it.
+   */
+  deliveryHoldReason: text("delivery_hold_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 }).enableRLS();

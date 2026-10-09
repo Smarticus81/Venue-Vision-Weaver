@@ -587,8 +587,6 @@ try {
     GEMINI_API_KEY: "",
     SUPABASE_URL: "https://YOUR-PROJECT.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
-    PRIVATE_OBJECT_DIR: "",
-    PUBLIC_OBJECT_SEARCH_PATHS: "",
     GALLERY_QUALITY_GATE: "off",
     GALLERY_MIN_LIKENESS_SCORE: "0.6",
     GALLERY_MIN_PARTNER_LIKENESS_SCORE: "0.6",
@@ -621,7 +619,7 @@ try {
     "production env requires Gemini credentials",
   );
   assert.ok(
-    envErrors.some((error) => error.includes("Configure either Supabase storage")),
+    envErrors.some((error) => error.includes("Configure Supabase storage")),
     "production env requires private object storage",
   );
   assert.ok(
@@ -1584,7 +1582,7 @@ try {
   );
   assert.match(
     sessionsRoute,
-    /session = await db\.transaction[\s\S]*update\(organizationsTable\)[\s\S]*gte\(organizationsTable\.creditsBalance, neededCredits\)[\s\S]*update\(venuesTable\)[\s\S]*gte\(venuesTable\.creditsBalance, neededCredits\)[\s\S]*update\(uploadIntentsTable\)[\s\S]*insert\(coupleSessionsTable\)[\s\S]*creditsCharged: neededCredits[\s\S]*insert\(coupleMediaTable\)[\s\S]*creditTransactionsTable/s,
+    /session = await db\.transaction[\s\S]*update\(organizationsTable\)[\s\S]*gte\(organizationsTable\.creditsBalance, neededCredits\)[\s\S]*update\(uploadIntentsTable\)[\s\S]*insert\(coupleSessionsTable\)[\s\S]*creditsCharged: neededCredits[\s\S]*insert\(coupleMediaTable\)[\s\S]*creditTransactionsTable/s,
     "session creation atomically checks/debits credits, consumes upload intents, creates the gallery, records couple media, and stores the debit",
   );
   assert.match(
@@ -1876,8 +1874,8 @@ try {
   );
   assert.match(
     appSource,
-    /session\.status === "ready"[\s\S]*hasCompletePublicGalleryAssets\(generatedAssets\)[\s\S]*thumbnailAsset[\s\S]*displayOrder === 1/s,
-    "share-page Open Graph thumbnails are only emitted for ready sessions with a complete public gallery bundle",
+    /canExposeGeneratedAssetsToSharePage\(session\.status, session\.deliveryHoldReason\)[\s\S]*hasCompletePublicGalleryAssets\(generatedAssets\)[\s\S]*thumbnailAsset[\s\S]*displayOrder === 1/s,
+    "share-page Open Graph thumbnails are only emitted for ready, unheld sessions with a complete public gallery bundle",
   );
   const spaRouteSource = fs.readFileSync(
     new URL("../../artifacts/wedding-app/src/App.tsx", import.meta.url),

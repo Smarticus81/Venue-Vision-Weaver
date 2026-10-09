@@ -318,10 +318,6 @@ export function configWarningsFor(state: SendReadiness): string[] {
   return warnings;
 }
 
-export async function configWarnings(): Promise<string[]> {
-  return configWarningsFor(await loadSendReadiness());
-}
-
 /** Pure: why the vetting state would stop (or delay) this email. */
 export function vettingWarningsFor(
   vetting: Pick<ControlProspectVetting, "status" | "score" | "expiresAt" | "summary"> | null,
@@ -387,6 +383,40 @@ export interface CreateDraftInput {
   variantKey?: string | null;
 }
 
+/** Advisory-lock namespace (first int4 key) serializing draft creation per prospect. */
+const DRAFT_LOCK_NAMESPACE = 7_270_302;
+/** A draft inserted this recently without its action yet is still being proposed. */
+const UNLINKED_DRAFT_WINDOW_MS = 15 * 60_000;
+
+/**
+ * An open outreach email for the prospect: one whose send action is pending,
+ * approved or executing, or a draft inserted moments ago whose action is not
+ * linked yet (another createDraft is between its insert and its proposal).
+ */
+export function openDraftWhere(prospectId: number, now: Date = new Date()) {
+  const unlinkedSince = new Date(now.getTime() - UNLINKED_DRAFT_WINDOW_MS);
+  return and(
+    eq(controlOutreachEmailsTable.prospectId, prospectId),
+    sql`(${agentActionsTable.status} in ('pending', 'approved', 'executing') or (${controlOutreachEmailsTable.actionId} is null and ${controlOutreachEmailsTable.status} = 'draft' and ${controlOutreachEmailsTable.createdAt} >= ${unlinkedSince}))`,
+  );
+}
+
+async function findOpenDraft(executor: Pick<typeof db, "select">, prospectId: number) {
+  const [row] = await executor
+    .select({ id: controlOutreachEmailsTable.id, actionId: controlOutreachEmailsTable.actionId })
+    .from(controlOutreachEmailsTable)
+    .leftJoin(agentActionsTable, eq(controlOutreachEmailsTable.actionId, agentActionsTable.id))
+    .where(openDraftWhere(prospectId))
+    .limit(1);
+  return row ?? null;
+}
+
+function openDraftMessage(prospectId: number, existing: { id: number; actionId: number | null }): string {
+  return `Prospect ${prospectId} already has outreach email #${existing.id} waiting for approval${
+    existing.actionId != null ? ` (action #${existing.actionId})` : ""
+  }; review that one instead of drafting another.`;
+}
+
 export async function createDraft(input: CreateDraftInput): Promise<{
   email: ControlOutreachEmail;
   actionId: number | null;
@@ -399,22 +429,9 @@ export async function createDraft(input: CreateDraftInput): Promise<{
   // Fail fast on consent/cadence so no research or model spend happens for a blocked target.
   await assertProspectContactableNow(prospect);
 
-  const [pendingExisting] = await db
-    .select({ id: controlOutreachEmailsTable.id, actionId: controlOutreachEmailsTable.actionId })
-    .from(controlOutreachEmailsTable)
-    .innerJoin(agentActionsTable, eq(controlOutreachEmailsTable.actionId, agentActionsTable.id))
-    .where(
-      and(
-        eq(controlOutreachEmailsTable.prospectId, prospect.id),
-        sql`${agentActionsTable.status} in ('pending', 'approved', 'executing')`,
-      ),
-    )
-    .limit(1);
-  if (pendingExisting) {
-    throw new Error(
-      `Prospect ${prospect.id} already has outreach email #${pendingExisting.id} waiting for approval (action #${pendingExisting.actionId}); review that one instead of drafting another.`,
-    );
-  }
+  // Cheap early refusal; repeated under a per-prospect lock right before the insert.
+  const pendingExisting = await findOpenDraft(db, prospect.id);
+  if (pendingExisting) throw new Error(openDraftMessage(prospect.id, pendingExisting));
 
   // Campaign membership and step order before any spend.
   const requestedCampaignId = input.campaignId ?? null;
@@ -472,35 +489,44 @@ export async function createDraft(input: CreateDraftInput): Promise<{
 
   const claimToken = newClaimToken();
   const selectedImageIds = assets.filter((asset) => asset.selected && asset.kind === "venue_image").map((asset) => asset.id);
-  const [email] = await db
-    .insert(controlOutreachEmailsTable)
-    .values({
-      prospectId: prospect.id,
-      campaignId: touch.campaignId,
-      step: touch.step,
-      variantKey: growth.variantKey,
-      status: "draft",
-      subjectOptions: copy.subjects,
-      subject: copy.subjects[0],
-      body: copy.body,
-      greeting: copy.greeting,
-      signOff: copy.signOff,
-      ctaLabel: copy.ctaLabel,
-      ctaUrl: outreachDefaultCtaUrl(facts.name ?? prospect.name, {
-        token: claimToken,
+  // Research and copy take seconds; a concurrent createDraft (agent and
+  // operator, or two runs) may have inserted meanwhile. Re-check and insert
+  // under a per-prospect advisory lock so only one sendable draft exists.
+  const email = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(${DRAFT_LOCK_NAMESPACE}, ${prospect.id})`);
+    const raced = await findOpenDraft(tx, prospect.id);
+    if (raced) throw new Error(openDraftMessage(prospect.id, raced));
+    const [inserted] = await tx
+      .insert(controlOutreachEmailsTable)
+      .values({
+        prospectId: prospect.id,
         campaignId: touch.campaignId,
-        variantKey: growth.variantKey,
         step: touch.step,
-      }),
-      imageAssetIds: selectedImageIds,
-      draftNotes: { ...copy.notes, research: { status: research.status, warnings: research.warnings } },
-      citedFacts: cited,
-      vettingSnapshot: { status: vetting.status, score: vetting.score, vettedAt: vetting.vettedAt.toISOString() },
-      unsubscribeToken: newUnsubscribeToken(),
-      claimToken,
-      createdByAgent: input.agentKey,
-    })
-    .returning();
+        variantKey: growth.variantKey,
+        status: "draft",
+        subjectOptions: copy.subjects,
+        subject: copy.subjects[0],
+        body: copy.body,
+        greeting: copy.greeting,
+        signOff: copy.signOff,
+        ctaLabel: copy.ctaLabel,
+        ctaUrl: outreachDefaultCtaUrl(facts.name ?? prospect.name, {
+          token: claimToken,
+          campaignId: touch.campaignId,
+          variantKey: growth.variantKey,
+          step: touch.step,
+        }),
+        imageAssetIds: selectedImageIds,
+        draftNotes: { ...copy.notes, research: { status: research.status, warnings: research.warnings } },
+        citedFacts: cited,
+        vettingSnapshot: { status: vetting.status, score: vetting.score, vettedAt: vetting.vettedAt.toISOString() },
+        unsubscribeToken: newUnsubscribeToken(),
+        claimToken,
+        createdByAgent: input.agentKey,
+      })
+      .returning();
+    return inserted;
+  });
   if (!email) throw new Error("Failed to persist outreach draft.");
 
   const readiness = await loadSendReadiness();
@@ -727,6 +753,31 @@ export interface EmailPatch {
 export const EDIT_TOO_FEW_FACTS =
   "This edit leaves fewer than two verified venue facts in the email (named space, location, capacity, or published owner name). Keep at least two so the note is unmistakably about this venue.";
 
+/**
+ * Guard for operator edits: the row must still be a draft whose action (if
+ * any) is still pending. Research and Grok take seconds; if the email was
+ * approved and sent meanwhile, the sent record must keep what the venue got.
+ */
+export function editableEmailWhere(emailId: number) {
+  return and(
+    eq(controlOutreachEmailsTable.id, emailId),
+    eq(controlOutreachEmailsTable.status, "draft"),
+    sql`(${controlOutreachEmailsTable.actionId} is null or exists (select 1 from ${agentActionsTable} where ${agentActionsTable.id} = ${controlOutreachEmailsTable.actionId} and ${agentActionsTable.status} = 'pending'))`,
+  );
+}
+
+function changedWhileEditing(emailId: number): Error {
+  return new Error(`Outreach email ${emailId} was approved, sent or changed while you were editing; your edit was not applied.`);
+}
+
+/** Retitle the email's action only while it is still pending. */
+async function retitlePendingAction(actionId: number, title: string): Promise<void> {
+  await db
+    .update(agentActionsTable)
+    .set({ title })
+    .where(and(eq(agentActionsTable.id, actionId), eq(agentActionsTable.status, "pending")));
+}
+
 export async function updateEmail(emailId: number, patch: EmailPatch, operatorEmail: string): Promise<EmailDetail> {
   const detail = await getEmailDetail(emailId);
   if (!detail) throw new Error(`Outreach email ${emailId} not found.`);
@@ -759,7 +810,7 @@ export async function updateEmail(emailId: number, patch: EmailPatch, operatorEm
     if (cited.length < COPY_RULES.minCitedFacts) throw new Error(EDIT_TOO_FEW_FACTS);
   }
 
-  await db
+  const edited = await db
     .update(controlOutreachEmailsTable)
     .set({
       ...(subject !== undefined ? { subject, subjectOptions } : {}),
@@ -773,13 +824,12 @@ export async function updateEmail(emailId: number, patch: EmailPatch, operatorEm
       editedBy: operatorEmail,
       updatedAt: new Date(),
     })
-    .where(eq(controlOutreachEmailsTable.id, emailId));
+    .where(editableEmailWhere(emailId))
+    .returning({ id: controlOutreachEmailsTable.id });
+  if (edited.length === 0) throw changedWhileEditing(emailId);
 
   if (subject && detail.action) {
-    await db
-      .update(agentActionsTable)
-      .set({ title: `Email ${detail.prospect.name}: “${subject}”` })
-      .where(eq(agentActionsTable.id, detail.action.id));
+    await retitlePendingAction(detail.action.id, `Email ${detail.prospect.name}: “${subject}”`);
   }
   await recordAuditEvent({
     actorType: "operator",
@@ -812,10 +862,12 @@ export async function regenerateEmail(
     research = refreshed.research;
     assets = refreshed.assets;
     const selected = assets.filter((asset) => asset.selected && asset.kind === "venue_image").map((asset) => asset.id);
-    await db
+    const reimaged = await db
       .update(controlOutreachEmailsTable)
       .set({ imageAssetIds: selected, updatedAt: new Date() })
-      .where(eq(controlOutreachEmailsTable.id, emailId));
+      .where(editableEmailWhere(emailId))
+      .returning({ id: controlOutreachEmailsTable.id });
+    if (reimaged.length === 0) throw changedWhileEditing(emailId);
   }
   if (mode === "copy" || mode === "both") {
     const facts = factsFromResearch(research, prospect);
@@ -836,7 +888,7 @@ export async function regenerateEmail(
         `The regenerated draft cites ${cited.length} verified venue fact(s); at least ${COPY_RULES.minCitedFacts} are required. The previous copy was kept.`,
       );
     }
-    await db
+    const rewritten = await db
       .update(controlOutreachEmailsTable)
       .set({
         subjectOptions: copy.subjects,
@@ -850,12 +902,11 @@ export async function regenerateEmail(
         editedBy: operatorEmail,
         updatedAt: new Date(),
       })
-      .where(eq(controlOutreachEmailsTable.id, emailId));
+      .where(editableEmailWhere(emailId))
+      .returning({ id: controlOutreachEmailsTable.id });
+    if (rewritten.length === 0) throw changedWhileEditing(emailId);
     if (detail.action) {
-      await db
-        .update(agentActionsTable)
-        .set({ title: `Email ${prospect.name}: “${copy.subjects[0]}”` })
-        .where(eq(agentActionsTable.id, detail.action.id));
+      await retitlePendingAction(detail.action.id, `Email ${prospect.name}: “${copy.subjects[0]}”`);
     }
   }
   await recordAuditEvent({

@@ -1,6 +1,7 @@
 import { FormLayout } from "@/components/layout/SiteChrome";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CreateOrganization,
   SignedIn,
@@ -22,10 +23,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { normalizeWebsiteInput, toVenueSlug } from "@/lib/venueSlug";
+import { normalizeWebsiteInput, venueSlugOrFallback } from "@/lib/venueSlug";
 import { ClerkWidgetFrame, ClerkSetupNotice, OrgGate, Pending } from "@/components/auth/OrgGate";
 import { clerkConfigured, brandAppearance } from "@/lib/clerk";
 import { usePublicConfig } from "@/lib/publicConfig";
+import { signupTrialNote } from "@/lib/signupNote";
 import { track, trackOnce } from "@/lib/track";
 import { apiErrorMessage, describeApiError } from "@/pages/dashboard/errors";
 
@@ -35,21 +37,39 @@ import { apiErrorMessage, describeApiError } from "@/pages/dashboard/errors";
  * manage several businesses see Clerk's organization form.
  */
 export default function CreateVenuePage() {
-  const config = usePublicConfig();
   if (!clerkConfigured) return <ClerkSetupNotice />;
+  return <CreateVenueLayout />;
+}
 
-  const trialCredits = config.trial.credits;
-  const trialDays = config.trial.days;
+function CreateVenueLayout() {
+  const config = usePublicConfig();
+  // The trial is once per person: someone who already has an organization
+  // (adding another business) is not promised free galleries again.
+  // Read once when the memberships first settle, so the organization this
+  // page creates on submit does not flip the note mid-signup.
+  const { isLoaded, userMemberships } = useOrganizationList({ userMemberships: { infinite: false } });
+  const [hasExistingOrganization, setHasExistingOrganization] = useState<boolean | null>(null);
+  const membershipCount = userMemberships?.data?.length ?? 0;
+  const membershipsSettled = isLoaded && !userMemberships?.isLoading && !userMemberships?.isFetching;
+  useEffect(() => {
+    if (hasExistingOrganization === null && membershipsSettled) setHasExistingOrganization(membershipCount > 0);
+  }, [hasExistingOrganization, membershipsSettled, membershipCount]);
+  const note = signupTrialNote({
+    trialCredits: config.trial.credits,
+    trialDays: config.trial.days,
+    hasExistingOrganization: hasExistingOrganization === true,
+  });
 
   return (
     <FormLayout
       label="Create your venue"
       title="Set up in one sitting."
-      description="Create your sign-in, then add your venue. Your first galleries are on us, and credits are shared across every venue you add."
-      note={{
-        heading: `${trialCredits} galleries free`,
-        body: `Enough to run it at the end of this week's tours and see how couples respond. ${trialDays} days, no card needed to start.`,
-      }}
+      description={
+        hasExistingOrganization === true
+          ? "Add your venue. Credits are shared across every venue in the business."
+          : "Create your sign-in, then add your venue. Your first galleries are on us, and credits are shared across every venue you add."
+      }
+      note={note}
     >
       <ClerkWidgetFrame>
         <SignedOut>
@@ -117,6 +137,7 @@ function VenueForm() {
   const { organization } = useOrganization();
   const { createOrganization, setActive, isLoaded: listLoaded } = useOrganizationList();
   const createVenue = useCreateVenue();
+  const queryClient = useQueryClient();
   const prefill = useMemo(readPrefill, []);
 
   const claimQuery = useGetOutreachClaim(prefill.claimToken ?? "", {
@@ -164,11 +185,11 @@ function VenueForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = form.name.trim();
-    const slug = toVenueSlug(name);
-    if (!slug) {
+    if (!name) {
       toast({ title: "Venue name required", variant: "destructive" });
       return;
     }
+    const slug = venueSlugOrFallback(name);
     if (websiteInvalid || bookingInvalid) {
       toast({ title: "Check the web addresses", description: "Use a full address like yourvenue.com/tours.", variant: "destructive" });
       return;
@@ -223,6 +244,13 @@ function VenueForm() {
       });
       if (!hasVenue) track("signup_completed", { venueId: venue.id, surface: "signup" });
 
+      // The dashboard reads the same GET /org cache; a {venues: []} cached
+      // before this insert would send the new owner straight back here.
+      try {
+        await queryClient.invalidateQueries({ queryKey: getGetOrganizationQueryKey() });
+      } catch {
+        // The dashboard refetches on mount anyway; never block navigation.
+      }
       toast({ title: "Venue created", description: "Your dashboard is ready." });
       const next = new URLSearchParams();
       next.set("welcome", "1");

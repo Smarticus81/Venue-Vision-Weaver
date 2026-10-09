@@ -1,4 +1,4 @@
-import { db, funnelEventsTable, FUNNEL_EVENTS, type FunnelEvent } from "@workspace/db";
+import { db, funnelEventsTable, type FunnelEvent } from "@workspace/db";
 import { logger } from "./logger.js";
 
 /*
@@ -16,10 +16,6 @@ export interface FunnelEventInput {
   properties?: Record<string, unknown> | null;
   /** web | server | stripe | control_plane ... */
   source?: string | null;
-}
-
-export function isFunnelEvent(value: unknown): value is FunnelEvent {
-  return typeof value === "string" && (FUNNEL_EVENTS as readonly string[]).includes(value);
 }
 
 export async function recordFunnelEvent(input: FunnelEventInput): Promise<void> {

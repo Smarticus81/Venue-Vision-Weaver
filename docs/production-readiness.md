@@ -105,9 +105,12 @@ overhaul) and tick each one off.
    `review_before_send`, incentive text, gallery and funnel events, render
    telemetry, `stripe_events` / `billing_events`, the vetting, facts, copy
    variant, adaptation and digest tables, and the partial unique index
-   `organizations_trial_grantee_unique` (trial once per Clerk user). Nothing
-   is dropped. `/api/readyz`
-   `database` must read `ok` afterwards.
+   `organizations_trial_grantee_unique` (trial once per Clerk user). Before
+   creating that index it clears the grantee on any later duplicate
+   organization (an earlier build could race); `pnpm db push` does not, so
+   prefer `bootstrap.sql` when the preflight's `duplicate_trial_grantees` is
+   non-zero. Nothing is dropped. `/api/readyz` `database` must read `ok`
+   afterwards.
 2. **Decide RLS.** Production tables were created with row-level security off.
    The server connects as the table owner and is not affected by RLS; RLS only
    closes the Supabase PostgREST surface (the anon and authenticated keys).
@@ -116,7 +119,9 @@ overhaul) and tick each one off.
    ever talks to Postgres directly, and the anon key must never ship to a
    browser), or, if something outside this app reads these tables through
    PostgREST, write policies for it first. Until every table has RLS on,
-   `/api/readyz` reports `rls: degraded` and answers 503.
+   `/api/readyz` reports `rls: degraded` and answers 503. That includes the
+   retired `owner_*` tables, which `bootstrap.sql` also closes, so the new
+   build's healthcheck passes before step 3 drops them.
 3. **Drop the retired owner-auth tables, after the new build is live.** Run
    `supabase/migrations/2026-10-08-drop-owner-auth.sql` (drops
    `owner_sessions`, `owner_login_tokens`, `owner_credentials`). Not before:
@@ -188,7 +193,11 @@ overhaul) and tick each one off.
     approval until the `lifecycle_email_auto_send` policy is switched on.
 12. **Demo couple photos (optional).** "Render a sample" answers
     `409 demo_not_configured` until two or three consented demo couple photos
-    are in `lib/brand/assets/demo-couple` or `DEMO_COUPLE_DIR`.
+    are in `lib/brand/assets/demo-couple` (committed before the image is
+    built; the Dockerfile copies that folder into the runtime image) or in a
+    mounted directory named by `DEMO_COUPLE_DIR`. Each organization may start
+    six samples in total, and only while its account can spend (trial running
+    or a paid plan, with credits); a sample itself never uses a credit.
 13. **Database TLS.** Download the Supabase CA certificate and set
     `DATABASE_SSL_CA` (PEM text) or `DATABASE_SSL_CA_PATH` so the connection
     is verified, not only encrypted.

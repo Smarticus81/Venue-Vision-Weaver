@@ -174,8 +174,11 @@ export function truncateForModel(value: unknown): unknown {
 async function callGrok(
   apiKey: string,
   body: Record<string, unknown>,
-  options: { deadline?: number } = {},
+  options: { deadline?: number; signal?: AbortSignal } = {},
 ): Promise<ResponsesApiResponse> {
+  if (options.signal?.aborted) {
+    throw new GrokRequestError("Agent run was stopped before the request was sent", { status: 0, timedOut: false });
+  }
   // One request never outlives the run it belongs to.
   const remaining = options.deadline === undefined ? Infinity : options.deadline - Date.now();
   if (remaining <= 0) {
@@ -195,7 +198,7 @@ async function callGrok(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: options.signal ? AbortSignal.any([AbortSignal.timeout(timeoutMs), options.signal]) : AbortSignal.timeout(timeoutMs),
     });
     text = await res.text();
   } catch (err) {
@@ -320,6 +323,13 @@ export async function runAgentLoop(params: {
   enableWebSearch?: boolean;
   /** Overrides CONTROL_PLANE_RUN_BUDGET_MS for this run. */
   budgetMs?: number;
+  /**
+   * Running token totals, updated after every model response, so a caller
+   * can record what a run spent even when the loop throws or is abandoned.
+   */
+  usage?: { promptTokens: number; completionTokens: number };
+  /** Stops the loop: no further model request or tool call once aborted. */
+  signal?: AbortSignal;
 }): Promise<AgentLoopResult> {
   const apiKey = process.env.XAI_API_KEY?.trim();
   if (!apiKey) {
@@ -353,6 +363,7 @@ export async function runAgentLoop(params: {
   let previousResponseId: string | undefined;
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
+    params.signal?.throwIfAborted();
     if (Date.now() >= deadline) {
       budgetExhausted = true;
       break;
@@ -365,11 +376,15 @@ export async function runAgentLoop(params: {
         tools: toolsPayload,
         ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
       },
-      { deadline },
+      { deadline, signal: params.signal },
     );
 
     promptTokens += response.usage?.input_tokens ?? 0;
     completionTokens += response.usage?.output_tokens ?? 0;
+    if (params.usage) {
+      params.usage.promptTokens = promptTokens;
+      params.usage.completionTokens = completionTokens;
+    }
     previousResponseId = response.id;
 
     const output = response.output ?? [];
@@ -434,6 +449,7 @@ export async function runAgentLoop(params: {
         continue;
       }
 
+      params.signal?.throwIfAborted();
       try {
         const result = await params.executeTool(name, args);
         const compact = truncateForModel(result);

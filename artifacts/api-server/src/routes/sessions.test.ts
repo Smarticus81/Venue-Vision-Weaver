@@ -112,6 +112,15 @@ test("Turnstile failure is 400, an unreachable verifier is 503", async () => {
   assert.equal(!unavailable.ok && unavailable.body.code, "turnstile_unavailable");
 });
 
+test("a signed-in member of the venue's organization (dashboard, tour day) is not asked for a Turnstile token", async () => {
+  const deps = passingDeps({ verifyTurnstile: async () => ({ ok: false, reason: "missing_token", errorCodes: [] }) });
+  const owner = await sessions.runSessionCreateGuards({ ...INPUT, callerIsVenueMember: true }, deps);
+  assert.equal(owner.ok, true);
+  assert.ok(!deps.calls.includes("turnstile"));
+  const couple = await sessions.runSessionCreateGuards(INPUT, passingDeps({ verifyTurnstile: async () => ({ ok: false, reason: "missing_token", errorCodes: [] }) }));
+  assert.equal(!couple.ok && couple.body.code, "turnstile_failed", "anonymous couples still pass the check");
+});
+
 test("photo validation errors surface the couple-facing message as 400 invalid_photos", async () => {
   const result = await sessions.runSessionCreateGuards(
     INPUT,
@@ -152,10 +161,53 @@ test("low-credit email goes out once per dip, again only after a later grant", (
   );
 });
 
+test("a session_refund never re-arms the low-credit email (only purchases and grants do)", async () => {
+  const { db, creditTransactionsTable } = await import("@workspace/db");
+  const query = db
+    .select({ id: creditTransactionsTable.id })
+    .from(creditTransactionsTable)
+    .where(sessions.lowCreditGrantWhere(12))
+    .toSQL();
+  assert.match(query.sql, /"reason" <> \$\d/);
+  assert.ok(query.params.includes("session_refund"));
+  assert.ok(query.params.includes(12));
+});
+
 test("gallery recovery matches the address exactly (lower(email) = $1), never with LIKE", () => {
   const query = sessions.recoverableSessionsQuery("a_b%c@example.com").toSQL();
   assert.match(query.sql, /lower\("couple_sessions"\."couple_email"\) = \$\d/);
   assert.doesNotMatch(query.sql, /\blike\b/i);
   assert.ok(query.params.includes("a_b%c@example.com"));
   assert.ok(query.params.includes("couple"), "only couple sessions are recoverable, never samples");
+});
+
+test("retention sweeps never-ready (failed, stuck) sessions too, and purges their generated frames", async () => {
+  const retention = await import("../lib/photoRetention.js");
+  const { db, coupleSessionsTable } = await import("@workspace/db");
+  const cutoff = new Date("2026-09-01T00:00:00Z");
+  const query = db.select({ id: coupleSessionsTable.id }).from(coupleSessionsTable).where(retention.retentionDueWhere(cutoff)).toSQL();
+  assert.match(query.sql, /coalesce\("couple_sessions"\."completed_at", "couple_sessions"\."created_at"\)/);
+  assert.match(query.sql, /"couple_sessions"\."status" <> \$\d/);
+  assert.match(query.sql, /"couple_sessions"\."source_photos_deleted_at" is null/);
+
+  const marked: Array<[number, boolean]> = [];
+  const result = await retention.runPhotoRetentionSweep(
+    {
+      listDue: async () => [
+        { sessionId: 1, objectKeys: ["/objects/uploads/a"] },
+        { sessionId: 2, objectKeys: ["/objects/uploads/b", "/objects/generated/frame"], purgeGenerated: true },
+      ],
+      deleteObject: async () => {},
+      markDeleted: async (sessionId, _at, options) => {
+        marked.push([sessionId, options?.purgeGenerated === true]);
+      },
+    },
+    { now: new Date("2026-10-01T00:00:00Z"), retentionDays: 30 },
+  );
+  assert.equal(result.sessionsCleared, 2);
+  assert.equal(result.objectsDeleted, 3);
+  assert.deepEqual(marked, [
+    [1, false],
+    [2, true],
+  ]);
 });

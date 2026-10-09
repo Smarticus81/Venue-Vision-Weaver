@@ -815,3 +815,114 @@ test("isUniqueViolation recognises the trial-grantee index, including wrapped dr
   assert.equal(orgAuth.isUniqueViolation(pgError, "organizations_clerk_org_id_unique"), false);
   assert.equal(orgAuth.isUniqueViolation(new Error("boom"), "organizations_trial_grantee_unique"), false);
 });
+
+test("a trial claim that throws is offered again on the next request; a completed one is not", async () => {
+  orgAuth.resetOrgAuthMemos();
+  const offered: Array<string | null> = [];
+  await assert.rejects(
+    orgAuth.withTrialClaimantOnce("org_t", "user_t", async (claimant) => {
+      offered.push(claimant);
+      throw new Error("connection reset");
+    }),
+  );
+  await orgAuth.withTrialClaimantOnce("org_t", "user_t", async (claimant) => {
+    offered.push(claimant);
+  });
+  await orgAuth.withTrialClaimantOnce("org_t", "user_t", async (claimant) => {
+    offered.push(claimant);
+  });
+  assert.deepEqual(offered, ["user_t", "user_t", null]);
+  orgAuth.resetOrgAuthMemos();
+});
+
+/* ————— Late deliveries, prorations, delayed payment ————— */
+
+test("a late invoice.paid after customer.subscription.deleted grants the paid period but never revives the subscription", async () => {
+  const deletedSub = subscriptionObject({ id: "sub_1", status: "canceled", priceId: "price_starter", orgId: 7 });
+  const store = makeStore(
+    [makeOrg({ plan: "starter", stripeSubscriptionId: "sub_1", subscriptionStatus: "active", creditsBalance: 3 })],
+    { sub_1: deletedSub },
+  );
+  await deliver(
+    store,
+    event("evt_del_first", "customer.subscription.deleted", deletedSub),
+    classicInvoice({
+      id: "evt_inv_late",
+      subscription: "sub_1",
+      priceId: "price_starter",
+      billingReason: "subscription_cycle",
+      metadata: { organizationId: "7", product: "starter" },
+    }),
+    event("evt_upd_late", "customer.subscription.updated", subscriptionObject({ id: "sub_1", status: "active", priceId: "price_starter", orgId: 7 })),
+  );
+  const org = store.orgs.get(7)!;
+  assert.equal(org.stripeSubscriptionId, null, "the dead subscription id is not written back");
+  assert.equal(org.subscriptionStatus, "canceled");
+  assert.equal(org.plan, "payg");
+  assert.equal(org.churnedAt?.toISOString(), FIXED_NOW.toISOString());
+  assert.equal(org.creditsBalance, 3 + STARTER_MONTHLY_CREDITS, "the paid period's credits are still granted");
+});
+
+test("a new subscription after a cancellation is still picked up from invoice.paid before checkout", async () => {
+  const store = makeStore(
+    [makeOrg({ plan: "payg", creditsBalance: 4, subscriptionStatus: "canceled", churnedAt: new Date("2026-09-01") })],
+    { sub_2: subscriptionObject({ id: "sub_2", status: "active", priceId: "price_growth", orgId: 7, product: "growth" }) },
+  );
+  await deliver(store, classicInvoice({ id: "evt_inv_new", subscription: "sub_2", priceId: "price_growth", billingReason: "subscription_create", metadata: { organizationId: "7", product: "growth" } }));
+  const org = store.orgs.get(7)!;
+  assert.equal(org.stripeSubscriptionId, "sub_2");
+  assert.equal(org.subscriptionStatus, "active");
+  assert.equal(org.plan, "growth");
+});
+
+test("renewal after a prorated upgrade grants the new tier, not the unused-time credit line", async () => {
+  const store = makeStore([makeOrg({ plan: "growth", stripeSubscriptionId: "sub_1", subscriptionStatus: "active", creditsBalance: 0 })]);
+  await deliver(
+    store,
+    event("evt_cycle_prorated", "invoice.paid", {
+      id: "in_9",
+      object: "invoice",
+      customer: "cus_7",
+      subscription: "sub_1",
+      billing_reason: "subscription_cycle",
+      amount_paid: 30000,
+      lines: {
+        data: [
+          { price: { id: "price_starter" }, proration: true, amount: -6000, period: { end: 1_765_000_000 } },
+          { price: { id: "price_growth" }, proration: true, amount: 14000, period: { end: 1_765_000_000 } },
+          { price: { id: "price_growth" }, proration: false, amount: 27900, period: { end: 1_767_000_000 } },
+        ],
+      },
+    }),
+  );
+  const org = store.orgs.get(7)!;
+  assert.equal(org.plan, "growth");
+  assert.equal(org.creditsBalance, GROWTH_MONTHLY_CREDITS);
+});
+
+test("basil proration lines (parent.subscription_item_details.proration) are read the same way", () => {
+  const ids = stripeLib.invoiceBilledPriceIds({
+    lines: {
+      data: [
+        { pricing: { price_details: { price: "price_growth" } }, amount: -9000, parent: { subscription_item_details: { proration: true } } },
+        { pricing: { price_details: { price: "price_starter" } }, amount: 3000, parent: { subscription_item_details: { proration: true } } },
+        { pricing: { price_details: { price: "price_starter" } }, amount: 12900, parent: { subscription_item_details: { proration: false } } },
+      ],
+    },
+  });
+  assert.deepEqual(ids, ["price_starter", "price_starter"], "a downgrade reads as the new, cheaper tier");
+});
+
+test("subscription checkout with a delayed payment method does not lift the trial until invoice.paid", async () => {
+  const store = makeStore([makeOrg({ plan: "trial", creditsBalance: 2 })]);
+  await deliver(store, checkoutCompleted({ id: "evt_co_unpaid", orgId: 7, product: "starter", subscription: "sub_9", paymentStatus: "unpaid" }));
+  let org = store.orgs.get(7)!;
+  assert.equal(org.plan, "trial");
+  assert.equal(org.subscriptionStatus, null);
+  assert.equal(org.firstPaidAt, null);
+  assert.equal(org.stripeSubscriptionId, "sub_9");
+  await deliver(store, classicInvoice({ id: "evt_inv_ach", subscription: "sub_9", priceId: "price_starter", billingReason: "subscription_create" }));
+  org = store.orgs.get(7)!;
+  assert.equal(org.plan, "starter");
+  assert.equal(org.subscriptionStatus, "active");
+});

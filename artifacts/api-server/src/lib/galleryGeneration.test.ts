@@ -19,9 +19,11 @@ const { GalleryJudgeUnavailableError, GalleryQualityError } = await import("./ga
 const { StillImageBlockedError, StillImageRequestError, SessionDeadlineError } = await import("./stillImageErrors.js");
 const { createSessionWorker, REAPER_GRACE_MS, sessionDeadlineMsFromEnv, maxConcurrentSessionsFromEnv } =
   await import("./sessionWorker.js");
-const { deliverReadyGallery, deliveryHoldReason, failSession, failureDetailFor } = await import(
+const { deliverReadyGallery, deliveryHoldReason, failSession, failureDetailFor, reconcileFailedRefunds } = await import(
   "./gallerySessionPipeline.js"
 );
+const { refundableSessionWhere } = await import("./credits.js");
+const { db, coupleSessionsTable } = await import("@workspace/db");
 const { renderPriceEnvKey, renderUnitPriceUsd, summarizeRenderCost } = await import("./renderTelemetry.js");
 const { composeReelFrame, kenBurnsFilter, strokeTextFor, buildReelTitleCard, layoutVenueTitle } = await import(
   "./motionReel.js"
@@ -282,6 +284,7 @@ test("the render semaphore caps concurrency and serves waiters in order", async 
 function memoryStore(initial: Array<{ objectKey: string; assetType: string; displayOrder: number }> = []) {
   const rows = [...initial];
   let readyCalls = 0;
+  const holds: Array<string | null | undefined> = [];
   const store: GalleryStore = {
     listAssets: async () => rows.map((row) => ({ ...row })),
     insertAsset: async (row) => {
@@ -292,12 +295,13 @@ function memoryStore(initial: Array<{ objectKey: string; assetType: string; disp
       if (index < 0) return null;
       return rows.splice(index, 1)[0]!.objectKey;
     },
-    markReady: async (sessionId) => {
+    markReady: async (sessionId, options) => {
       readyCalls += 1;
+      holds.push(options?.deliveryHoldReason);
       return { id: sessionId, status: "ready" } as CoupleSession;
     },
   };
-  return { store, rows, readyCalls: () => readyCalls };
+  return { store, rows, holds, readyCalls: () => readyCalls };
 }
 
 function runDeps(store: GalleryStore, overrides: Partial<GalleryRunDeps> = {}) {
@@ -354,7 +358,7 @@ test("a failing scene keeps the other accepted frames stored and fails with the 
 });
 
 test("a retry renders only the missing scene, replaces any stale reel and marks the session ready", async () => {
-  const { store, rows } = memoryStore([
+  const { store, rows, holds } = memoryStore([
     { objectKey: "/objects/uploads/a.jpg", assetType: "image", displayOrder: 1 },
     { objectKey: "/objects/uploads/b.jpg", assetType: "image", displayOrder: 2 },
     { objectKey: "/objects/uploads/d.jpg", assetType: "image", displayOrder: 4 },
@@ -393,10 +397,28 @@ test("a retry renders only the missing scene, replaces any stale reel and marks 
   assert.deepEqual(rendered, ["16:9"], "only scene 3 (grand-venue) renders again");
   assert.ok(result.readySession);
   assert.equal(result.needsReview, true, "an unjudged frame holds the gallery for owner review");
+  assert.deepEqual(holds, ["unjudged_frames"], "the hold is written with the ready transition, not after it");
   assert.deepEqual(deleted, ["/objects/uploads/old-reel.mp4"]);
   assert.equal(rows.filter((row) => row.assetType === "video").length, 1);
   assert.equal(reelInputs[0]![0]!.toString(), "kept-1", "the reel keeps scene order");
   assert.equal(reelInputs[0]!.length, 4);
+});
+
+test("a held gallery is never served through its share link until the owner releases it", async () => {
+  const visibility = await import("./sessionVisibility.js");
+  assert.equal(visibility.persistedDeliveryHold({ kind: "couple", reviewBeforeSend: true, needsReview: false }), "review_before_send");
+  assert.equal(visibility.persistedDeliveryHold({ kind: "couple", reviewBeforeSend: false, needsReview: true }), "unjudged_frames");
+  assert.equal(visibility.persistedDeliveryHold({ kind: "couple", reviewBeforeSend: false, needsReview: false }), null);
+  assert.equal(visibility.persistedDeliveryHold({ kind: "sample", reviewBeforeSend: true, needsReview: true }), null);
+
+  const complete = [
+    { assetType: "video", displayOrder: 0 },
+    ...[1, 2, 3, 4].map((displayOrder) => ({ assetType: "image", displayOrder })),
+  ];
+  assert.equal(visibility.canReadGeneratedAssetWithShareToken("ready", complete, null), true);
+  assert.equal(visibility.canReadGeneratedAssetWithShareToken("ready", complete, "review_before_send"), false);
+  assert.equal(visibility.canExposeGeneratedAssetsToSharePage("ready", "unjudged_frames"), false);
+  assert.equal(visibility.canExposeGeneratedAssetsToSharePage("ready"), true);
 });
 
 /* ----------------------------------------------------------- deadline */
@@ -513,6 +535,31 @@ test("failSession is a no-op for funnel when another path already failed the ses
   assert.equal(await failSession({ id: 42, venueId: 3 }, new SessionDeadlineError(1000), deps), false);
   assert.equal(calls.funnel.length, 0);
   assert.equal(calls.refunds, 1, "the refund itself is idempotent (credits_charged guard)");
+});
+
+test("refund guard only matches a failed session, so a gallery that turned ready keeps its charge", () => {
+  const query = db
+    .update(coupleSessionsTable)
+    .set({ creditsCharged: 0 })
+    .where(refundableSessionWhere(42, 1))
+    .toSQL();
+  assert.match(query.sql, /"status" = \$\d+/);
+  assert.ok(query.params.includes("failed"));
+  assert.ok(query.params.includes(42));
+});
+
+test("reconcileFailedRefunds retries refunds for failed sessions that still hold a charge", async () => {
+  const attempted: number[] = [];
+  const refunded = await reconcileFailedRefunds({
+    listFailedCharged: async () => [7, 8, 9],
+    refund: async (id) => {
+      attempted.push(id);
+      if (id === 8) throw new Error("connection reset");
+      return id === 7;
+    },
+  });
+  assert.deepEqual(attempted, [7, 8, 9]);
+  assert.deepEqual(refunded, [7]);
 });
 
 test("failSession forces the failed status when the guarded update throws", async () => {

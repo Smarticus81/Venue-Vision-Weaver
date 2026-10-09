@@ -196,12 +196,38 @@ export interface SampleCounts {
   nonFailed: number;
 }
 
-export type SampleRefusal = {
-  ok: false;
-  status: 409;
-  error: string;
-  code: "venue_not_ready" | "sample_in_progress" | "sample_limit" | typeof DEMO_NOT_CONFIGURED_CODE;
-};
+/**
+ * Sample renders an organization may ever start, failed ones included. It is
+ * counted from a persistent log (funnel event SAMPLE_STARTED_EVENT, server
+ * only), so deleting a sample gallery, adding venues or a restart never frees
+ * a slot: a sample is free to the venue but a real provider spend for us.
+ */
+export const MAX_SAMPLE_STARTS_PER_ORG = 6;
+/** Server-only funnel event logged for every sample start (not postable by the web client). */
+export const SAMPLE_STARTED_EVENT = "sample_started";
+
+export type SampleRefusal =
+  | {
+      ok: false;
+      status: 409;
+      error: string;
+      code: "venue_not_ready" | "sample_in_progress" | "sample_limit" | "sample_org_limit" | typeof DEMO_NOT_CONFIGURED_CODE;
+    }
+  | { ok: false; status: 402; error: string; code: "trial_expired" | "insufficient_credits" };
+
+export function sampleOrgLimitRefusal(max = MAX_SAMPLE_STARTS_PER_ORG): SampleRefusal {
+  return {
+    ok: false,
+    status: 409,
+    error: `Your account has used its ${max} sample galleries. Make a gallery for a real couple next.`,
+    code: "sample_org_limit",
+  };
+}
+
+const SAMPLE_SPEND_ERRORS = {
+  trial_expired: "Your free trial has ended. Pick a plan to render a sample.",
+  insufficient_credits: "Add credits to render a sample. The sample itself does not use one.",
+} as const;
 
 /** Cheap checks before any demo photo is copied. */
 export function checkSampleAllowed(
@@ -239,12 +265,17 @@ export function checkSampleAllowed(
 export interface SampleGalleryDeps<S> {
   loadMedia(venueId: number): Promise<Array<{ coverage?: string | null }>>;
   countSamples(venueId: number): Promise<SampleCounts>;
+  /** Trial clock and balance check for the venue's organization (a sample needs a fundable account). */
+  canSpend(venueId: number): Promise<{ ok: true } | { ok: false; reason: "trial_expired" | "insufficient_credits" }>;
+  /** Sample starts this venue's organization has ever made (persistent, failed ones included). */
+  countOrgSampleStarts(venueId: number): Promise<number>;
   /** Copy the demo couple's photos into private upload objects. */
   preparePhotos(): Promise<SamplePhotoOutcome>;
   /**
    * Insert the sample session and its couple_media rows. Must re-check the
-   * counts under a venue row lock; returns a refusal when a concurrent request
-   * won the race.
+   * venue counts and the organization's lifetime starts under a lock, and log
+   * the start in the same transaction; returns a refusal when a concurrent
+   * request won the race.
    */
   insertSession(venueId: number, objectKeys: string[]): Promise<{ ok: true; session: S } | SampleRefusal>;
   /** Best-effort cleanup of copied photos when the insert was refused. */
@@ -257,6 +288,10 @@ export async function startSampleGallery<S>(
 ): Promise<{ ok: true; session: S } | SampleRefusal> {
   const allowed = checkSampleAllowed(await deps.loadMedia(venueId), await deps.countSamples(venueId));
   if (!allowed.ok) return allowed;
+
+  const spend = await deps.canSpend(venueId);
+  if (!spend.ok) return { ok: false, status: 402, error: SAMPLE_SPEND_ERRORS[spend.reason], code: spend.reason };
+  if ((await deps.countOrgSampleStarts(venueId)) >= MAX_SAMPLE_STARTS_PER_ORG) return sampleOrgLimitRefusal();
 
   const photos = await deps.preparePhotos();
   if (!photos.ok) return { ok: false, status: 409, error: photos.error, code: photos.code };

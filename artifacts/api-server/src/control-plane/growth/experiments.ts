@@ -4,9 +4,10 @@ import { logger } from "../../lib/logger.js";
 import { recordAuditEvent } from "../audit.js";
 import type { BusinessMetrics } from "../metrics.js";
 import { latestGrowthSnapshot, snapshotMetrics } from "../metrics.js";
-import { experimentMinN } from "./config.js";
+import { activationMinPhotos, experimentMinN, guardMinSends, trialDays } from "./config.js";
+import { computeGrowthKpis, defaultGrowthLoaders } from "./kpi.js";
 import { DAY_MS } from "./kpiMath.js";
-import type { GrowthKpis } from "./kpiTypes.js";
+import type { GrowthKpis, GrowthLoaders } from "./kpiTypes.js";
 import { METRIC_KEYS, parseSegment, type MetricSource } from "./metricKeys.js";
 
 /*
@@ -157,7 +158,14 @@ export function evaluateExperiment(card: ExperimentCard, snapshot: MetricSource,
   if (target == null || card.baseline == null) {
     return { ...base, decision: "inconclusive", reason: `no baseline/lift to compare against: ${numbers}` };
   }
-  const won = metric.direction === "higher" ? value >= target : value <= target;
+  if (target === card.baseline) {
+    // A baseline of 0 (or a rate already at its bound) makes the target equal
+    // the baseline, so "no change" would read as a win.
+    return { ...base, decision: "inconclusive", reason: `the target equals the baseline, so a lift cannot be measured: ${numbers}` };
+  }
+  // A win needs a strict improvement over the baseline as well as the target.
+  const won =
+    metric.direction === "higher" ? value >= target && value > card.baseline : value <= target && value < card.baseline;
   if (won) return { ...base, decision: "win", reason: `reached target (${metric.direction} is better): ${numbers}` };
   const worse = metric.direction === "higher" ? value < card.baseline : value > card.baseline;
   if (worse) return { ...base, decision: "kill", reason: `moved against the baseline (${metric.direction} is better): ${numbers}` };
@@ -215,6 +223,46 @@ export function validateScope(primaryMetricKey: string, segment: string | null |
   }
   if (variantKey && !metric.supportsVariant) throw new ExperimentValidationError(`${metric.key} cannot be scoped to a copy variant.`);
   if (segment && variantKey) throw new ExperimentValidationError("An experiment is scoped to a segment or a variant, not both.");
+}
+
+/**
+ * Loaders limited to what happened since the experiment started: emails sent
+ * (or drafted) and organizations created at or after startedAt, ledger and
+ * legacy sends from then on. Prospects stay whole (attribution needs them).
+ */
+export function loadersSince(base: GrowthLoaders, startedAt: Date): GrowthLoaders {
+  const from = (since: Date) => (since.getTime() > startedAt.getTime() ? since : startedAt);
+  return {
+    ...base,
+    orgs: async () => (await base.orgs()).filter((org) => org.createdAt.getTime() >= startedAt.getTime()),
+    emails: async (since) =>
+      (await base.emails(from(since))).filter((email) => (email.sentAt ?? email.createdAt).getTime() >= startedAt.getTime()),
+    legacySends: (since) => base.legacySends(from(since)),
+    ledger: (since) => base.ledger(from(since)),
+    venueCreatedAts: async (since) => (await base.venueCreatedAts(since)).filter((at) => at.getTime() >= startedAt.getTime()),
+  };
+}
+
+/**
+ * The readout for one card covers data since the card started (not the
+ * rolling all-time / 30-day figures, which are mostly pre-experiment). Live
+ * session metrics are not windowed and come from the snapshot. Falls back to
+ * the snapshot when the card has not started or the scoped load fails.
+ */
+async function sourceForCard(row: Pick<ControlExperiment, "id" | "startedAt">, snapshot: MetricSource, now: Date): Promise<MetricSource> {
+  if (!row.startedAt) return snapshot;
+  try {
+    const minPhotos = activationMinPhotos();
+    const growth = await computeGrowthKpis(loadersSince(defaultGrowthLoaders(minPhotos), row.startedAt), now, {
+      minPhotos,
+      trialDays: trialDays(),
+      minSendsForGuard: guardMinSends(),
+    });
+    return { growth, sessions: snapshot.sessions };
+  } catch (err) {
+    logger.warn({ err, experimentId: row.id }, "Scoped experiment readout failed; using the latest snapshot");
+    return snapshot;
+  }
 }
 
 async function latestSource(): Promise<MetricSource | null> {
@@ -408,7 +456,7 @@ export async function evaluateExperimentById(
     source = snap.metrics.growth ? { growth: snap.metrics.growth, sessions: snap.metrics.sessions } : null;
   }
   const evaluation = source
-    ? evaluateExperiment(toExperimentCard(row), source, now, experimentMinN())
+    ? evaluateExperiment(toExperimentCard(row), await sourceForCard(row, source, now), now, experimentMinN())
     : {
         decision: "not_measurable" as const,
         observedValue: null,
@@ -522,7 +570,7 @@ export async function runExperimentDecisions(snapshot: ExperimentSnapshot, snaps
   let decided = 0;
   for (const row of running) {
     try {
-      const evaluation = evaluateExperiment(toExperimentCard(row), source, now, minN);
+      const evaluation = evaluateExperiment(toExperimentCard(row), await sourceForCard(row, source, now), now, minN);
       await db
         .update(controlExperimentsTable)
         .set({ evaluation: { ...evaluationRecord(evaluation), snapshotId }, observedValue: evaluation.observedValue, observedN: evaluation.n, updatedAt: now })

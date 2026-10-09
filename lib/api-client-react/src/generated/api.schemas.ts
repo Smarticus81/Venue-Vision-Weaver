@@ -565,6 +565,8 @@ export interface SessionDetailResponse {
   completedAt?: string | null;
   venue?: VenuePublicResponse;
   generatedAssets: GeneratedAsset[];
+  /** True while a ready gallery waits for the venue's review (review before send, or a frame the quality check could not judge). The share link serves no assets until the owner sends it. */
+  deliveryHeld?: boolean;
 }
 
 export type OwnerSessionDetailResponse = SessionDetailResponse & {

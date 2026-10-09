@@ -1,5 +1,5 @@
 import { db, organizationsTable } from "@workspace/db";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { shareUrlForToken } from "../../lib/appUrl.js";
 import { logger } from "../../lib/logger.js";
 import { proposeAction } from "../actions.js";
@@ -125,6 +125,37 @@ interface LoadedTrialOrg extends TrialOrgState {
   firstShareToken: string | null;
 }
 
+/** Failed sends of one lifecycle template to one org after which it is not proposed again. */
+export const MAX_LIFECYCLE_FAILED_ATTEMPTS = 3;
+
+/**
+ * Lifecycle templates that must not be proposed again for an org: anything
+ * pending, approved, executing or executed; anything an operator REJECTED
+ * (a rejection is final for that org and template, so the hourly sweep never
+ * refills the queue, and a later auto-send policy never sends rejected copy);
+ * a failure in the last 24 hours (retry later); and a template that already
+ * failed MAX_LIFECYCLE_FAILED_ATTEMPTS times.
+ */
+export function lifecycleTemplatesTakenSql(organizationId: SQL) {
+  return sql`
+    select array_agg(distinct taken.template) from (
+      select a.params->>'template' as template
+      from agent_actions a
+      where a.action_type = 'send_lifecycle_email'
+        and a.params->>'organizationId' = ${organizationId}::text
+        and (a.status in ('pending', 'approved', 'executing', 'executed', 'rejected')
+             or (a.status = 'failed' and a.created_at > now() - interval '24 hours'))
+      union
+      select a.params->>'template' as template
+      from agent_actions a
+      where a.action_type = 'send_lifecycle_email'
+        and a.params->>'organizationId' = ${organizationId}::text
+        and a.status = 'failed'
+      group by a.params->>'template'
+      having count(*) >= ${MAX_LIFECYCLE_FAILED_ATTEMPTS}
+    ) taken`;
+}
+
 /** Trial organizations with ready-session counts, first venue name and the lifecycle templates already proposed/sent. */
 export async function loadTrialOrgs(): Promise<LoadedTrialOrg[]> {
   const result = await db.execute<TrialRow>(sql`
@@ -145,14 +176,7 @@ export async function loadTrialOrgs(): Promise<LoadedTrialOrg[]> {
     )
     select o.id, o.name, o.plan, o.created_at, o.trial_ends_at, o.trial_expired_at, o.credits_balance,
            coalesce(g.ready_sessions, 0)::int as ready_sessions, g.first_gallery_at, g.first_share_token, fv.venue_name,
-           coalesce((
-             select array_agg(distinct a.params->>'template')
-             from agent_actions a
-             where a.action_type = 'send_lifecycle_email'
-               and a.params->>'organizationId' = o.id::text
-               and (a.status in ('pending', 'approved', 'executing', 'executed')
-                    or (a.status = 'failed' and a.created_at > now() - interval '24 hours'))
-           ), '{}') as sent_templates
+           coalesce((${lifecycleTemplatesTakenSql(sql`o.id`)}), '{}') as sent_templates
     from organizations o
     left join galleries g on g.organization_id = o.id
     left join first_venue fv on fv.organization_id = o.id
@@ -284,10 +308,4 @@ export async function runTrialClock(now: Date = new Date()): Promise<TrialClockR
   if (now.getTime() - lastRunAt < HOUR_MS) return null;
   lastRunAt = now.getTime();
   return sweepTrialClock(now);
-}
-
-/** Test seam. */
-export function resetTrialClock(): void {
-  lastRunAt = 0;
-  skippedNoRecipient.clear();
 }

@@ -100,15 +100,22 @@ function DashboardShell() {
     if (!orgQuery.isSuccess) return;
     const list = orgQuery.data.venues;
     if (list.length === 0) {
-      setLocation("/create-venue");
+      // A cached {venues: []} from before the first venue was created must
+      // not bounce a new owner back to signup: decide on fresh data only.
+      if (!orgQuery.isFetching) setLocation("/create-venue");
       return;
     }
     setSlug((current) => {
       if (current && list.some((v) => v.slug === current)) return current;
+      // A link for one venue (owner email: /dashboard/<slug>) opens that venue.
+      if (initial.venue && list.some((v) => v.slug === initial.venue)) {
+        storeSlug(initial.venue);
+        return initial.venue;
+      }
       const stored = readStoredSlug();
       return stored && list.some((v) => v.slug === stored) ? stored : list[0].slug;
     });
-  }, [orgQuery.isSuccess, orgQuery.data, setLocation]);
+  }, [orgQuery.isSuccess, orgQuery.isFetching, orgQuery.data, setLocation, initial.venue]);
 
   const dashboard = useGetVenueDashboard(slug, {
     query: {
@@ -142,7 +149,7 @@ function DashboardShell() {
     storeSlug(next);
   };
 
-  if (orgQuery.isError || dashboard.isError) {
+  if (orgQuery.isError || dashboard.isError || mediaQuery.isError) {
     return (
       <div className="state-panel">
         <h1>We couldn't open your workspace</h1>
@@ -151,6 +158,7 @@ function DashboardShell() {
           onClick={() => {
             void orgQuery.refetch();
             void dashboard.refetch();
+            void mediaQuery.refetch();
           }}
         >
           Try again

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { eq, and, sql, gte, gt, isNull } from "drizzle-orm";
+import { eq, and, sql, gte, gt, isNull, ne } from "drizzle-orm";
 import {
   db,
   coupleSessionsTable,
@@ -43,6 +43,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { rateLimit, clientKey } from "../lib/rateLimit.js";
 import {
+  getCallerOrgDbId,
   requireOrg,
   requireOrgAdmin,
   requireOwnerMutationOrigin,
@@ -133,6 +134,7 @@ function buildSessionDetailPayload(
     completedAt: session.completedAt,
     venue: venue ? toPublicVenue(venue, venueMedia) : null,
     generatedAssets,
+    deliveryHeld: session.status === "ready" && Boolean(session.deliveryHoldReason),
   };
   if (options.includeEmail) {
     return {
@@ -273,6 +275,12 @@ export interface SessionCreateGuardInput {
   couplePhotoKeys: string[];
   turnstileToken: string | null | undefined;
   neededCredits: number;
+  /**
+   * The caller is a signed-in member of the venue's own organization (owner
+   * "Create a gallery" and tour-day mode). Clerk already proved a person, and
+   * those screens render no Turnstile widget, so the bot check is skipped.
+   */
+  callerIsVenueMember?: boolean;
 }
 
 export interface SessionCreateGuardDeps {
@@ -345,7 +353,10 @@ export async function runSessionCreateGuards(
   }
 
   // Optional bot check (only enforced when TURNSTILE_SECRET_KEY is set).
-  const turnstile = await deps.verifyTurnstile(input.turnstileToken, input.clientIp);
+  // Signed-in members of the venue's organization are already verified.
+  const turnstile = input.callerIsVenueMember
+    ? { ok: true as const }
+    : await deps.verifyTurnstile(input.turnstileToken, input.clientIp);
   if (!turnstile.ok) {
     if (turnstile.reason === "verify_failed") {
       return {
@@ -434,6 +445,19 @@ async function notifyCreditsExhausted(
   if (!result.sent) logger.warn({ venueId: venue.id, reason: result.reason }, "Credits-exhausted owner email not sent");
 }
 
+/**
+ * Credits that re-arm the low-credit email: purchases and grants only. A
+ * session_refund gives back a credit the org already had, so it is not a new
+ * grant and must not cause another "low credit" email after each failure.
+ */
+export function lowCreditGrantWhere(organizationId: number) {
+  return and(
+    eq(creditTransactionsTable.organizationId, organizationId),
+    gt(creditTransactionsTable.delta, 0),
+    ne(creditTransactionsTable.reason, "session_refund"),
+  );
+}
+
 async function maybeSendLowCreditEmail(venue: CreateVenueRow): Promise<void> {
   if (venue.organizationId == null) return;
   const [org] = await db
@@ -447,7 +471,7 @@ async function maybeSendLowCreditEmail(venue: CreateVenueRow): Promise<void> {
   const [grant] = await db
     .select({ createdAt: sql<Date | string | null>`max(${creditTransactionsTable.createdAt})` })
     .from(creditTransactionsTable)
-    .where(and(eq(creditTransactionsTable.organizationId, venue.organizationId), gt(creditTransactionsTable.delta, 0)));
+    .where(lowCreditGrantWhere(venue.organizationId));
   const lastGrantAt = grant?.createdAt ? new Date(grant.createdAt) : null;
   if (!shouldSendLowCreditEmail({ balance: org.creditsBalance, lowCreditNotifiedAt: org.lowCreditNotifiedAt, lastGrantAt })) return;
 
@@ -581,6 +605,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
 
   const neededCredits = creditsForSession();
   const coupleName = body.data.coupleName?.trim() || null;
+  const callerOrgId = venue.organizationId != null ? await getCallerOrgDbId(req).catch(() => null) : null;
 
   const guard = await runSessionCreateGuards(
     {
@@ -589,6 +614,7 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
       couplePhotoKeys: body.data.couplePhotoKeys,
       turnstileToken: body.data.turnstileToken,
       neededCredits,
+      callerIsVenueMember: callerOrgId != null && callerOrgId === venue.organizationId,
     },
     liveGuardDeps(),
   );
@@ -610,31 +636,21 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
   let session: typeof coupleSessionsTable.$inferSelect | null = null;
   try {
     session = await db.transaction(async (tx) => {
-      // Credits are debited from the billing organization when the venue has
-      // one; legacy venues (not yet adopted) draw from their own balance.
-      if (venue.organizationId != null) {
-        const [updatedCredits] = await tx
-          .update(organizationsTable)
-          .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${neededCredits}` })
-          .where(
-            and(
-              eq(organizationsTable.id, venue.organizationId),
-              gte(organizationsTable.creditsBalance, neededCredits),
-            ),
-          )
-          .returning({ creditsBalance: organizationsTable.creditsBalance });
-        if (!updatedCredits) {
-          return null;
-        }
-      } else {
-        const [updatedCredits] = await tx
-          .update(venuesTable)
-          .set({ creditsBalance: sql`${venuesTable.creditsBalance} - ${neededCredits}` })
-          .where(and(eq(venuesTable.id, venue.id), gte(venuesTable.creditsBalance, neededCredits)))
-          .returning({ creditsBalance: venuesTable.creditsBalance });
-        if (!updatedCredits) {
-          return null;
-        }
+      // Credits are debited from the venue's billing organization; every venue
+      // belongs to one (venues are only created inside an organization).
+      if (venue.organizationId == null) return null;
+      const [updatedCredits] = await tx
+        .update(organizationsTable)
+        .set({ creditsBalance: sql`${organizationsTable.creditsBalance} - ${neededCredits}` })
+        .where(
+          and(
+            eq(organizationsTable.id, venue.organizationId),
+            gte(organizationsTable.creditsBalance, neededCredits),
+          ),
+        )
+        .returning({ creditsBalance: organizationsTable.creditsBalance });
+      if (!updatedCredits) {
+        return null;
       }
 
       for (const objectKey of body.data.couplePhotoKeys) {
@@ -828,7 +844,7 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
   // "viewed" has one writer (lib/galleryEvents.ts): a ready couple gallery
   // opened through its share link, deduped per viewer per UTC day. Owner
   // previews through the public URL count too; sample sessions never do.
-  if (session.status === "ready" && session.kind === "couple") {
+  if (session.status === "ready" && !session.deliveryHoldReason && session.kind === "couple") {
     void recordGalleryEvent({
       sessionId: session.id,
       venueId: session.venueId,
@@ -851,7 +867,7 @@ router.get("/sessions/by-token/:shareToken", async (req, res): Promise<void> => 
         .orderBy(venueMediaTable.displayOrder)
     : [];
 
-  const generatedAssets = canExposeGeneratedAssetsToSharePage(session.status)
+  const generatedAssets = canExposeGeneratedAssetsToSharePage(session.status, session.deliveryHoldReason)
     ? await db
         .select()
         .from(generatedAssetsTable)
@@ -1022,6 +1038,13 @@ router.post("/sessions/:id/send-email", async (req, res): Promise<void> => {
     res.status(502).json({ error: `Email not sent: ${result.reason}` });
     return;
   }
+  if (session.deliveryHoldReason) {
+    // The owner reviewed and sent it: the share link may show it now.
+    await db
+      .update(coupleSessionsTable)
+      .set({ deliveryHoldReason: null })
+      .where(eq(coupleSessionsTable.id, session.id));
+  }
   if (session.kind === "couple") {
     void recordGalleryEvent({ sessionId: session.id, venueId: session.venueId, eventType: "sent", source: "dashboard" });
   }
@@ -1047,6 +1070,11 @@ router.post("/sessions/by-token/:shareToken/send-email", async (req, res): Promi
 
   if (session.status !== "ready" || !(await hasReadyEmailGalleryBundle(session.id))) {
     res.status(409).json({ error: "This gallery is not ready to email yet." });
+    return;
+  }
+  if (session.deliveryHoldReason) {
+    // The venue reviews it first; only the owner's send releases it.
+    res.status(409).json({ error: "The venue is taking a quick look first. It will be sent to you soon.", code: "delivery_held" });
     return;
   }
 

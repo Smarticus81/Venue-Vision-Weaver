@@ -208,6 +208,12 @@ function sampleDeps(overrides: Partial<import("../lib/venueSetup.js").SampleGall
       calls.push("countSamples");
       return { inFlight: 0, nonFailed: 0 };
     },
+    async canSpend() {
+      return { ok: true as const };
+    },
+    async countOrgSampleStarts() {
+      return 0;
+    },
     async preparePhotos() {
       calls.push("preparePhotos");
       return { ok: true, objectKeys: ["/objects/uploads/a", "/objects/uploads/b"] };
@@ -272,6 +278,24 @@ test("sample gallery inserts once photos are copied, and discards them when the 
   const refused = await setup.startSampleGallery(raced.deps, 3);
   assert.equal(refused.ok, false);
   assert.ok(raced.calls.includes("discard:2"));
+});
+
+test("a sample needs a fundable account and counts against a lifetime per-organization allowance", async () => {
+  const expired = sampleDeps({ canSpend: async () => ({ ok: false, reason: "trial_expired" }) });
+  const a = await setup.startSampleGallery(expired.deps, 3);
+  assert.deepEqual(a.ok ? null : [a.status, a.code], [402, "trial_expired"]);
+  assert.ok(!expired.calls.includes("preparePhotos"), "no provider spend without a fundable account");
+
+  const broke = sampleDeps({ canSpend: async () => ({ ok: false, reason: "insufficient_credits" }) });
+  const b = await setup.startSampleGallery(broke.deps, 3);
+  assert.deepEqual(b.ok ? null : [b.status, b.code], [402, "insufficient_credits"]);
+
+  // Deleting a sample or failing one never frees a slot: starts are counted
+  // from a persistent log, not from live non-failed rows.
+  const used = sampleDeps({ countOrgSampleStarts: async () => setup.MAX_SAMPLE_STARTS_PER_ORG });
+  const c = await setup.startSampleGallery(used.deps, 3);
+  assert.deepEqual(c.ok ? null : [c.status, c.code], [409, "sample_org_limit"]);
+  assert.ok(!used.calls.includes("preparePhotos"));
 });
 
 /* ————— Owner quality summary ————— */

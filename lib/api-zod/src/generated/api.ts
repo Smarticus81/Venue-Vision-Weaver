@@ -794,6 +794,12 @@ export const GetSessionResponse = zod
           ),
       }),
     ),
+    deliveryHeld: zod
+      .boolean()
+      .optional()
+      .describe(
+        "True while a ready gallery waits for the venue's review (review before send, or a frame the quality check could not judge). The share link serves no assets until the owner sends it.",
+      ),
   })
   .describe(
     "Public\/couple-facing session view. Intentionally omits PII like coupleEmail.",
@@ -1003,6 +1009,12 @@ export const GetSessionByTokenResponse = zod
           ),
       }),
     ),
+    deliveryHeld: zod
+      .boolean()
+      .optional()
+      .describe(
+        "True while a ready gallery waits for the venue's review (review before send, or a frame the quality check could not judge). The share link serves no assets until the owner sends it.",
+      ),
   })
   .describe(
     "Public\/couple-facing session view. Intentionally omits PII like coupleEmail.",

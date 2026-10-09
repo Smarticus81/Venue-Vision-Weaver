@@ -40,6 +40,11 @@ RUN pnpm run build
 # are already bundled into dist, but pnpm still links them; they are small).
 RUN pnpm --filter @workspace/api-server deploy --prod --legacy /out/api-server
 
+# Demo couple photos for "Render a sample" (docs/production-readiness.md step
+# 12). The directory always exists so the runtime COPY below never fails;
+# without photos in it the route still answers 409 demo_not_configured.
+RUN mkdir -p /app/lib/brand/assets/demo-couple
+
 # ---------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runtime
 
@@ -60,6 +65,8 @@ COPY --from=builder --chown=node:node /out/api-server/package.json ./artifacts/a
 COPY --from=builder --chown=node:node /out/api-server/node_modules ./artifacts/api-server/node_modules
 COPY --from=builder --chown=node:node /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder --chown=node:node /app/artifacts/wedding-app/dist/public ./artifacts/wedding-app/dist/public
+# Found by lib/sampleGallery.ts at <cwd>/lib/brand/assets/demo-couple (or DEMO_COUPLE_DIR).
+COPY --from=builder --chown=node:node /app/lib/brand/assets/demo-couple ./lib/brand/assets/demo-couple
 
 USER node
 

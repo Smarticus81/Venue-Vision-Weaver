@@ -227,6 +227,20 @@ test("score: verdict thresholds, composite fresh-domain rule, error routing", ()
   assert.equal(computeLegitimacy([check("site_reachable", 0, { outcome: "error" }), check("mx_present", 70)], POLICY).status, "error");
   const threeErrors = ["domain_age", "site_history", "tls"].map((key) => check(key, 0, { outcome: "error" }));
   assert.equal(computeLegitimacy([...threeErrors, check("mx_present", 70)], POLICY).status, "error");
+  // A site behind a bot wall or down: site-derived checks score 0, so the
+  // low score is an outage, not a verdict (never "failed" without a hard fail).
+  assert.equal(
+    computeLegitimacy([check("site_reachable", 0, { outcome: "error" }), check("domain_age", 15), check("mx_present", 21)], POLICY).status,
+    "error",
+  );
+  assert.equal(
+    computeLegitimacy(
+      [check("site_reachable", 0, { outcome: "error" }), check("site_not_parked", 0, { outcome: "fail", hardFail: true })],
+      POLICY,
+    ).status,
+    "failed",
+    "a real hard fail still wins over an outage",
+  );
 
   const passed = computeLegitimacy(
     [check("mx_present", 10, { data: { mxProvider: "google_workspace", freeMail: false } }), check("domain_age", 68)],

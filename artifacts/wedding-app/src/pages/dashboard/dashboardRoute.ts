@@ -40,7 +40,11 @@ export interface DashboardLocation {
   welcome: boolean;
   importRequested: boolean;
   billing: "success" | "cancel" | null;
+  /** ?venue=<slug>: links in owner emails (/dashboard/<slug>) open that venue. */
+  venue: string | null;
 }
+
+const VENUE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,80}$/;
 
 export function parseDashboardLocation(search: string, hash: string): DashboardLocation {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -49,13 +53,21 @@ export function parseDashboardLocation(search: string, hash: string): DashboardL
   const welcome = params.get("welcome") === "1";
   const importRequested = params.get("import") === "1";
   const tab = tabFromHash(hash) ?? (billing ? "billing" : welcome ? "photos" : null);
-  return { tab, welcome, importRequested, billing };
+  const venueRaw = params.get("venue")?.trim().toLowerCase() ?? "";
+  const venue = VENUE_SLUG_PATTERN.test(venueRaw) ? venueRaw : null;
+  return { tab, welcome, importRequested, billing, venue };
+}
+
+/** /dashboard/<slug> (owner email links) -> /dashboard?venue=<slug>, keeping the slug. */
+export function dashboardPathForVenue(slug: string | null | undefined): string {
+  const clean = slug?.trim().toLowerCase() ?? "";
+  return VENUE_SLUG_PATTERN.test(clean) ? `/dashboard?venue=${encodeURIComponent(clean)}` : "/dashboard";
 }
 
 /** Strips the one-shot flags so a reload does not replay them. */
 export function cleanedSearch(search: string): string {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-  for (const key of ["billing", "welcome", "import"]) params.delete(key);
+  for (const key of ["billing", "welcome", "import", "venue"]) params.delete(key);
   const out = params.toString();
   return out ? `?${out}` : "";
 }

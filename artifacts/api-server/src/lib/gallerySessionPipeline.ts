@@ -7,7 +7,7 @@ import {
   venuesTable,
   type CoupleSession,
 } from "@workspace/db";
-import { and, asc, eq, lt, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, lt, notInArray, sql } from "drizzle-orm";
 import { refundCreditsForSession } from "./credits.js";
 import {
   GallerySceneFailureError,
@@ -202,8 +202,9 @@ export async function failSession(
     }
   }
   if (!failedRow) {
-    // Someone else (the deadline or the reaper) already finished it,
-    // or the forced update ran: refund is idempotent, so still try it.
+    // Someone else (the deadline or the reaper) already finished it, the
+    // forced update ran, or the session turned ready. The refund is
+    // idempotent and only lands on a failed session, so still try it.
     try {
       await deps.refund(session.id);
     } catch (refundErr) {
@@ -527,6 +528,7 @@ export async function processSession(sessionId: number, options: ProcessSessionO
       venueBuffers,
       venueName: venue.name,
       existingFrames,
+      reviewBeforeSend: venue.reviewBeforeSend,
       signal,
       uploadBuffer: uploadBufferToStorage,
       deleteObject: (objectKey) => storage().deleteObjectEntity(objectKey),
@@ -571,7 +573,50 @@ export async function reapStaleSessions(cutoff: Date, excludeIds: number[], err:
   for (const row of stale) {
     if (await failSession(row, err)) reaped.push(row.id);
   }
+  await reconcileFailedRefunds().catch((reconcileErr) =>
+    logger.error({ err: reconcileErr }, "Failed-session refund reconciliation threw"),
+  );
   return reaped;
+}
+
+export interface RefundReconcileDeps {
+  /** Failed sessions that still hold a charge (a refund threw earlier). */
+  listFailedCharged(limit: number): Promise<number[]>;
+  refund(sessionId: number): Promise<boolean>;
+}
+
+const dbRefundReconcileDeps: RefundReconcileDeps = {
+  async listFailedCharged(limit) {
+    const rows = await db
+      .select({ id: coupleSessionsTable.id })
+      .from(coupleSessionsTable)
+      .where(and(eq(coupleSessionsTable.status, "failed"), gt(coupleSessionsTable.creditsCharged, 0)))
+      .orderBy(asc(coupleSessionsTable.id))
+      .limit(limit);
+    return rows.map((row) => row.id);
+  },
+  refund: (sessionId) => refundCreditsForSession(sessionId),
+};
+
+/**
+ * Retry refunds that threw inside failSession: every failed session that
+ * still carries a charge is refunded. Idempotent, because the refund is
+ * guarded on status=failed and on the charge it read. Returns the ids refunded.
+ */
+export async function reconcileFailedRefunds(
+  deps: RefundReconcileDeps = dbRefundReconcileDeps,
+  limit = 50,
+): Promise<number[]> {
+  const refunded: number[] = [];
+  for (const id of await deps.listFailedCharged(limit)) {
+    try {
+      if (await deps.refund(id)) refunded.push(id);
+    } catch (refundErr) {
+      logger.error({ err: refundErr, sessionId: id }, "Reconciliation refund threw; will retry");
+    }
+  }
+  if (refunded.length > 0) logger.warn({ ids: refunded }, "Refunded failed sessions whose earlier refund did not land");
+  return refunded;
 }
 
 /** Pending session ids, oldest first. */

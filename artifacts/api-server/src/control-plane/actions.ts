@@ -12,12 +12,12 @@ import {
   type AgentAction,
   type ActionRiskLevel,
 } from "@workspace/db";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { grantCreditsToOrg } from "../lib/credits.js";
 import { sendRawEmail } from "../lib/emailService.js";
 import { logger } from "../lib/logger.js";
 import { recordAuditEvent } from "./audit.js";
-import { executedTodayCount, startOfUtcDay } from "./actionCounts.js";
+import { startOfUtcDay } from "./actionCounts.js";
 import { getAgentDefinition } from "./agents.js";
 import { growthActions } from "./growth/actions.js";
 import { getPolicyBoolean, getPolicyNumber, setPolicy, validatePolicyUpdate } from "./policies.js";
@@ -39,7 +39,8 @@ export interface ActionDefinition {
   riskLevel: ActionRiskLevel;
   description: string;
   paramsSchema: z.ZodType<Record<string, unknown>>;
-  execute: (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** ctx.actionId is the row being executed (already claimed as "executing"). */
+  execute: (params: Record<string, unknown>, ctx?: { actionId: number }) => Promise<Record<string, unknown>>;
   /** Retired types stay in the catalog so historical rows render; proposing or approving them is refused. */
   retired?: boolean;
   /** Low-risk actions may still demand approval (e.g. until a policy flag is flipped). */
@@ -139,6 +140,29 @@ const sendOutreachEmailSchema = z
 export const SEND_PROSPECT_EMAIL_RETIRED =
   "send_prospect_email is retired: prospects are emailed only through the outreach studio (draft_outreach_email → send_outreach_email). Reject this action and draft through the studio.";
 
+/**
+ * send_venue_email rows that count toward today's cap: executed today, and
+ * executing (claimed today) with a lower id than the caller, so the earlier
+ * claim wins and later ones see it while it is still in flight.
+ */
+export function venueEmailCapWhere(selfActionId: number | null, since: Date = startOfUtcDay()) {
+  return and(
+    eq(agentActionsTable.actionType, "send_venue_email"),
+    gte(agentActionsTable.executedAt, since),
+    selfActionId == null
+      ? sql`${agentActionsTable.status} in ('executed', 'executing')`
+      : sql`(${agentActionsTable.status} = 'executed' or (${agentActionsTable.status} = 'executing' and ${agentActionsTable.id} < ${selfActionId}))`,
+  );
+}
+
+async function venueEmailsCountedToday(selfActionId: number | null): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(agentActionsTable)
+    .where(venueEmailCapWhere(selfActionId));
+  return row?.total ?? 0;
+}
+
 const CORE_ACTIONS: Record<string, ActionDefinition> = {
   send_venue_email: {
     type: "send_venue_email",
@@ -146,10 +170,12 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
     description:
       "Send an operational/outreach email to a venue owner (activation nudge, low-credit reminder, support follow-up).",
     paramsSchema: sendVenueEmailSchema as z.ZodType<Record<string, unknown>>,
-    async execute(rawParams) {
+    async execute(rawParams, ctx) {
       const params = sendVenueEmailSchema.parse(rawParams);
       const cap = await getPolicyNumber("max_outbound_emails_per_day", "emails", 25);
-      const sentToday = await executedTodayCount("send_venue_email");
+      // Completed sends plus sends already in flight that were claimed first
+      // (lower id): concurrent approvals cannot all pass on the same count.
+      const sentToday = await venueEmailsCountedToday(ctx?.actionId ?? null);
       if (sentToday >= cap) {
         throw new Error(`Daily outbound email cap reached (${sentToday}/${cap}).`);
       }
@@ -376,11 +402,15 @@ const CORE_ACTIONS: Record<string, ActionDefinition> = {
             and(
               eq(coupleSessionsTable.id, params.sessionId),
               eq(coupleSessionsTable.status, "failed"),
+              // Past retention the couple's photos are gone; there is nothing to rerun.
+              isNull(coupleSessionsTable.sourcePhotosDeletedAt),
             ),
           )
           .returning({ id: coupleSessionsTable.id, venueId: coupleSessionsTable.venueId });
         if (!updated) {
-          throw new Error(`Session ${params.sessionId} is not in a failed state (or does not exist).`);
+          throw new Error(
+            `Session ${params.sessionId} is not in a failed state, its photos were deleted after the retention window, or it does not exist.`,
+          );
         }
         const [venue] = await tx
           .select({ organizationId: venuesTable.organizationId })
@@ -566,7 +596,9 @@ export async function proposeAction(input: {
 export async function executeAction(actionId: number, executor: string): Promise<AgentAction> {
   const [claimed] = await db
     .update(agentActionsTable)
-    .set({ status: "executing" })
+    // executedAt marks when execution started until the outcome overwrites
+    // it; the stale-executing sweep measures from it.
+    .set({ status: "executing", executedAt: new Date() })
     .where(and(eq(agentActionsTable.id, actionId), eq(agentActionsTable.status, "approved")))
     .returning();
   if (!claimed) {
@@ -591,7 +623,7 @@ export async function executeAction(actionId: number, executor: string): Promise
   }
 
   try {
-    const result = await definition.execute(action.params);
+    const result = await definition.execute(action.params, { actionId });
     const [updated] = await db
       .update(agentActionsTable)
       .set({ status: "executed", executedAt: new Date(), result, error: null })
@@ -646,8 +678,17 @@ export async function executeAction(actionId: number, executor: string): Promise
 /**
  * Rows left in "executing" by a crashed process are never re-run (the side
  * effect may have happened); they are failed with an explanation so an
- * operator can check and re-propose. The scheduler may call this on boot.
+ * operator can check and re-propose. Age is measured from when execution
+ * started (executedAt, stamped at claim), so the scheduler runs this on
+ * every tick: a quick restart no longer leaves a row stuck forever.
  */
+export function staleExecutingWhere(cutoff: Date) {
+  return and(
+    eq(agentActionsTable.status, "executing"),
+    sql`coalesce(${agentActionsTable.executedAt}, ${agentActionsTable.decidedAt}, ${agentActionsTable.createdAt}) < ${cutoff}`,
+  );
+}
+
 export async function recoverStaleExecutingActions(olderThanMinutes = 15, now: Date = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - olderThanMinutes * 60_000);
   const stale = await db
@@ -657,12 +698,7 @@ export async function recoverStaleExecutingActions(olderThanMinutes = 15, now: D
       executedAt: now,
       error: "Execution was interrupted (server restart); the outcome is unknown. Check the target before re-proposing.",
     })
-    .where(
-      and(
-        eq(agentActionsTable.status, "executing"),
-        sql`coalesce(${agentActionsTable.decidedAt}, ${agentActionsTable.createdAt}) < ${cutoff}`,
-      ),
-    )
+    .where(staleExecutingWhere(cutoff))
     .returning({ id: agentActionsTable.id });
   for (const row of stale) {
     await recordAuditEvent({

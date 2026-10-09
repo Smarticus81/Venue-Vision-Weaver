@@ -52,3 +52,17 @@ export function normalizeWebsiteInput(value: string): string | null {
     return null;
   }
 }
+
+/**
+ * Slug for a venue name. A name with no Latin letters or digits
+ * ("Κτήμα Λίμνη", "森の家") still gets a valid slug ("venue-k3x9q2") instead
+ * of being refused as missing; the server keeps it unique.
+ */
+export function venueSlugOrFallback(name: string, random: () => number = Math.random): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  const slug = toVenueSlug(trimmed);
+  if (slug) return slug;
+  const suffix = Array.from({ length: 6 }, () => "abcdefghijkmnpqrstuvwxyz23456789"[Math.floor(random() * 32) % 32]).join("");
+  return `venue-${suffix}`;
+}

@@ -6,6 +6,7 @@ import { previousGrowthSnapshot } from "../metrics.js";
 import {
   baseDailyCap,
   computeEffectiveCap,
+  computeSendingHealthSince,
   effectiveDailyCap,
   loadGuard,
   pauseGuard,
@@ -15,7 +16,7 @@ import {
 import { getPolicy, getPolicyNumber, setPolicy } from "../policies.js";
 import { normalizeSegmentGuidance, type SegmentGuidance, type SegmentGuidanceEntry } from "./adaptationTypes.js";
 import { growthLoopEnabled, guardMinSends, segmentMinSent, variantMinSent } from "./config.js";
-import { DAY_MS, DELIVERABILITY_THRESHOLDS } from "./kpiMath.js";
+import { DAY_MS, DELIVERABILITY_THRESHOLDS, rate } from "./kpiMath.js";
 import type { GrowthKpis, SegmentStat } from "./kpiTypes.js";
 import { listVariants, normalizeControlShare } from "./variants.js";
 
@@ -33,8 +34,19 @@ export const VARIANT_PAUSE_MIN_DELIVERED = 20;
 export const STEP_CAP_MIN_SENT = 20;
 export const RESTORE_OK_DAYS = 7;
 
+/** Deliverability counts rule R1 judges (the 14-day window, or sends since an operator reset). */
+export interface GuardWindow {
+  sent: number;
+  bounced: number;
+  complained: number;
+  bounceRate: number | null;
+  complaintRate: number | null;
+}
+
 export interface AdaptationInput {
   kpis: GrowthKpis;
+  /** Overrides kpis.deliverability.window14d for R1 (sends since the guard's last operator reset). */
+  guardWindow?: GuardWindow | null;
   guard: GuardState;
   baseCap: number;
   effectiveCap: number;
@@ -82,14 +94,15 @@ function pct(value: number | null, digits = 2): string {
 
 export function deriveGuardChange(input: AdaptationInput): Extract<AdaptationChange, { ruleKey: "deliverability_guard" }> | null {
   const { guard, baseCap, effectiveCap, now, cfg } = input;
-  const window = input.kpis.deliverability.window14d;
+  const window = input.guardWindow ?? input.kpis.deliverability.window14d;
+  const resetAt = guard.resetAt ?? null;
   if (guard.status === "paused") return null; // never touches a paused guard; operator reset only
   if (window.sent < cfg.minSendsForGuard) return null;
   const bounce = window.bounceRate ?? 0;
   const complaint = window.complaintRate ?? 0;
   const nowIso = now.toISOString();
   const before: GuardWithCap = { ...guard, cap: effectiveCap };
-  const stats = `bounce ${pct(window.bounceRate)} (${window.bounced}/${window.sent}), complaints ${pct(window.complaintRate, 3)} (${window.complained}/${window.sent}) over 14 days`;
+  const stats = `bounce ${pct(window.bounceRate)} (${window.bounced}/${window.sent}), complaints ${pct(window.complaintRate, 3)} (${window.complained}/${window.sent}) ${input.guardWindow ? "since the operator reset" : "over 14 days"}`;
 
   if (bounce >= DELIVERABILITY_THRESHOLDS.pause.bounce || complaint >= DELIVERABILITY_THRESHOLDS.pause.complaint) {
     const reason = `paused by rule R1: ${stats}`;
@@ -99,7 +112,7 @@ export function deriveGuardChange(input: AdaptationInput): Extract<AdaptationCha
     const cap = computeEffectiveCap({ status: "throttled" }, baseCap);
     if (guard.status === "throttled" && effectiveCap === cap && guard.okDays === 0) return null;
     const reason = `throttled by rule R1: ${stats}; cap ${cap} of base ${baseCap}`;
-    return { ruleKey: "deliverability_guard", action: "throttle", before, after: { status: "throttled", since: nowIso, reason, okDays: 0, cap }, reason };
+    return { ruleKey: "deliverability_guard", action: "throttle", before, after: { status: "throttled", since: nowIso, reason, okDays: 0, cap, resetAt }, reason };
   }
   if (bounce >= DELIVERABILITY_THRESHOLDS.warn.bounce || window.complained > 0) {
     if (guard.status === "warn" && guard.okDays === 0) return null;
@@ -107,21 +120,21 @@ export function deriveGuardChange(input: AdaptationInput): Extract<AdaptationCha
     // A warn never raises a throttled cap: keep the stricter of the two.
     const cap = guard.status === "throttled" ? effectiveCap : Math.min(effectiveCap, baseCap);
     const status = guard.status === "throttled" ? "throttled" : "warn";
-    return { ruleKey: "deliverability_guard", action: "warn", before, after: { status, since: nowIso, reason, okDays: 0, cap }, reason };
+    return { ruleKey: "deliverability_guard", action: "warn", before, after: { status, since: nowIso, reason, okDays: 0, cap, resetAt }, reason };
   }
   // Clean window.
   if ((guard.status === "throttled" || guard.status === "warn") && bounce < DELIVERABILITY_THRESHOLDS.restore.bounce && complaint < DELIVERABILITY_THRESHOLDS.restore.complaint) {
     const okDays = Math.round((guard.okDays + Math.max(0, cfg.hoursSinceLastRun) / 24) * 100) / 100;
     if (okDays >= RESTORE_OK_DAYS) {
       const reason = `restored by rule R1 after ${okDays.toFixed(1)} clean days: ${stats}; cap back to base ${baseCap}`;
-      return { ruleKey: "deliverability_guard", action: "restore", before, after: { status: "ok", since: nowIso, reason: null, okDays: 0, cap: baseCap }, reason };
+      return { ruleKey: "deliverability_guard", action: "restore", before, after: { status: "ok", since: nowIso, reason: null, okDays: 0, cap: baseCap, resetAt }, reason };
     }
     const reason = `clean window (${stats}); ${okDays.toFixed(1)} of ${RESTORE_OK_DAYS} days toward restore`;
     return {
       ruleKey: "deliverability_guard",
       action: "clear",
       before,
-      after: { status: guard.status, since: guard.since ?? nowIso, reason: guard.reason, okDays, cap: effectiveCap },
+      after: { status: guard.status, since: guard.since ?? nowIso, reason: guard.reason, okDays, cap: effectiveCap, resetAt },
       reason,
       quiet: Math.floor(okDays) === Math.floor(guard.okDays),
     };
@@ -191,7 +204,6 @@ export function deriveVariantChanges(input: AdaptationInput): Array<Extract<Adap
     if (!stat || stat.sent < minSent) continue;
     variant.weight = stat.smoothedPositiveReplyRate;
   }
-
   // Pause: a non-control variant far below the best measured variant.
   const measured = working
     .filter((v) => v.active && (stats.get(v.key)?.sent ?? 0) >= minSent)
@@ -219,6 +231,26 @@ export function deriveVariantChanges(input: AdaptationInput): Array<Extract<Adap
     }
   }
 
+  // Keep every active arm on one scale: once some arms carry a smoothed
+  // reply rate (~0.05-0.1), a still-unmeasured arm left at its seeded weight
+  // (0.2-0.4) would out-draw the best measured one. Unmeasured arms take the
+  // mean of the measured arms until they reach minSent themselves.
+  const unmeasuredReasons = new Map<string, string>();
+  const measuredRates = working
+    .filter((v) => v.active && (stats.get(v.key)?.sent ?? 0) >= minSent)
+    .map((v) => stats.get(v.key)!.smoothedPositiveReplyRate);
+  if (measuredRates.length > 0) {
+    const mean = Math.round((measuredRates.reduce((sum, r) => sum + r, 0) / measuredRates.length) * 10_000) / 10_000;
+    for (const variant of working) {
+      if (!variant.active || (stats.get(variant.key)?.sent ?? 0) >= minSent) continue;
+      variant.weight = mean;
+      unmeasuredReasons.set(
+        variant.key,
+        `set by rule R3 to the mean smoothed positive-reply rate of the measured variants (${pct(mean)}) until it has ${minSent} sends`,
+      );
+    }
+  }
+
   const normalized = normalizeControlShare(working);
   const changes: Array<Extract<AdaptationChange, { ruleKey: "variant_weights" }>> = [];
   for (const after of normalized) {
@@ -235,6 +267,7 @@ export function deriveVariantChanges(input: AdaptationInput): Array<Extract<Adap
       after: { weight: after.weight, active: after.active },
       reason:
         pauseReasons.get(after.key) ??
+        unmeasuredReasons.get(after.key) ??
         `reweighted by rule R3 to smoothed positive-reply rate ${pct(stat?.smoothedPositiveReplyRate ?? null)} (${stat?.positiveReplied ?? 0}/${stat?.delivered ?? 0} delivered, ${stat?.sent ?? 0} sent; control keeps >= 20%)`,
     });
   }
@@ -366,19 +399,50 @@ export async function loadAdaptationState(): Promise<Pick<AdaptationInput, "guar
   return { guard, baseCap, effectiveCap, stepCap, variants, guidance: normalizeSegmentGuidance(guidanceRaw) };
 }
 
+/** R1 window after an operator reset (within 14 days): sends since the reset only. */
+export function guardWindowSinceReset(
+  guard: Pick<GuardState, "resetAt">,
+  now: Date,
+): Date | null {
+  if (!guard.resetAt) return null;
+  const resetAt = new Date(guard.resetAt);
+  if (Number.isNaN(resetAt.getTime())) return null;
+  return now.getTime() - resetAt.getTime() < 14 * DAY_MS ? resetAt : null;
+}
+
 /** Load state, derive, apply, audit. Skipped entirely when GROWTH_LOOP_ENABLED=off. */
-export async function runAdaptationRules(kpis: GrowthKpis, snapshotId: number, now = new Date()): Promise<AdaptationChange[]> {
+export async function runAdaptationRules(
+  kpis: GrowthKpis,
+  snapshotId: number,
+  now = new Date(),
+  options: { hoursSinceLastRun?: number } = {},
+): Promise<AdaptationChange[]> {
   if (!growthLoopEnabled()) return [];
   const state = await loadAdaptationState();
-  let hoursSinceLastRun = Number(process.env.CONTROL_PLANE_SNAPSHOT_MINUTES ?? "360") / 60;
-  try {
-    const previous = await previousGrowthSnapshot(snapshotId);
-    if (previous) hoursSinceLastRun = Math.max(0, (now.getTime() - previous.createdAt.getTime()) / 3_600_000);
-  } catch (err) {
-    logger.warn({ err }, "Could not read the previous snapshot; using the configured cadence for okDays");
+  let hoursSinceLastRun = options.hoursSinceLastRun ?? Number(process.env.CONTROL_PLANE_SNAPSHOT_MINUTES ?? "360") / 60;
+  if (options.hoursSinceLastRun == null) {
+    try {
+      const previous = await previousGrowthSnapshot(snapshotId);
+      if (previous) hoursSinceLastRun = Math.max(0, (now.getTime() - previous.createdAt.getTime()) / 3_600_000);
+    } catch (err) {
+      logger.warn({ err }, "Could not read the previous snapshot; using the configured cadence for okDays");
+    }
+  }
+  let guardWindow: GuardWindow | null = null;
+  const resetSince = guardWindowSinceReset(state.guard, now);
+  if (resetSince) {
+    const health = await computeSendingHealthSince(resetSince);
+    guardWindow = {
+      sent: health.sent,
+      bounced: health.bounced,
+      complained: health.complained,
+      bounceRate: rate(health.bounced, health.sent),
+      complaintRate: rate(health.complained, health.sent),
+    };
   }
   const changes = deriveAdaptations({
     kpis,
+    guardWindow,
     ...state,
     now,
     cfg: { minSendsForGuard: guardMinSends(), segmentMinSent: segmentMinSent(), variantMinSent: variantMinSent(), hoursSinceLastRun },

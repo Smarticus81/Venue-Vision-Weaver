@@ -218,6 +218,16 @@ test("production requires Clerk keys and the operator allowlist", () => {
   });
   assert.ok(badOperators.some((error) => error.includes("invalid: not-an-email")));
 
+  // The deploy template's defaults must not pass as real configuration.
+  const templateDefaults = envValidation.validateProductionEnvironment({
+    ...productionEnv,
+    CONTROL_PLANE_OPERATOR_EMAILS: "founder@yourdomain.com",
+    EMAIL_FROM: "Dreemer <noreply@yourdomain.com>",
+  });
+  assert.ok(templateDefaults.some((error) => error.startsWith("CONTROL_PLANE_OPERATOR_EMAILS still holds a placeholder")));
+  assert.ok(templateDefaults.some((error) => error.startsWith("EMAIL_FROM still holds a placeholder")));
+  assert.equal(envValidation.isPlaceholderEmail("ops@yourvenue.com"), false, "a real domain that starts with 'your' is fine");
+
   // VITE_CLERK_PUBLISHABLE_KEY alone satisfies the publishable-key requirement.
   assert.deepEqual(
     envValidation.validateProductionEnvironment({
@@ -431,6 +441,20 @@ test("gallery Open Graph tags are absolute and replace the shell's defaults inst
   assert.ok(html.includes('<link rel="icon" href="/favicon.ico" />'));
 });
 
+test("couple names containing $-patterns are inserted literally, never expanded by String.replace", () => {
+  const tags = shell.galleryOpenGraphTags({
+    title: "A $' B $` C $& D at Ivy Hall",
+    description: "x",
+    pageUrl: "https://dreemer.example.com/v/abc",
+    imageUrl: "https://dreemer.example.com/og.png",
+  });
+  const html = shell.renderShellHtml({ html: shellHtml, replaceMetaWith: tags, noscript: "<p>$' and $`</p>" });
+  assert.ok(html.includes("A $&#39; B $` C $&amp; D at Ivy Hall") || html.includes("A $' B $` C $& D"));
+  assert.equal((html.match(/<head>/g) ?? []).length, 1, "no copy of the document spliced in");
+  assert.equal((html.match(/<body>/g) ?? []).length, (shellHtml.match(/<body>/g) ?? []).length);
+  assert.ok(html.includes("<p>$' and $`</p>"));
+});
+
 test("shell default preview images become absolute when no page-specific meta replaces them", () => {
   const html = shell.renderShellHtml({ html: shellHtml, assetBaseUrl: "https://dreemer.example.com/" });
   assert.ok(html.includes('<meta property="og:image" content="https://dreemer.example.com/og-image.png" />'));
@@ -632,4 +656,59 @@ test("upload-intent knobs clamp to safe ranges", () => {
   assert.equal(cleanupConfig.uploadIntentVenueDailyCap({ UPLOAD_INTENT_VENUE_DAILY_CAP: "999999" } as NodeJS.ProcessEnv), 5000);
   assert.equal(cleanupConfig.uploadIntentCoupleHourlyCap({ UPLOAD_INTENT_COUPLE_HOURLY_CAP: "abc" } as NodeJS.ProcessEnv), 60);
   assert.equal(cleanupConfig.uploadIntentCleanupBatchSize({ UPLOAD_INTENT_CLEANUP_BATCH_SIZE: "2" } as NodeJS.ProcessEnv), 10);
+});
+
+test("the operator allowlist is only ever matched against a verified Clerk address", () => {
+  const verified = { status: "verified" };
+  const unverified = { status: "unverified" };
+  // Phone/username sign-up (no primary email) that added the operator's
+  // address to its own profile without verifying it.
+  assert.equal(
+    operatorAuth.operatorEmailFromClerkUser({
+      primaryEmailAddressId: null,
+      emailAddresses: [{ id: "e1", emailAddress: "ops@example.com", verification: unverified }],
+    }),
+    null,
+  );
+  assert.equal(
+    operatorAuth.operatorEmailFromClerkUser({
+      primaryEmailAddressId: "e1",
+      emailAddresses: [
+        { id: "e1", emailAddress: "ops@example.com", verification: unverified },
+        { id: "e2", emailAddress: "Me@Venue.com", verification: verified },
+      ],
+    }),
+    "me@venue.com",
+  );
+  assert.equal(
+    operatorAuth.operatorEmailFromClerkUser({
+      primaryEmailAddressId: "e2",
+      emailAddresses: [
+        { id: "e1", emailAddress: "other@venue.com", verification: verified },
+        { id: "e2", emailAddress: "ops@example.com", verification: verified },
+      ],
+    }),
+    "ops@example.com",
+  );
+});
+
+test("bootstrap.sql can pass readiness before the owner_* drop, and dedupes trial grantees before the unique index", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const bootstrap = await readFile(new URL("../../../../supabase/bootstrap.sql", import.meta.url), "utf8");
+  for (const table of ["owner_sessions", "owner_login_tokens", "owner_credentials"]) {
+    assert.match(bootstrap, new RegExp(`ALTER TABLE IF EXISTS ${table} ENABLE ROW LEVEL SECURITY;`));
+  }
+  const dedupe = bootstrap.indexOf("SET trial_granted_by_clerk_user_id = NULL");
+  const index = bootstrap.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS organizations_trial_grantee_unique");
+  assert.ok(dedupe > 0 && index > dedupe, "the dedupe runs before the unique index");
+  assert.match(bootstrap, /ADD COLUMN IF NOT EXISTS delivery_hold_reason TEXT/);
+});
+
+test("the runtime image carries the demo couple folder where sampleGallery looks for it", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const dockerfile = await readFile(new URL("../../../../Dockerfile", import.meta.url), "utf8");
+  const runtime = dockerfile.slice(dockerfile.indexOf("AS runtime"));
+  assert.match(runtime, /COPY --from=builder[^\n]*\/app\/lib\/brand\/assets\/demo-couple \.\/lib\/brand\/assets\/demo-couple/);
+  const { demoCoupleDirCandidates } = await import("./sampleGallery.js");
+  assert.ok(demoCoupleDirCandidates({}, "/app").includes("/app/lib/brand/assets/demo-couple"));
 });
