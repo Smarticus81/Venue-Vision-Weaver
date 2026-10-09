@@ -14,7 +14,15 @@ import { ActionButton, Card, EmptyState, Pill, TabLoading, apiErrorMessage, fmt 
 
 /* ————— Agents fleet ————— */
 
-export function AgentCard({ agent, aiConfigured }: { agent: ControlAgent; aiConfigured: boolean }) {
+export function AgentCard({
+  agent,
+  aiConfigured,
+  fleetPaused = false,
+}: {
+  agent: ControlAgent;
+  aiConfigured: boolean;
+  fleetPaused?: boolean;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const invalidate = () => {
@@ -53,7 +61,7 @@ export function AgentCard({ agent, aiConfigured }: { agent: ControlAgent; aiConf
           <p className="font-display text-lg text-foreground">{agent.name}</p>
           <p className="mono-label mt-0.5 text-muted-foreground">{agent.domain}</p>
         </div>
-        <Pill value={agent.status} />
+        <Pill value={fleetPaused ? "paused" : agent.status} />
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">{agent.description}</p>
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
@@ -62,7 +70,10 @@ export function AgentCard({ agent, aiConfigured }: { agent: ControlAgent; aiConf
             Last run {fmt(agent.lastRunAt)}
             {agent.lastRunStatus ? ` (${agent.lastRunStatus})` : ""}
           </p>
-          <p>Every {Math.round(agent.intervalMinutes / 60)}h</p>
+          <p>
+            Every {Math.round(agent.intervalMinutes / 60)}h
+            {fleetPaused && agent.status === "active" ? " · held by the kill switch" : ""}
+          </p>
         </div>
         <div className="flex items-center gap-1.5">
           <ActionButton
@@ -77,7 +88,8 @@ export function AgentCard({ agent, aiConfigured }: { agent: ControlAgent; aiConf
           </ActionButton>
           <ActionButton
             tone="primary"
-            disabled={runAgent.isPending || !aiConfigured}
+            disabled={runAgent.isPending || !aiConfigured || fleetPaused}
+            title={fleetPaused ? "All agents are paused by the kill switch" : undefined}
             onClick={() => runAgent.mutate({ key: agent.key })}
           >
             {runAgent.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
@@ -90,11 +102,19 @@ export function AgentCard({ agent, aiConfigured }: { agent: ControlAgent; aiConf
 }
 
 /* The fleet grid rendered inside the Overview tab (markup moved verbatim from ControlConsole). */
-export function AgentsTab({ agents, aiConfigured }: { agents: ControlAgent[]; aiConfigured: boolean }) {
+export function AgentsTab({
+  agents,
+  aiConfigured,
+  fleetPaused = false,
+}: {
+  agents: ControlAgent[];
+  aiConfigured: boolean;
+  fleetPaused?: boolean;
+}) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {agents.map((agent) => (
-        <AgentCard key={agent.key} agent={agent} aiConfigured={aiConfigured} />
+        <AgentCard key={agent.key} agent={agent} aiConfigured={aiConfigured} fleetPaused={fleetPaused} />
       ))}
     </div>
   );
