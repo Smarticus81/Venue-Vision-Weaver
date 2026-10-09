@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Mail, Check } from "lucide-react";
-import { requestRecoveryEmail } from "@/lib/savedSessions";
+import { requestRecoveryEmail } from "@/lib/recovery";
 import { FormLayout } from "@/components/layout/SiteChrome";
 export default function FindMyGalleryPage() {
   const [email, setEmail] = useState("");

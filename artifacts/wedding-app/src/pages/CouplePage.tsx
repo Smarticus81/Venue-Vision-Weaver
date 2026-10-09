@@ -17,7 +17,6 @@ import {
 } from "@workspace/api-client-react";
 import { useUpload } from "@workspace/object-storage-web";
 import { useToast } from "@/hooks/use-toast";
-import { useSavedSessions } from "@/lib/savedSessions";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -90,7 +89,6 @@ export default function CouplePage() {
     venueSlug: slug,
     uploadToken: venueQuery.data?.uploadToken,
   });
-  const { save: saveSession } = useSavedSessions(slug);
 
   const validatePhotoDimensions = (file: File): Promise<boolean> =>
     new Promise((resolve) => {
@@ -222,7 +220,6 @@ export default function CouplePage() {
         },
         {
           onSuccess: (session) => {
-            saveSession(session.shareToken, session.id, slug!);
             setLocation(`/v/${session.shareToken}`);
           },
           onError: (err: ErrorType<ErrorEnvelope>) => {
