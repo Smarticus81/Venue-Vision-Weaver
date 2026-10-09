@@ -1377,6 +1377,27 @@ try {
       `${label} documents the generated-output local quality floor`,
     );
   }
+  {
+    // Both env templates document the same keys (set or commented out), and
+    // every key production boot validation requires is in them.
+    const envKeys = (source: string) =>
+      [...source.matchAll(/^#? ?([A-Z][A-Z0-9_]+)=/gm)].map((match) => match[1]!).sort();
+    const exampleKeys = [...new Set(envKeys(envExample))];
+    const railwayKeys = [...new Set(envKeys(railwayEnvTemplate))];
+    assert.deepEqual(
+      exampleKeys.filter((key) => !railwayKeys.includes(key)),
+      [],
+      ".env.example keys missing from railway.env.template",
+    );
+    assert.deepEqual(
+      railwayKeys.filter((key) => !exampleKeys.includes(key)),
+      [],
+      "railway.env.template keys missing from .env.example",
+    );
+    for (const key of Object.keys(productionEnv).filter((key) => key !== "NODE_ENV")) {
+      assert.ok(exampleKeys.includes(key), `env templates document the production key ${key}`);
+    }
+  }
   assert.match(
     railwayEnvTemplate,
     /UPLOAD_TOKEN_SECRET=generate-a-second-long-random-string[\s\S]*SUPABASE_STORAGE_BUCKET=glimpse[\s\S]*SUPABASE_PUBLIC_BUCKET=glimpse-public/s,
