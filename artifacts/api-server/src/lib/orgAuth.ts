@@ -242,6 +242,17 @@ function toProvisioned(row: Organization): ProvisionedOrg {
   };
 }
 
+/** Postgres unique violation (23505) on the named constraint/index, unwrapping driver causes. */
+export function isUniqueViolation(err: unknown, constraint: string): boolean {
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    const candidate = current as { code?: unknown; constraint?: unknown; cause?: unknown };
+    if (candidate.code === "23505" && candidate.constraint === constraint) return true;
+    current = candidate.cause;
+  }
+  return false;
+}
+
 export function createDbProvisioningStore(): OrgProvisioningStore {
   return {
     async findByClerkOrgId(clerkOrgId) {
@@ -262,23 +273,32 @@ export function createDbProvisioningStore(): OrgProvisioningStore {
       return { org: toProvisioned(row), created: false };
     },
     async claimTrialGrant(orgId, clerkUserId, credits) {
-      const claimed = await db
-        .update(organizationsTable)
-        .set({
-          trialGrantedByClerkUserId: clerkUserId,
-          creditsBalance: sql`${organizationsTable.creditsBalance} + ${credits}`,
-        })
-        .where(
-          and(
-            eq(organizationsTable.id, orgId),
-            eq(organizationsTable.plan, "trial"),
-            isNull(organizationsTable.trialGrantedByClerkUserId),
-            eq(organizationsTable.creditsBalance, 0),
-            sql`not exists (select 1 from ${creditTransactionsTable} where ${creditTransactionsTable.organizationId} = ${orgId} and ${creditTransactionsTable.reason} = 'trial_grant')`,
-            sql`not exists (select 1 from ${organizationsTable} o2 where o2.trial_granted_by_clerk_user_id = ${clerkUserId})`,
-          ),
-        )
-        .returning({ id: organizationsTable.id });
+      let claimed: Array<{ id: number }>;
+      try {
+        claimed = await db
+          .update(organizationsTable)
+          .set({
+            trialGrantedByClerkUserId: clerkUserId,
+            creditsBalance: sql`${organizationsTable.creditsBalance} + ${credits}`,
+          })
+          .where(
+            and(
+              eq(organizationsTable.id, orgId),
+              eq(organizationsTable.plan, "trial"),
+              isNull(organizationsTable.trialGrantedByClerkUserId),
+              eq(organizationsTable.creditsBalance, 0),
+              sql`not exists (select 1 from ${creditTransactionsTable} where ${creditTransactionsTable.organizationId} = ${orgId} and ${creditTransactionsTable.reason} = 'trial_grant')`,
+              sql`not exists (select 1 from ${organizationsTable} o2 where o2.trial_granted_by_clerk_user_id = ${clerkUserId})`,
+            ),
+          )
+          .returning({ id: organizationsTable.id });
+      } catch (err) {
+        // organizations_trial_grantee_unique: a concurrent claim for the same
+        // Clerk user on another organization won. This one starts without
+        // the trial (the user already has it), never as a 500.
+        if (isUniqueViolation(err, "organizations_trial_grantee_unique")) return false;
+        throw err;
+      }
       return claimed.length > 0;
     },
     async insertTrialLedger(orgId, credits) {

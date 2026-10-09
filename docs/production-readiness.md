@@ -103,8 +103,10 @@ overhaul) and tick each one off.
    `ADD COLUMN IF NOT EXISTS`) or `pnpm --filter @workspace/db run push`. It
    adds the trial clock, `first_paid_at` / `churned_at` / attribution columns,
    `review_before_send`, incentive text, gallery and funnel events, render
-   telemetry, `stripe_events` / `billing_events`, and the vetting, facts, copy
-   variant, adaptation and digest tables. Nothing is dropped. `/api/readyz`
+   telemetry, `stripe_events` / `billing_events`, the vetting, facts, copy
+   variant, adaptation and digest tables, and the partial unique index
+   `organizations_trial_grantee_unique` (trial once per Clerk user). Nothing
+   is dropped. `/api/readyz`
    `database` must read `ok` afterwards.
 2. **Decide RLS.** Production tables were created with row-level security off.
    The server connects as the table owner and is not affected by RLS; RLS only

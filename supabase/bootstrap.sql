@@ -52,6 +52,11 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS attribution_campaign_id INTEGER,
   ADD COLUMN IF NOT EXISTS share_aggregates BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Trial once per Clerk user, even when two organizations are provisioned at once.
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_trial_grantee_unique
+  ON organizations (trial_granted_by_clerk_user_id)
+  WHERE trial_granted_by_clerk_user_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS venues (
   id SERIAL PRIMARY KEY,
   organization_id INTEGER REFERENCES organizations(id),

@@ -211,6 +211,12 @@ export const REQUIRED_DATABASE_INDEXES = [
     requiredFragments: ["unique", "clerk_org_id"],
   },
   {
+    table: "organizations",
+    name: "organizations_trial_grantee_unique",
+    label: "organizations.trial_granted_by_clerk_user_id.partial_unique",
+    requiredFragments: ["unique", "trial_granted_by_clerk_user_id", "where", "is not null"],
+  },
+  {
     table: "venues",
     label: "venues.slug.unique",
     requiredFragments: ["unique", "slug"],
