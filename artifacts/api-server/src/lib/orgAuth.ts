@@ -520,8 +520,18 @@ export async function getCallerOrgDbId(req: Request): Promise<number | null> {
 
 /**
  * Org-scoped replacement for the old requireOwnerVenue: resolves a venue by
- * slug and verifies it belongs to the caller's active organization. Applies
- * the same mutation-origin policy as before. Returns the org context too, for
+ * slug and verifies it belongs to the caller's active organization (see
+ * requireOrgVenueContext below for the checks).
+ */
+export async function requireOrgVenue(req: Request, res: Response, slug: string) {
+  const resolved = await requireOrgVenueContext(req, res, slug);
+  return resolved ? resolved.venue : null;
+}
+
+/**
+ * The venue check behind requireOrgVenue: applies the mutation-origin policy,
+ * requires a Clerk session with an active organization, and resolves the
+ * venue only inside that organization. Returns the org context too, for
  * routes that gate on the member's role or record who acted.
  */
 export async function requireOrgVenueContext(
@@ -545,9 +555,4 @@ export async function requireOrgVenueContext(
   }
 
   return { ctx, venue };
-}
-
-export async function requireOrgVenue(req: Request, res: Response, slug: string) {
-  const resolved = await requireOrgVenueContext(req, res, slug);
-  return resolved ? resolved.venue : null;
 }

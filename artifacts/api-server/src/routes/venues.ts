@@ -233,11 +233,11 @@ const sessionSummaryColumns = {
 
 type SessionSummarySource = NonNullable<Awaited<ReturnType<typeof loadSummaryRow>>>;
 
-async function toSessionSummary(row: SessionSummarySource, stats?: SessionGalleryStats) {
-  const { bookedBy: _bookedBy, ...summary } = row;
+async function toSessionSummary(session: SessionSummarySource, stats?: SessionGalleryStats) {
+  const { bookedBy: _bookedBy, ...summary } = session;
   return {
     ...summary,
-    thumbnailObjectKey: await readyGalleryThumbnailObjectKey(row.id, row.status),
+    thumbnailObjectKey: await readyGalleryThumbnailObjectKey(session.id, session.status),
     emailedAt: stats?.emailedAt ?? null,
     sharedCount: stats?.sharedCount ?? 0,
   };
