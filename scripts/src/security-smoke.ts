@@ -205,6 +205,10 @@ const venueResponseModule = (await import(
     contactPhone: string | null;
     websiteUrl: string | null;
     bookingUrl: string | null;
+    incentiveText: string | null;
+    tourCardDownloadedAt: Date | null;
+    websiteImportedAt: Date | null;
+    reviewBeforeSend: boolean;
     plan: string;
     creditsBalance: number;
     stripeCustomerId: string | null;
@@ -492,6 +496,7 @@ try {
     CLERK_SECRET_KEY: "sk_live_1234567890abcdef",
     CLERK_PUBLISHABLE_KEY: "pk_live_1234567890abcdef",
     CLERK_WEBHOOK_SIGNING_SECRET: "whsec_1234567890abcdef",
+    CONTROL_PLANE_OPERATOR_EMAILS: "ops@examplevenue.com,founder@examplevenue.com",
     STRIPE_SECRET_KEY: "sk_live_1234567890abcdef",
     STRIPE_WEBHOOK_SECRET: "whsec_1234567890abcdef",
     STRIPE_PRICE_STARTER_MONTHLY: "price_123starter",
@@ -524,10 +529,45 @@ try {
     CLERK_PUBLISHABLE_KEY: "",
     CLERK_WEBHOOK_SIGNING_SECRET: "",
   };
+  const clerklessErrors = validateProductionEnvironment(clerklessProductionEnv);
+  for (const expected of [
+    "CLERK_SECRET_KEY must be set",
+    "CLERK_WEBHOOK_SIGNING_SECRET must be set",
+    "CLERK_PUBLISHABLE_KEY (or VITE_CLERK_PUBLISHABLE_KEY) must be set",
+  ]) {
+    assert.ok(
+      clerklessErrors.includes(expected),
+      `production boot refuses to start without Clerk (owner sign-in and billing are Clerk-gated): ${expected}`,
+    );
+  }
+
+  assert.ok(
+    validateProductionEnvironment({ ...productionEnv, CONTROL_PLANE_OPERATOR_EMAILS: "" }).includes(
+      "CONTROL_PLANE_OPERATOR_EMAILS must be set",
+    ),
+    "production boot requires an explicit control-plane operator allowlist",
+  );
+  assert.ok(
+    validateProductionEnvironment({
+      ...productionEnv,
+      CONTROL_PLANE_OPERATOR_EMAILS: "ops@examplevenue.com,not-an-email",
+    }).some((error) => error.includes("CONTROL_PLANE_OPERATOR_EMAILS must be comma-separated email addresses")),
+    "operator allowlist entries must all be email addresses",
+  );
+  assert.ok(
+    validateProductionEnvironment({ ...productionEnv, XAI_API_KEY: "xai-live-key-123" }).includes(
+      "RESEND_WEBHOOK_SECRET must be set when XAI_API_KEY enables the control plane",
+    ),
+    "a live control plane (outreach can email real people) requires verifiable Resend webhooks",
+  );
   assert.deepEqual(
-    validateProductionEnvironment(clerklessProductionEnv),
+    validateProductionEnvironment({
+      ...productionEnv,
+      XAI_API_KEY: "xai-live-key-123",
+      RESEND_WEBHOOK_SECRET: "whsec_resendsecret123",
+    }),
     [],
-    "Clerk is optional at boot; owner/org routes degrade to 503 until configured",
+    "a live control plane with a Resend webhook secret passes startup validation",
   );
 
   const testKeyClerkEnv = {
@@ -950,8 +990,8 @@ try {
   );
   assert.match(
     storageRoute,
-    /requireOrgVenue\(req, res, venueSlug\)[\s\S]*verifyCoupleUploadToken\(uploadToken, venueSlug\)[\s\S]*db\.insert\(uploadIntentsTable\)\.values\({[\s\S]*objectKey: objectPath[\s\S]*venueId[\s\S]*purpose[\s\S]*contentType[\s\S]*sizeBytes: size[\s\S]*expiresAt/s,
-    "upload URL requests authenticate owner/couple context and persist venue-scoped upload intents",
+    /requireOrgVenue\(req, res, venueSlug\)[\s\S]*verifyCoupleUploadToken\(uploadToken, venueSlug, now\)[\s\S]*uploadIntentCapExceeded\(venueId[\s\S]*db\.insert\(uploadIntentsTable\)\.values\({[\s\S]*objectKey: objectPath[\s\S]*venueId[\s\S]*purpose[\s\S]*contentType[\s\S]*sizeBytes: size[\s\S]*expiresAt/s,
+    "upload URL requests authenticate owner/couple context, cap intents per venue, and persist venue-scoped upload intents",
   );
   assert.match(
     storageRouteSource,
@@ -986,30 +1026,134 @@ try {
     new URL("../../artifacts/api-server/src/lib/databaseReadiness.ts", import.meta.url),
     "utf8",
   );
-  assert.match(
-    databaseReadinessSource,
-    /REQUIRED_DATABASE_TABLES[\s\S]*"upload_intents"[\s\S]*missingRequiredDatabaseTables[\s\S]*information_schema\.tables/s,
-    "database readiness checks include the upload_intents table required by production upload security",
+  // Behaviour, not source text: the readiness contract is exported as data
+  // plus pure evaluators, so feed them introspection rows and check verdicts.
+  process.env.DATABASE_URL ??= "postgresql://smoke:smoke@localhost:5432/smoke";
+  const readiness = (await import(
+    new URL("../../artifacts/api-server/src/lib/databaseReadiness.ts", import.meta.url).href
+  )) as {
+    REQUIRED_DATABASE_TABLES: readonly string[];
+    REQUIRED_DATABASE_COLUMNS: Record<string, readonly string[]>;
+    REQUIRED_DATABASE_NOT_NULL_COLUMNS: Record<string, readonly string[]>;
+    REQUIRED_DATABASE_INDEXES: ReadonlyArray<{
+      table: string;
+      name?: string;
+      label: string;
+      requiredFragments: readonly string[];
+    }>;
+    evaluateMissingTables: (rows: Array<{ table_name: string }>) => string[];
+    evaluateMissingColumns: (
+      rows: Array<{ table_name: string; column_name: string; is_nullable: "YES" | "NO" }>,
+    ) => string[];
+    evaluateNullableColumns: (
+      rows: Array<{ table_name: string; column_name: string; is_nullable: "YES" | "NO" }>,
+    ) => string[];
+    evaluateMissingIndexes: (
+      rows: Array<{ tablename: string; indexname: string; indexdef: string }>,
+    ) => string[];
+    evaluateRowLevelSecurity: (rows: Array<{ tablename: string; rowsecurity: boolean }>) => string[];
+  };
+  for (const table of [
+    "organizations",
+    "venues",
+    "venue_media",
+    "upload_intents",
+    "couple_sessions",
+    "generated_assets",
+    "credit_transactions",
+    "control_outreach_emails",
+    "control_email_suppressions",
+  ]) {
+    assert.ok(
+      readiness.evaluateMissingTables([]).includes(table),
+      `database readiness reports a missing ${table} table (upload security, billing and outreach depend on it)`,
+    );
+  }
+  assert.deepEqual(
+    readiness.evaluateMissingTables(
+      readiness.REQUIRED_DATABASE_TABLES.map((table) => ({ table_name: table })),
+    ),
+    [],
+    "database readiness passes once every required table exists",
   );
-  assert.match(
-    databaseReadinessSource,
-    /REQUIRED_DATABASE_COLUMNS[\s\S]*organizations: \[[\s\S]*"clerk_org_id"[\s\S]*venues: \[[\s\S]*"organization_id"[\s\S]*generated_assets[\s\S]*quality_report[\s\S]*credit_transactions: \[[\s\S]*"organization_id"[\s\S]*control_outreach_emails[\s\S]*unsubscribe_token[\s\S]*missingRequiredDatabaseColumns[\s\S]*information_schema\.columns/s,
-    "database readiness checks launch-critical organization, billing-ledger, outreach, and gallery metadata columns",
+  const missingColumnsOnEmptyDb = readiness.evaluateMissingColumns([]);
+  for (const column of [
+    "organizations.clerk_org_id",
+    "venues.organization_id",
+    "generated_assets.quality_report",
+    "credit_transactions.organization_id",
+    "credit_transactions.stripe_event_id",
+    "control_outreach_emails.unsubscribe_token",
+    "venue_media.coverage",
+  ]) {
+    assert.ok(
+      missingColumnsOnEmptyDb.includes(column),
+      `database readiness checks launch-critical organization, billing-ledger, outreach, and gallery metadata columns: ${column}`,
+    );
+  }
+  const nullableFixture = (
+    [
+      ["organizations", "clerk_org_id"],
+      ["venues", "owner_email"],
+      ["venue_media", "coverage"],
+      ["couple_sessions", "couple_email"],
+      ["couple_sessions", "share_token"],
+      ["control_outreach_emails", "unsubscribe_token"],
+    ] as const
+  ).map(([table_name, column_name]) => ({ table_name, column_name, is_nullable: "YES" as const }));
+  assert.deepEqual(
+    readiness.evaluateNullableColumns(nullableFixture).sort(),
+    nullableFixture.map((row) => `${row.table_name}.${row.column_name}`).sort(),
+    "database readiness checks launch-critical organization, venue owner, media coverage, session identity, and outreach not-null column constraints",
   );
-  assert.match(
-    databaseReadinessSource,
-    /venue_media: \["id", "venue_id", "object_key", "coverage", "display_order", "created_at"\][\s\S]*REQUIRED_DATABASE_NOT_NULL_COLUMNS[\s\S]*venue_media: \["id", "venue_id", "object_key", "coverage", "display_order", "created_at"\]/s,
-    "database readiness requires non-null venue media coverage metadata",
+  const missingIndexesOnEmptyDb = readiness.evaluateMissingIndexes([]);
+  for (const label of [
+    "organizations.clerk_org_id.unique",
+    "venues.slug.unique",
+    "upload_intents.object_key.unique",
+    "generated_assets.object_key.unique",
+    "generated_assets.session_id_asset_type_display_order.unique",
+    "credit_transactions.stripe_event_id.partial_unique",
+    "control_prospects.email.unique",
+    "control_email_suppressions.email.unique",
+  ]) {
+    assert.ok(
+      missingIndexesOnEmptyDb.includes(label),
+      `database readiness checks organization, public slug, upload, gallery asset, outreach suppression, and Stripe webhook uniqueness indexes: ${label}`,
+    );
+  }
+  const completeIndexes = readiness.REQUIRED_DATABASE_INDEXES.map((required, index) => ({
+    tablename: required.table,
+    indexname: required.name ?? `smoke_index_${index}`,
+    indexdef: `CREATE ${required.requiredFragments.join(" ")} INDEX`,
+  }));
+  assert.deepEqual(
+    readiness.evaluateMissingIndexes(completeIndexes),
+    [],
+    "database readiness passes once every required index exists",
   );
-  assert.match(
-    databaseReadinessSource,
-    /REQUIRED_DATABASE_NOT_NULL_COLUMNS[\s\S]*organizations:[\s\S]*clerk_org_id[\s\S]*venues:[\s\S]*owner_email[\s\S]*couple_sessions:[\s\S]*couple_email[\s\S]*share_token[\s\S]*control_outreach_emails:[\s\S]*unsubscribe_token[\s\S]*nullableRequiredDatabaseColumns[\s\S]*is_nullable/s,
-    "database readiness checks launch-critical organization, venue owner, session identity, and outreach not-null column constraints",
+  assert.deepEqual(
+    readiness.evaluateMissingIndexes(
+      completeIndexes.map((index) =>
+        index.indexname === "credit_transactions_stripe_event_id_unique"
+          ? {
+              ...index,
+              indexdef:
+                "CREATE UNIQUE INDEX credit_transactions_stripe_event_id_unique ON credit_transactions (stripe_event_id)",
+            }
+          : index,
+      ),
+    ),
+    ["credit_transactions.stripe_event_id.partial_unique"],
+    "database readiness rejects a Stripe event-id index that is not partial (WHERE stripe_event_id IS NOT NULL)",
   );
-  assert.match(
-    databaseReadinessSource,
-    /REQUIRED_DATABASE_INDEXES[\s\S]*organizations\.clerk_org_id\.unique[\s\S]*venues\.slug\.unique[\s\S]*upload_intents_object_key_unique[\s\S]*generated_assets_object_key_unique[\s\S]*generated_assets_session_slot_unique[\s\S]*credit_transactions_stripe_event_id_unique[\s\S]*is not null[\s\S]*control_prospects_email_unique[\s\S]*control_email_suppressions_email_unique[\s\S]*missingRequiredDatabaseIndexes[\s\S]*pg_indexes/s,
-    "database readiness checks organization, public slug, upload, gallery asset, outreach suppression, and Stripe webhook uniqueness indexes",
+  assert.deepEqual(
+    readiness.evaluateRowLevelSecurity([
+      { tablename: "venues", rowsecurity: true },
+      { tablename: "organizations", rowsecurity: false },
+    ]),
+    ["organizations"],
+    "database readiness reports public tables with row-level security switched off",
   );
   assert.match(
     databaseReadinessSource,
@@ -1027,9 +1171,141 @@ try {
   );
   assert.match(
     healthRoute,
-    /productionImageModelChainReady[\s\S]*models\[0\] === "gpt-image-2\.5-sunburst"[\s\S]*models\.every\(isSupportedImageModel\)[\s\S]*imageModel: productionImageModelChainReady\(\) \? "ok" : "degraded"/s,
+    /function productionImageModelChainReady[\s\S]*isProductionImageModelChain\(configuredImageModels\(\)\)[\s\S]*imageModel: productionImageModelChainReady\(\) \? "ok" : "degraded"/s,
     "readiness endpoint degrades when the production image model chain leaves the supported gpt-image / Gemini 3 models",
   );
+  const { isProductionImageModelChain } = envValidationModule as unknown as {
+    isProductionImageModelChain: (models: readonly string[]) => boolean;
+  };
+  assert.equal(
+    isProductionImageModelChain(["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gemini-3-pro-image"]),
+    true,
+    "the shared image-chain policy accepts gpt-image-2.5-sunburst first with supported fallbacks",
+  );
+  for (const chain of [
+    ["gemini-3-pro-image", "gpt-image-2.5-sunburst"],
+    ["gpt-image-2.5-sunburst", "gemini-2.5-flash-image"],
+    ["gpt-image-1"],
+  ]) {
+    assert.equal(
+      isProductionImageModelChain(chain),
+      false,
+      `the shared image-chain policy (boot validation and /readyz) rejects ${chain.join(",")}`,
+    );
+  }
+  const healthModule = (await import(
+    new URL("../../artifacts/api-server/src/routes/health.ts", import.meta.url).href
+  )) as {
+    readinessTokenMatches: (
+      presented: string | string[] | undefined,
+      env?: Record<string, string | undefined>,
+    ) => boolean;
+  };
+  const readinessTokenEnv = { READINESS_DETAIL_TOKEN: "readiness-detail-token-0123456789" };
+  assert.equal(
+    healthModule.readinessTokenMatches("readiness-detail-token-0123456789", readinessTokenEnv),
+    true,
+    "readiness details open for the exact READINESS_DETAIL_TOKEN",
+  );
+  assert.equal(
+    healthModule.readinessTokenMatches("readiness-detail-token-wrong-value", readinessTokenEnv),
+    false,
+    "readiness details stay hidden for a wrong token",
+  );
+  assert.equal(
+    healthModule.readinessTokenMatches("short", { READINESS_DETAIL_TOKEN: "short" }),
+    false,
+    "readiness detail tokens shorter than 16 characters are never accepted",
+  );
+  assert.equal(
+    healthModule.readinessTokenMatches(undefined, readinessTokenEnv),
+    false,
+    "readiness details stay hidden without a token",
+  );
+  assert.match(
+    healthRoute,
+    /readinessDetailAuthorized[\s\S]*readinessTokenMatches\(req\.headers\["x-readiness-token"\]\)[\s\S]*isOperatorRequest\(req\)[\s\S]*withDetails \? \{ \.\.\.data, details \} : data/s,
+    "readiness reasons are only returned to operators or token holders",
+  );
+  {
+    const operatorAuth = (await import(
+      new URL("../../artifacts/api-server/src/control-plane/operatorAuth.ts", import.meta.url).href
+    )) as {
+      operatorAccessDecision: (
+        email: string,
+        env: Record<string, string | undefined>,
+      ) => { kind: string; reason?: string };
+    };
+    const allowlist = { CONTROL_PLANE_OPERATOR_EMAILS: "Ops@Example.com, founder@example.com" };
+    assert.equal(
+      operatorAuth.operatorAccessDecision("ops@example.com", allowlist).kind,
+      "allowed",
+      "operators on the allowlist reach the control plane (case-insensitive)",
+    );
+    assert.equal(
+      operatorAuth.operatorAccessDecision("owner@venue.com", allowlist).kind,
+      "forbidden",
+      "signed-in venue owners who are not on the allowlist are refused",
+    );
+    assert.equal(
+      operatorAuth.operatorAccessDecision("anyone@example.com", { NODE_ENV: "development" }).kind,
+      "not_configured",
+      "an empty operator allowlist admits nobody (fails closed)",
+    );
+    assert.equal(
+      operatorAuth.operatorAccessDecision("anyone@example.com", {
+        NODE_ENV: "production",
+        CONTROL_PLANE_DEV_OPEN: "true",
+      }).kind,
+      "not_configured",
+      "CONTROL_PLANE_DEV_OPEN never opens the control plane in production",
+    );
+    assert.equal(
+      operatorAuth.operatorAccessDecision("dev@example.com", {
+        NODE_ENV: "development",
+        CONTROL_PLANE_DEV_OPEN: "true",
+      }).kind,
+      "allowed",
+      "CONTROL_PLANE_DEV_OPEN=true opens the control plane only on a non-production machine",
+    );
+    const controlRoutes = ["controlPlane.ts", "controlProspects.ts", "controlGrowth.ts"].map((name) =>
+      fs.readFileSync(new URL(`../../artifacts/api-server/src/routes/${name}`, import.meta.url), "utf8"),
+    );
+    for (const source of controlRoutes) {
+      const handlers = source.split(/(?=router\.(?:get|post|put|patch|delete)\()/).slice(1);
+      assert.ok(handlers.length > 0, "control-plane route files register handlers");
+      for (const handler of handlers) {
+        const path = /router\.\w+\(\s*"([^"]+)"/.exec(handler)?.[1] ?? "?";
+        assert.match(
+          handler,
+          /await (?:requireOperator|operatorMutation)\(req, res\)/,
+          `control-plane route ${path} gates every request behind the operator allowlist`,
+        );
+      }
+    }
+  }
+  {
+    const sessionsSource = fs.readFileSync(
+      new URL("../../artifacts/api-server/src/routes/sessions.ts", import.meta.url),
+      "utf8",
+    );
+    const recoveryQuery = /export function recoverableSessionsQuery[\s\S]*?\n}\n/.exec(sessionsSource)?.[0] ?? "";
+    assert.match(
+      recoveryQuery,
+      /eq\(sql`lower\(\$\{coupleSessionsTable\.coupleEmail\}\)`, normalizedEmail\)[\s\S]*eq\(coupleSessionsTable\.kind, "couple"\)/,
+      "gallery recovery matches the stored couple email exactly (case-insensitive) and only for couple sessions",
+    );
+    assert.doesNotMatch(
+      recoveryQuery,
+      /\b(?:ilike|like)\b/i,
+      "gallery recovery never uses LIKE/ILIKE, so _ and % in an address cannot widen the match",
+    );
+    assert.match(
+      sessionsSource,
+      /router\.post\("\/sessions\/recover"[\s\S]*rateLimit\(`recover:ip:[\s\S]*rateLimit\(`recover:email:[\s\S]*res\.json\(\{ accepted: true \}\)/,
+      "gallery recovery is rate limited per IP and per inbox and never reveals whether the email exists",
+    );
+  }
   const productionVerifier = fs.readFileSync(
     new URL("../../scripts/src/verify-production.ts", import.meta.url),
     "utf8",
@@ -1267,9 +1543,64 @@ try {
   );
   assert.match(
     sessionsRoute,
-    /venueMediaForReadiness[\s\S]*select\({ coverage: venueMediaTable\.coverage }\)[\s\S]*venueMediaCount < MIN_VENUE_PHOTOS[\s\S]*const normalizedEmail/s,
-    "session creation blocks venues without media before debiting credits or consuming couple uploads",
+    /const guard = await runSessionCreateGuards\([\s\S]*liveGuardDeps\(\)[\s\S]*if \(!guard\.ok\)[\s\S]*return;[\s\S]*const normalizedEmail[\s\S]*session = await db\.transaction/s,
+    "session creation runs every guard (readiness, caps, trial clock, Turnstile, upload intents) before the debit transaction",
   );
+  {
+    const sessionsModule = (await import(
+      new URL("../../artifacts/api-server/src/routes/sessions.ts", import.meta.url).href
+    )) as {
+      runSessionCreateGuards: (
+        input: {
+          venueId: number;
+          clientIp: string;
+          couplePhotoKeys: string[];
+          turnstileToken: string | null | undefined;
+          neededCredits: number;
+        },
+        deps: Record<string, (...args: never[]) => unknown>,
+      ) => Promise<{ ok: boolean; status?: number; body?: { code?: string } }>;
+    };
+    const touched: string[] = [];
+    const guardDeps = (media: Array<{ coverage: string }>) => ({
+      rateLimit: () => true,
+      loadVenueMedia: async () => media,
+      countVenueSessionsToday: async () => 0,
+      countVenueSessionsLastHour: async () => 0,
+      assertCanSpend: async () => {
+        touched.push("spend");
+        return { ok: true };
+      },
+      verifyTurnstile: async () => ({ ok: true }),
+      validatePhotos: async () => {
+        touched.push("photos");
+      },
+    });
+    const guardInput = {
+      venueId: 1,
+      clientIp: "203.0.113.9",
+      couplePhotoKeys: ["/objects/uploads/a", "/objects/uploads/b"],
+      turnstileToken: null,
+      neededCredits: 1,
+    };
+    const notReady = await sessionsModule.runSessionCreateGuards(
+      guardInput,
+      guardDeps([{ coverage: "exterior" }, { coverage: "ceremony" }]),
+    );
+    assert.equal(notReady.ok, false, "session guards refuse a venue without its reference photos");
+    assert.equal(notReady.status, 409);
+    assert.equal(notReady.body?.code, "venue_not_ready");
+    assert.deepEqual(
+      touched,
+      [],
+      "session creation blocks venues without media before checking credits or touching couple uploads",
+    );
+    const readyMedia = VENUE_MEDIA_COVERAGES.map((coverage) => ({ coverage }));
+    while (readyMedia.length < 5) readyMedia.push({ coverage: "detail" });
+    const ready = await sessionsModule.runSessionCreateGuards(guardInput, guardDeps(readyMedia));
+    assert.equal(ready.ok, true, "session guards pass a ready venue with credits and valid photos");
+    assert.deepEqual(touched, ["spend", "photos"], "credit check runs before photo download and validation");
+  }
   assert.match(
     sessionsRoute,
     /session\.status !== "ready"[\s\S]*hasReadyEmailGalleryBundle\(session\.id\)[\s\S]*This gallery is not ready to email yet/s,
@@ -1280,10 +1611,10 @@ try {
     /assertUploadIntentAvailable\(objectKey, venueId, "couple"\)[\s\S]*update\(uploadIntentsTable\)[\s\S]*set\({ consumedAt: new Date\(\) }\)[\s\S]*eq\(uploadIntentsTable\.purpose, "couple"\)[\s\S]*isNull\(uploadIntentsTable\.consumedAt\)[\s\S]*gte\(uploadIntentsTable\.expiresAt, new Date\(\)\)[\s\S]*insert\(coupleMediaTable\)/s,
     "couple session creation only attaches authorized, unexpired, unused couple upload intents",
   );
-  assert.match(
+  assert.doesNotMatch(
     sessionsRoute,
-    /readyGalleryThumbnailObjectKey\(sessionId: number, status: string\)[\s\S]*hasCompletePublicGalleryAssets\(assets\)[\s\S]*displayOrder === 1[\s\S]*readyGalleryThumbnailObjectKey\(session\.id, session\.status\)/s,
-    "owner session lists only show thumbnails for ready sessions with a complete V1 gallery bundle",
+    /router\.get\("\/venues\/:slug\/sessions"/,
+    "the owner session list is served only by the org-scoped venue dashboard (venues.ts), never by an unscoped sessions route",
   );
   const venuesRoute = fs.readFileSync(
     new URL("../../artifacts/api-server/src/routes/venues.ts", import.meta.url),
@@ -1348,9 +1679,122 @@ try {
   );
   assert.match(
     billingRoute,
-    /handleStripeWebhook[\s\S]*constructEvent\(req\.body as Buffer, sig, webhookSecret\)[\s\S]*eq\(creditTransactionsTable\.stripeEventId, event\.id\)[\s\S]*grantCreditsToOrg\(organizationId, CREDIT_PACK_AMOUNT, "pack_purchase", event\.id\)[\s\S]*setOrgCreditsBalance\(org\.id, credits, "subscription_grant", event\.id\)/s,
-    "Stripe webhook verifies signatures and grants organization credits idempotently by event id",
+    /handleStripeWebhook[\s\S]*constructEvent\(req\.body as Buffer, sig, webhookSecret\)[\s\S]*runStripeWebhookEvent\(event, createDbBillingStore\(\)\)/s,
+    "Stripe webhook verifies signatures, records event ids first and grants organization credits additively",
   );
+  assert.match(
+    billingRoute,
+    /recordStripeEvent\(event\)[\s\S]*processStripeEvent\(event, store\)[\s\S]*forgetStripeEvent\(event\.id\)/s,
+    "Stripe events are recorded before acting and released on failure",
+  );
+  assert.ok(!/setOrgCreditsBalance\(/.test(billingRoute), "webhooks never SET an organization balance");
+  {
+    // Replay deliveries against an in-memory store: the same event id must
+    // grant once, and a failed delivery must release its id for the retry.
+    const billingModule = (await import(
+      new URL("../../artifacts/api-server/src/routes/billing.ts", import.meta.url).href
+    )) as {
+      runStripeWebhookEvent: (
+        event: { id: string; type: string; data: { object: unknown } },
+        store: Record<string, unknown>,
+      ) => Promise<{ status: number; body: Record<string, unknown> }>;
+    };
+    type SmokeOrg = Record<string, unknown> & { id: number; creditsBalance: number };
+    const org: SmokeOrg = {
+      id: 41,
+      name: "Smoke Barn",
+      plan: "trial",
+      creditsBalance: 2,
+      stripeCustomerId: "cus_smoke",
+      stripeSubscriptionId: null,
+      billingPeriodEnd: null,
+      subscriptionStatus: null,
+      cancelAtPeriodEnd: false,
+      firstPaidAt: null,
+      churnedAt: null,
+      contactEmail: null,
+    };
+    const recorded = new Set<string>();
+    const grants: Array<{ amount: number; eventId: string }> = [];
+    let failNextLookup = false;
+    const store = {
+      async recordStripeEvent(event: { id: string }) {
+        if (recorded.has(event.id)) return false;
+        recorded.add(event.id);
+        return true;
+      },
+      async forgetStripeEvent(eventId: string) {
+        recorded.delete(eventId);
+      },
+      async findOrgById(id: number) {
+        if (failNextLookup) {
+          failNextLookup = false;
+          throw new Error("database blip");
+        }
+        return id === org.id ? { ...org } : null;
+      },
+      async findOrgByCustomerId() {
+        return null;
+      },
+      async findOrgBySubscriptionId() {
+        return null;
+      },
+      async updateOrg(_id: number, patch: Record<string, unknown>) {
+        Object.assign(org, patch);
+        return { ...org };
+      },
+      async grantPackCredits(_orgId: number, amount: number, eventId: string) {
+        grants.push({ amount, eventId });
+        org.creditsBalance += amount;
+        return org.creditsBalance;
+      },
+      async grantPlanCredits() {
+        throw new Error("no plan grant expected in this smoke");
+      },
+      async recordBillingEvent() {},
+      async recordFunnelEvent() {},
+      async recordAudit() {},
+      async retrieveSubscription() {
+        return null;
+      },
+      now: () => new Date("2026-10-08T12:00:00Z"),
+    };
+    const packEvent = {
+      id: "evt_smoke_pack",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_smoke",
+          object: "checkout.session",
+          customer: "cus_smoke",
+          mode: "payment",
+          payment_status: "paid",
+          amount_total: 5900,
+          subscription: null,
+          metadata: { organizationId: String(org.id), product: "credit_pack" },
+        },
+      },
+    };
+    assert.equal((await billingModule.runStripeWebhookEvent(packEvent, store)).status, 200);
+    assert.equal(
+      (await billingModule.runStripeWebhookEvent(packEvent, store)).body.duplicate,
+      true,
+      "a replayed Stripe event id is acknowledged without acting",
+    );
+    assert.equal(grants.length, 1, "Stripe webhook grants organization credits idempotently by event id");
+    assert.equal(org.creditsBalance, 2 + grants[0]!.amount, "pack credits are added to the balance, never SET");
+
+    failNextLookup = true;
+    const retryEvent = { ...packEvent, id: "evt_smoke_retry" };
+    assert.equal(
+      (await billingModule.runStripeWebhookEvent(retryEvent, store)).status,
+      500,
+      "a failed Stripe delivery answers 500 so Stripe retries",
+    );
+    assert.equal(recorded.has("evt_smoke_retry"), false, "a failed delivery releases its event id");
+    assert.equal((await billingModule.runStripeWebhookEvent(retryEvent, store)).status, 200);
+    assert.equal(grants.length, 2, "Stripe's retry of a failed delivery is processed once");
+  }
   assert.match(
     billingRoute,
     /success_url: `\$\{base\}\/dashboard\?billing=success`[\s\S]*cancel_url: `\$\{base\}\/dashboard\?billing=cancel`[\s\S]*return_url: `\$\{getAppBaseUrl\(\)\}\/dashboard`/s,
@@ -1405,15 +1849,30 @@ try {
     venueLandingSource.includes("/create-venue") && venueLandingSource.includes("/login"),
     "venue landing page routes venues to workspace creation and Clerk sign-in",
   );
+  const dashboardFile = (name: string) =>
+    fs.readFileSync(
+      new URL(`../../artifacts/wedding-app/src/pages/dashboard/${name}`, import.meta.url),
+      "utf8",
+    );
   assert.match(
-    venueOwnerPageSource,
-    /COVERAGE_OPTIONS[\s\S]*exterior[\s\S]*ceremony[\s\S]*reception[\s\S]*detail[\s\S]*natural_light[\s\S]*coverage: nextCoverage/s,
+    dashboardFile("photoQueue.ts"),
+    /COVERAGE_TILES[\s\S]*"exterior"[\s\S]*"ceremony"[\s\S]*"reception"[\s\S]*"detail"[\s\S]*"natural_light"/s,
+    "owner dashboard offers one labelled tile per required venue coverage",
+  );
+  assert.match(
+    dashboardFile("VenuePhotos.tsx"),
+    /registerPhoto = async \(objectKey: string, coverage: Coverage, displayOrder: number\)[\s\S]*addMedia\.mutateAsync\(\{ slug, data: \{ objectKey, coverage, displayOrder \} \}\)/s,
     "owner dashboard registers venue photos with explicit coverage metadata",
   );
   assert.match(
     venueOwnerPageSource,
-    /OrgGate[\s\S]*useGetOrganization[\s\S]*useCreateOrgBillingCheckout[\s\S]*useCreateOrgBillingPortal[\s\S]*BILLING_PRODUCTS/s,
-    "owner dashboard is organization-gated and drives Stripe checkout, credit packs, and the billing portal",
+    /OrgGate[\s\S]*useGetOrganization/s,
+    "owner dashboard is organization-gated",
+  );
+  assert.match(
+    dashboardFile("useBilling.ts"),
+    /useCreateOrgBillingCheckout[\s\S]*useCreateOrgBillingPortal[\s\S]*checkout\.mutate\(\s*\{ data: \{ product \} \}/s,
+    "owner dashboard drives Stripe checkout, credit packs, and the billing portal through the org-scoped API",
   );
   const couplePageSource = fs.readFileSync(
     new URL("../../artifacts/wedding-app/src/pages/CouplePage.tsx", import.meta.url),
@@ -1454,6 +1913,10 @@ try {
       websiteUrl: "https://example.com/",
       bookingUrl: "https://example.com/tours",
       organizationId: 7,
+      incentiveText: "Mention Dreemer for a free tasting",
+      tourCardDownloadedAt: null,
+      websiteImportedAt: null,
+      reviewBeforeSend: true,
       plan: "growth",
       creditsBalance: 17,
       stripeCustomerId: "cus_123",
@@ -1473,6 +1936,10 @@ try {
       websiteUrl: "https://example.com/",
       bookingUrl: "https://example.com/tours",
       organizationId: 7,
+      incentiveText: "Mention Dreemer for a free tasting",
+      tourCardDownloadedAt: null,
+      websiteImportedAt: null,
+      reviewBeforeSend: true,
       plan: "growth",
       creditsBalance: 17,
       billingPeriodEnd,
@@ -1630,11 +2097,13 @@ try {
   }));
 
   const gemini3FetchCalls: string[] = [];
+  const gemini3ApiKeyHeaders: Array<string | undefined> = [];
   let gemini3RequestBody: Record<string, unknown> | null = null;
   globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     gemini3FetchCalls.push(url);
     if (url.includes("/models/gemini-3-pro-image:generateContent")) {
+      gemini3ApiKeyHeaders.push((init?.headers as Record<string, string> | undefined)?.["x-goog-api-key"]);
       gemini3RequestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
       assert.equal(
         (init?.headers as Record<string, string> | undefined)?.["Api-Revision"],
@@ -1680,8 +2149,13 @@ try {
   );
   assert.deepEqual(
     gemini3FetchCalls,
-    ["https://mock-gemini.invalid/v1beta/models/gemini-3-pro-image:generateContent?key=test-key"],
-    "Gemini 3 image models use the stable generateContent endpoint by default",
+    ["https://mock-gemini.invalid/v1beta/models/gemini-3-pro-image:generateContent"],
+    "Gemini 3 image models use the stable generateContent endpoint by default, with no API key in the URL",
+  );
+  assert.deepEqual(
+    gemini3ApiKeyHeaders,
+    ["test-key"],
+    "Gemini image requests authenticate with the x-goog-api-key header so the key never lands in URL logs",
   );
   const gemini3Body = gemini3RequestBody as {
     contents?: unknown[];
