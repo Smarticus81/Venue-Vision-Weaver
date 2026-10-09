@@ -315,7 +315,8 @@ export interface EmailAttribution {
 /**
  * One reply per prospect, credited to the latest email sent at or before the
  * reply (or the latest sent email when none precedes it). The same email
- * gets `converted` when the prospect converted after being contacted.
+ * gets `converted` when the prospect converted after being contacted; a
+ * conversion without a recorded reply is not counted as a reply.
  */
 export function attributeRepliesToEmails(
   emails: EmailFact[],
@@ -335,8 +336,10 @@ export function attributeRepliesToEmails(
   for (const prospect of prospects) {
     const sent = sentByProspect.get(prospect.id);
     if (!sent || sent.length === 0) continue;
-    const repliedStatus = prospect.status === "replied" || prospect.status === "converted";
-    const repliedAt = prospect.repliedAt ?? (repliedStatus ? prospect.convertedAt ?? now : null);
+    // A reply is a recorded reply (replied_at), or status "replied" without a
+    // timestamp. "converted" alone is not a reply: attribution converts on a
+    // signup match, and counting that as a reply would inflate reply rates.
+    const repliedAt = prospect.repliedAt ?? (prospect.status === "replied" ? now : null);
     const converted = prospect.convertedAt != null && prospect.contactCount > 0;
     if (!repliedAt && !converted) continue;
     const anchor = repliedAt ?? prospect.convertedAt ?? now;

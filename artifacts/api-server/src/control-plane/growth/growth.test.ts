@@ -244,7 +244,11 @@ test("kpiMath: replies credit the last email sent before the reply, once per pro
   const map = kpiMath.attributeRepliesToEmails(emails, [replied, converted, silent], NOW);
   assert.deepEqual(map.get(10), { replied: true, positive: true, converted: false }, "day-9 email precedes the day-7 reply");
   assert.equal(map.get(11), undefined);
-  assert.deepEqual(map.get(20), { replied: true, positive: false, converted: true }, "converted prospects count as replied once");
+  assert.deepEqual(
+    map.get(20),
+    { replied: false, positive: false, converted: true },
+    "a conversion without a recorded reply (auto-attributed signup) is not a reply",
+  );
   assert.equal(map.get(21), undefined);
   assert.equal([...map.keys()].length, 2, "no sent email -> no attribution");
 });
@@ -1051,4 +1055,76 @@ test("studio hook: campaign step cap rule", () => {
   assert.equal(stepExceedsCap(4, 3), true);
   const err = new CampaignStepCapError(4, 3);
   assert.equal(err.message, "Campaign step 4 exceeds policy max_campaign_steps (3).");
+});
+
+test("a rejected lifecycle email is final for that org and template; failures stop after a few attempts", async () => {
+  const { PgDialect } = await import("drizzle-orm/pg-core");
+  const { sql } = await import("drizzle-orm");
+  const query = new PgDialect().sqlToQuery(trialClock.lifecycleTemplatesTakenSql(sql`o.id`));
+  assert.match(query.sql, /'executed', 'rejected'\)/);
+  assert.match(query.sql, /having count\(\*\) >= \$\d/);
+  assert.ok(query.params.includes(trialClock.MAX_LIFECYCLE_FAILED_ATTEMPTS));
+});
+
+test("a lifecycle email approved after the org paid, or after its trigger passed, is not sent", () => {
+  const now = new Date("2026-10-20T00:00:00Z");
+  const base = { plan: "trial", firstPaidAt: null, creditsBalance: 0, trialEndsAt: new Date("2026-10-10T00:00:00Z"), createdAt: new Date("2026-09-26T00:00:00Z") };
+  assert.equal(growthActions.lifecycleNoLongerApplies("trial_expired", base, now, 14), null);
+  assert.match(growthActions.lifecycleNoLongerApplies("trial_expired", { ...base, plan: "starter" }, now, 14) ?? "", /paid/);
+  assert.match(growthActions.lifecycleNoLongerApplies("trial_expired", { ...base, firstPaidAt: new Date() }, now, 14) ?? "", /paid/);
+  assert.match(growthActions.lifecycleNoLongerApplies("trial_credits_out", { ...base, creditsBalance: 10 }, now, 14) ?? "", /credits again/);
+  const active = { ...base, creditsBalance: 3, trialEndsAt: new Date("2026-10-25T00:00:00Z") };
+  assert.equal(growthActions.lifecycleNoLongerApplies("trial_day_10", active, now, 14), null);
+  assert.match(growthActions.lifecycleNoLongerApplies("trial_expired", active, now, 14) ?? "", /not ended/);
+});
+
+test("attribution never matches on a shared social/listing host or ISP mail, nor credits an org that predates the first email", () => {
+  const signup = {
+    organizationId: 3,
+    venueId: 4,
+    ownerEmail: "owner@bellsouth.net",
+    contactEmail: null,
+    websiteUrl: "https://www.facebook.com/OtherVenue",
+    orgContactEmail: null,
+  };
+  assert.equal(attribution.matchProspect({ email: "rose@hall.com", website: "https://facebook.com/RoseHall" }, signup), null);
+  assert.equal(attribution.matchProspect({ email: "rose@hall.com", website: "m.facebook.com/RoseHall" }, signup), null);
+  assert.equal(attribution.matchProspect({ email: "rose@hall.com", website: "https://www.theknot.com/marketplace/rose" }, { ...signup, websiteUrl: "theknot.com/marketplace/other" }), null);
+  assert.equal(attribution.matchProspect({ email: "someone@bellsouth.net", website: null }, signup), null, "ISP mail never matches");
+  assert.equal(attribution.matchProspect({ email: "someone@yahoo.co.uk", website: null }, { ...signup, ownerEmail: "x@yahoo.co.uk" }), null);
+
+  const firstContactAt = new Date("2026-09-01T00:00:00Z");
+  assert.equal(attribution.isPreexistingCustomer(new Date("2026-08-01T00:00:00Z"), { contactCount: 1, firstContactAt }), true);
+  assert.equal(attribution.isPreexistingCustomer(new Date("2026-09-05T00:00:00Z"), { contactCount: 1, firstContactAt }), false);
+  assert.equal(attribution.isPreexistingCustomer(new Date("2026-08-01T00:00:00Z"), { contactCount: 0, firstContactAt: null }), false);
+});
+
+test("evaluator: a baseline of 0 never declares a win for an unchanged 0", async () => {
+  const zero = card({ baseline: 0, decisionDate: daysAgo(1) });
+  const evaluation = experiments.evaluateExperiment(zero, { growth: await kpisWithPositiveRate(0, 60) }, NOW, 30);
+  assert.equal(evaluation.decision, "inconclusive");
+  assert.match(evaluation.reason, /target equals the baseline/);
+});
+
+test("evaluator readout is limited to data since the experiment started", async () => {
+  const startedAt = daysAgo(7);
+  const base = {
+    orgs: async () => [{ createdAt: daysAgo(20) }, { createdAt: daysAgo(3) }],
+    emails: async (since: Date) => {
+      assert.ok(since.getTime() >= startedAt.getTime(), "emails are loaded from the start date on");
+      return [
+        { createdAt: daysAgo(9), sentAt: daysAgo(8) },
+        { createdAt: daysAgo(6), sentAt: daysAgo(5) },
+        { createdAt: daysAgo(1), sentAt: null },
+      ];
+    },
+    legacySends: async (since: Date) => (since.getTime() >= startedAt.getTime() ? 0 : 99),
+    ledger: async () => [],
+    venueCreatedAts: async () => [daysAgo(10), daysAgo(2)],
+  } as unknown as import("./kpiTypes.js").GrowthLoaders;
+  const scoped = experiments.loadersSince(base, startedAt);
+  assert.equal((await scoped.orgs()).length, 1);
+  assert.equal((await scoped.emails(daysAgo(30))).length, 2);
+  assert.equal(await scoped.legacySends(daysAgo(30)), 0);
+  assert.equal((await scoped.venueCreatedAts(daysAgo(30))).length, 1);
 });

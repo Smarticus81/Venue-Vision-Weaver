@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db, agentActionsTable, controlDigestsTable } from "@workspace/db";
+import { db, agentActionsTable, controlDigestsTable, organizationsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { sendTransactionalEmail } from "../../lib/emailService.js";
 import { logger } from "../../lib/logger.js";
@@ -8,7 +8,7 @@ import type { ActionDefinition } from "../actions.js";
 import { operatorEmails } from "../operatorAuth.js";
 import { isSuppressed } from "../outreach/unsubscribe.js";
 import { getPolicyBoolean, getPolicyNumber } from "../policies.js";
-import { controlUrl } from "./config.js";
+import { controlUrl, trialDays } from "./config.js";
 import { escapeHtml, growthCtaButton, growthEmailLayout, paragraphsHtml, plainText } from "./emailRender.js";
 import { LIFECYCLE_TEMPLATES, renderLifecycleMessage } from "./lifecycleEmails.js";
 import { resolveLifecycleRecipient } from "./lifecycleRecipient.js";
@@ -70,6 +70,43 @@ export const sendOperatorNudgeSchema = z
   .strict();
 
 export type SendOperatorNudgeParams = z.infer<typeof sendOperatorNudgeSchema>;
+
+export interface LifecycleOrgNow {
+  plan: string;
+  firstPaidAt: Date | null;
+  creditsBalance: number;
+  trialEndsAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Re-check at send time that the template still fits the org: it may have
+ * bought a pack or subscribed while the action waited for approval. Returns
+ * why it no longer applies, or null when it may go out. Pure.
+ */
+export function lifecycleNoLongerApplies(
+  template: (typeof LIFECYCLE_TEMPLATES)[number],
+  org: LifecycleOrgNow,
+  now: Date,
+  days: number = trialDays(),
+): string | null {
+  if (org.plan !== "trial" || org.firstPaidAt != null) return `the organization is now on plan "${org.plan}" (paid)`;
+  const endsAt = org.trialEndsAt ?? new Date(org.createdAt.getTime() + days * 86_400_000);
+  const expired = endsAt.getTime() <= now.getTime();
+  switch (template) {
+    case "trial_expired":
+      return expired ? null : "the trial has not ended";
+    case "trial_credits_out":
+      return org.creditsBalance <= 0 ? null : "the organization has credits again";
+    case "trial_gallery_3":
+      if (expired) return "the trial has ended";
+      return org.creditsBalance > 0 ? null : "the organization is out of credits";
+    case "trial_day_10":
+      return expired ? "the trial has ended" : null;
+    default:
+      return null;
+  }
+}
 
 async function alreadySent(organizationId: number, template: string): Promise<boolean> {
   const [row] = await db
@@ -165,6 +202,21 @@ export const growthActions: Record<string, ActionDefinition> = {
       }
       if (await alreadySent(params.organizationId, params.template)) {
         throw new Error(`Lifecycle email "${params.template}" was already sent to organization ${params.organizationId}.`);
+      }
+      const [org] = await db
+        .select({
+          plan: organizationsTable.plan,
+          firstPaidAt: organizationsTable.firstPaidAt,
+          creditsBalance: organizationsTable.creditsBalance,
+          trialEndsAt: organizationsTable.trialEndsAt,
+          createdAt: organizationsTable.createdAt,
+        })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, params.organizationId));
+      if (!org) throw new Error(`Organization ${params.organizationId} not found.`);
+      const stale = lifecycleNoLongerApplies(params.template, org, new Date());
+      if (stale) {
+        throw new Error(`Lifecycle email "${params.template}" no longer applies: ${stale}. Not sent.`);
       }
       const recipient = await resolveLifecycleRecipient(params.organizationId);
       if (!recipient) {

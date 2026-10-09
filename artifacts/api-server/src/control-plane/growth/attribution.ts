@@ -1,5 +1,6 @@
-import { db, controlProspectsTable, organizationsTable, venuesTable } from "@workspace/db";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { db, controlOutreachEmailsTable, controlProspectsTable, organizationsTable, venuesTable } from "@workspace/db";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { FREE_MAIL_DOMAINS as VETTING_FREE_MAIL_DOMAINS } from "../vetting/lists.js";
 import { logger } from "../../lib/logger.js";
 import { recordAuditEvent } from "../audit.js";
 import type { ProspectFact } from "./kpiTypes.js";
@@ -35,7 +36,115 @@ export const FREE_MAIL_DOMAINS = new Set([
   "mail.com",
   "gmx.com",
   "zoho.com",
+  // ISP and regional consumer mail: a shared domain proves nothing.
+  "bellsouth.net",
+  "earthlink.net",
+  "charter.net",
+  "optonline.net",
+  "frontier.com",
+  "frontiernet.net",
+  "windstream.net",
+  "centurylink.net",
+  "q.com",
+  "roadrunner.com",
+  "rr.com",
+  "twc.com",
+  "spectrum.net",
+  "juno.com",
+  "netzero.net",
+  "aim.com",
+  "rocketmail.com",
+  "yahoo.co.uk",
+  "yahoo.ca",
+  "yahoo.com.au",
+  "hotmail.co.uk",
+  "hotmail.ca",
+  "live.co.uk",
+  "outlook.co.uk",
+  "btinternet.com",
+  "sky.com",
+  "talktalk.net",
+  "virginmedia.com",
+  "ntlworld.com",
+  "blueyonder.co.uk",
+  "shaw.ca",
+  "rogers.com",
+  "sympatico.ca",
+  "telus.net",
+  "bigpond.com",
+  "optusnet.com.au",
+  "web.de",
+  "gmx.de",
+  "gmx.net",
+  "t-online.de",
+  "orange.fr",
+  "free.fr",
+  "laposte.net",
+  "libero.it",
+  "pm.me",
+  "fastmail.com",
+  "hey.com",
+  "tutanota.com",
+  "yandex.com",
+  ...VETTING_FREE_MAIL_DOMAINS,
 ]);
+
+/**
+ * Hosts shared by many businesses (social profiles, wedding marketplaces,
+ * link-in-bio and site-builder roots). A matching host there says nothing
+ * about the venue (facebook.com/RoseHall vs facebook.com/OtherVenue), so it
+ * never attributes a signup. Subdomains count too (m.facebook.com).
+ */
+export const SHARED_WEBSITE_HOSTS = new Set([
+  "facebook.com",
+  "fb.com",
+  "instagram.com",
+  "tiktok.com",
+  "twitter.com",
+  "x.com",
+  "youtube.com",
+  "pinterest.com",
+  "linkedin.com",
+  "threads.net",
+  "theknot.com",
+  "weddingwire.com",
+  "weddingwire.ca",
+  "zola.com",
+  "herecomestheguide.com",
+  "weddingspot.com",
+  "venuereport.com",
+  "junebugweddings.com",
+  "brides.com",
+  "eventective.com",
+  "peerspace.com",
+  "tagvenue.com",
+  "hitched.co.uk",
+  "bridebook.com",
+  "yelp.com",
+  "tripadvisor.com",
+  "google.com",
+  "goo.gl",
+  "g.page",
+  "business.site",
+  "maps.app.goo.gl",
+  "linktr.ee",
+  "beacons.ai",
+  "bio.link",
+  "linkin.bio",
+  "bit.ly",
+  "tinyurl.com",
+  "airbnb.com",
+  "vrbo.com",
+  "booking.com",
+]);
+
+export function isSharedWebsiteHost(host: string): boolean {
+  const lowerHost = host.toLowerCase();
+  for (const shared of SHARED_WEBSITE_HOSTS) {
+    if (lowerHost === shared || lowerHost.endsWith(`.${shared}`)) return true;
+  }
+  return false;
+}
 
 export type AttributionMatch = "email" | "website_domain" | "email_domain";
 
@@ -91,7 +200,7 @@ export function matchProspect(
 
   const prospectHost = normalizeHost(prospect.website);
   const signupHost = normalizeHost(signup.websiteUrl);
-  if (prospectHost && signupHost && prospectHost === signupHost) return "website_domain";
+  if (prospectHost && signupHost && prospectHost === signupHost && !isSharedWebsiteHost(prospectHost)) return "website_domain";
 
   const prospectDomain = emailDomain(prospectEmail);
   const signupDomain = emailDomain(signup.ownerEmail ?? signup.orgContactEmail);
@@ -102,6 +211,19 @@ export function matchProspect(
 }
 
 const CANDIDATE_STATUSES = ["new", "qualified", "contacted", "replied"] as const;
+
+/**
+ * True when the organization existed before we first emailed the prospect:
+ * it is a customer we found, not one outreach brought in. Prospects never
+ * contacted are not "pre-existing" (they are simply customers now).
+ */
+export function isPreexistingCustomer(
+  orgCreatedAt: Date | null,
+  prospect: { contactCount: number; firstContactAt: Date | null },
+): boolean {
+  if (prospect.contactCount <= 0 || orgCreatedAt == null || prospect.firstContactAt == null) return false;
+  return orgCreatedAt.getTime() < prospect.firstContactAt.getTime();
+}
 
 /**
  * Match unconverted prospects against organizations (left-joined to venues so
@@ -117,6 +239,7 @@ export async function attributeSignups(options: { organizationId?: number } = {}
       website: controlProspectsTable.website,
       campaignId: controlProspectsTable.campaignId,
       contactCount: controlProspectsTable.contactCount,
+      lastContactedAt: controlProspectsTable.lastContactedAt,
     })
     .from(controlProspectsTable)
     .where(
@@ -125,9 +248,31 @@ export async function attributeSignups(options: { organizationId?: number } = {}
     .limit(10_000);
   if (prospects.length === 0) return 0;
 
+  // First studio email sent to each candidate (legacy sends fall back to lastContactedAt).
+  const firstSends = await db
+    .select({
+      prospectId: controlOutreachEmailsTable.prospectId,
+      firstSentAt: sql<Date | string | null>`min(${controlOutreachEmailsTable.sentAt})`,
+    })
+    .from(controlOutreachEmailsTable)
+    .where(
+      and(
+        isNotNull(controlOutreachEmailsTable.sentAt),
+        inArray(
+          controlOutreachEmailsTable.prospectId,
+          prospects.map((p) => p.id),
+        ),
+      ),
+    )
+    .groupBy(controlOutreachEmailsTable.prospectId);
+  const firstSentById = new Map(
+    firstSends.map((row) => [row.prospectId, row.firstSentAt ? new Date(row.firstSentAt) : null] as const),
+  );
+
   const rows = await db
     .select({
       organizationId: organizationsTable.id,
+      orgCreatedAt: organizationsTable.createdAt,
       orgContactEmail: organizationsTable.contactEmail,
       venueId: venuesTable.id,
       ownerEmail: venuesTable.ownerEmail,
@@ -139,6 +284,7 @@ export async function attributeSignups(options: { organizationId?: number } = {}
     .where(options.organizationId != null ? eq(organizationsTable.id, options.organizationId) : undefined)
     .limit(5000);
 
+  const orgCreatedAt = new Map(rows.map((row) => [row.organizationId, row.orgCreatedAt] as const));
   const signups: SignupCandidate[] = rows.map((row) => ({
     organizationId: row.organizationId,
     venueId: row.venueId ?? null,
@@ -161,6 +307,28 @@ export async function attributeSignups(options: { organizationId?: number } = {}
       }
     }
     if (!hit) continue;
+
+    const firstContactAt = firstSentById.get(prospect.id) ?? prospect.lastContactedAt ?? null;
+    if (isPreexistingCustomer(orgCreatedAt.get(hit.signup.organizationId) ?? null, { contactCount: prospect.contactCount, firstContactAt })) {
+      // Already a customer before we wrote to them: lock it against outreach,
+      // but never credit outbound or stamp the organization with it.
+      const [locked] = await db
+        .update(controlProspectsTable)
+        .set({ status: "disqualified", statusChangedBy: "system:attribution", updatedAt: now })
+        .where(and(eq(controlProspectsTable.id, prospect.id), inArray(controlProspectsTable.status, [...CANDIDATE_STATUSES])))
+        .returning({ id: controlProspectsTable.id });
+      if (locked) {
+        await recordAuditEvent({
+          actorType: "system",
+          actor: "growth-attribution",
+          eventType: "prospect_matched_existing_customer",
+          subjectType: "prospect",
+          subjectId: prospect.id,
+          detail: { organizationId: hit.signup.organizationId, method: hit.method, contactCount: prospect.contactCount },
+        });
+      }
+      continue;
+    }
 
     const [updated] = await db
       .update(controlProspectsTable)
