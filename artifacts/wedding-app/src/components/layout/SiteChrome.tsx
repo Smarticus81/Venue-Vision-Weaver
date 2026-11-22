@@ -25,10 +25,10 @@ export function SiteHeader() {
       <header className="site-header page-width">
         <DreemerLogo />
         <nav aria-label="Main navigation">
-          <a href={onHome ? "#how-it-works" : "/#how-it-works"} className="nav-anchor">
+          <a href={onHome ? "#experience" : "/#experience"} className="nav-anchor">
             Workflow
           </a>
-          <a href={onHome ? "#pricing" : "/#pricing"} className="nav-anchor">
+          <a href={onHome ? "#plans" : "/#plans"} className="nav-anchor">
             Pricing
           </a>
           {isOperator ? (

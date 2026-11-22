@@ -177,13 +177,16 @@ function indexHtml(): string | null {
 
 // The landing hero is the LCP element; preload it only when the built asset
 // exists so a missing file never costs a wasted request.
-const HERO_IMAGE_PATH = "/brand/product-tour-poster.webp";
+const HERO_IMAGE_PATH = "/brand/lens-venue-1536.webp";
+const HERO_MOBILE_IMAGE_PATH = "/brand/lens-venue-800.webp";
 let heroPreloadTag: string | null = null;
 function heroPreload(): string {
   if (heroPreloadTag === null) {
-    heroPreloadTag = fs.existsSync(path.join(frontendDist, HERO_IMAGE_PATH))
-      ? `<link rel="preload" as="image" href="${HERO_IMAGE_PATH}" fetchpriority="high" />`
-      : "";
+    heroPreloadTag = [
+      [HERO_IMAGE_PATH, "(min-width: 761px)"],
+      [HERO_MOBILE_IMAGE_PATH, "(max-width: 760px)"],
+    ].filter(([asset]) => fs.existsSync(path.join(frontendDist, asset)))
+      .map(([asset, media]) => `<link rel="preload" as="image" href="${asset}" media="${media}" fetchpriority="high" />`).join("");
   }
   return heroPreloadTag;
 }

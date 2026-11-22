@@ -992,3 +992,57 @@ checks covered 375, 768 and 1440px, inline playback, product-view switching and
 mobile dashboard-to-billing navigation. These fixture checks do not claim a live
 payment, real-customer generation, physical iPhone test or measured mobile Core
 Web Vitals. Seedance remains unavailable due to the account's zero balance.
+
+# November 22, 2026 — Possibility lens (supersedes the workspace reset)
+
+The user rejected the graphite/orange workspace treatment as another boxy
+template and supplied https://motionsites.ai/ as the creative reference.
+The prior direction above is historical and is not the current design.
+
+Conversion spine: this page exists to get venue owners and sales teams to
+create a workspace because personalized visual follow-up gives tour prospects
+a reason to return and gives the venue team useful engagement signals.
+
+Direction: glacial light through a possibility lens. Canvas #EFF5F5, blue ink
+#092C39, prism action #2A4FDC, text accent #1639B6, refracted light #CBEAF0.
+Syne/Manrope replace Barlow/Plex. A split circular mark and wide custom vector
+wordmark replace the chevron identity. No italic alternation or pill boxes.
+
+Grid: oversized left-aligned type meets a free-standing circular image;
+white-space manifesto → dark three-chapter mechanism → tilted output image →
+open control lines → selectable single-plan detail → FAQ → oversized ask.
+No feature-card grid or pricing-card row. The primary action is readable before
+animation or scrolling; on phones it precedes the image.
+
+Signature: a refractive lens that reveals the personalized possibility. A small
+dynamic WebGL module provides chromatic edge refraction and a radial reveal.
+It renders on demand, caps pixel density, disposes resources and pauses when
+off-screen or hidden. Reduced-motion/coarse-pointer users never initialize it;
+ordinary images remain beneath it in all modes. The story uses ordinary scroll
+on desktop and manual buttons without pinning on mobile/reduced motion.
+Killed: continuous idle rotation, heavy 3D libraries, automatic video playback,
+card grids and a second separate decorative animation system.
+
+Reference inspection: MotionSites Golden Portal, Orbit Sphere and Card Story
+informed spatial composition and depth, not copied assets, code or paid prompts.
+New AI venue/couple concepts and exact prompts: `docs/possibility-lens-assets.md`.
+The original 15-second H.264 motion-design film is 788,901 bytes. No Seedance
+generation was submitted: the connected account still reports zero credits.
+All demonstrations are labelled illustrative; no customer proof is fabricated.
+
+Local browser checks: 360/375/768/1440px layouts, pointer and keyboard reveal,
+chapter selection, comparison slider Home, engagement example selection,
+config-driven Growth pricing, inline film playback and Escape-to-pause.
+Fixed a transparent layout layer intercepting the reveal and tablet headline
+overlap found in those checks. No console errors in the tested fixture.
+Reduced-motion/coarse-pointer GPU bypass and unavailable-WebGL fallback have
+unit coverage; the OS preference itself has not been exercised on a device.
+
+Validation: typecheck, full unit suite, security smoke, build and real reel
+encode/decode pass. The new film fully decodes with ffmpeg. Captures are local
+fixtures, not real accounts or payments. Preview evidence: `qa-output/lens-*`.
+Performance release gates are not certified: critical app chunks remain about
+195KB gzip (including existing auth/runtime), above the 150KB design budget.
+Physical mid-tier mobile LCP/CLS/INP/60fps profiling is still required before
+calling this production-performance approved. This revision is for design review,
+not an authorization to replace the public site or enable outreach.

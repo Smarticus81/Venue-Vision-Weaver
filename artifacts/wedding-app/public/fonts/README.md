@@ -1,9 +1,9 @@
 # Self-hosted brand fonts
 
-Active faces: Barlow Condensed (600 and 700) and IBM Plex Sans (variable), Latin WOFF2 subsets distributed by Google Fonts. The respective SIL Open Font License files are included alongside these files.
+Active faces: Syne (variable 400–800) and Manrope (variable 400–800), WOFF2 files distributed by Google Fonts. The respective SIL Open Font License files are included alongside these files.
 
 Upstream sources:
-- https://github.com/google/fonts/tree/main/ofl/barlowcondensed
-- https://github.com/google/fonts/tree/main/ofl/ibmplexsans
+- https://github.com/google/fonts/tree/main/ofl/syne
+- https://github.com/google/fonts/tree/main/ofl/manrope
 
-Outfit and Figtree files are retained for compatibility with cached prior builds, but are not loaded by the current app.
+Barlow Condensed, IBM Plex Sans, Outfit and Figtree files are retained for compatibility with cached prior builds, but are not loaded by the current app.

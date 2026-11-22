@@ -218,7 +218,7 @@ function reelLockupSvg(top: number): string {
   const wordX = LOCKUP_ICON_WIDTH + LOCKUP_GAP;
   return `<g transform="translate(${left} ${top}) scale(${scale})">
         <g transform="translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})">
-          <path d="${ICON_BODY_PATH}" fill="${coral[500]}" fill-rule="evenodd"/>
+          <path d="${ICON_BODY_PATH}" fill="${coral[400]}" fill-rule="evenodd"/>
           <g fill="none" stroke="${coral[400]}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
             ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
           </g>

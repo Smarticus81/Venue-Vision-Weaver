@@ -6,7 +6,7 @@ import { iconSvg, lockupSvg, logoColors, LOCKUP_HEIGHT, LOCKUP_WIDTH } from "./l
 import { contrastRatio } from "./contrast.js";
 import { semantic } from "./tokens.js";
 
-test("every logo renderer preserves the forward-frame counter", () => {
+test("every logo renderer preserves the split-lens and wordmark counters", () => {
   for (const svg of [iconSvg(), lockupSvg(), brandMarkSvg(semantic.text)]) {
     assert.match(svg, /fill-rule="evenodd"/);
   }
@@ -31,15 +31,15 @@ test("exported lockups preserve their wide aspect ratio and app icons remain squ
   assert.equal(icon.height, 192);
 });
 
-test("social card contains the product illustration, not a missing embedded image", async () => {
+test("social card contains the possibility lens, not a missing embedded image", async () => {
   const { fileURLToPath } = await import("node:url");
   const file = fileURLToPath(new URL("../assets/logo/og-image.png", import.meta.url));
   const meta = await sharp(file).metadata();
   assert.equal(meta.width, 1200);
   assert.equal(meta.height, 630);
-  // Crop the product window including its dark rail and screenshot detail.
+  // Crop the photographic lens, including architectural and reflection detail.
   const stats = await sharp(file).extract({ left: 600, top: 240, width: 520, height: 240 }).stats();
-  assert.ok(stats.channels.slice(0, 3).every((channel) => channel.stdev > 20), "product area is blank or nearly uniform");
+  assert.ok(stats.channels.slice(0, 3).every((channel) => channel.stdev > 20), "lens area is blank or nearly uniform");
 });
 
 test("every walkthrough source panel has visible content", async () => {

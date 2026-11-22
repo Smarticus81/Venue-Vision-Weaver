@@ -11,7 +11,7 @@ export function faqEntries(config: PublicConfig): Array<{ q: string; a: string }
   return [
     {
       q: "Is this a photo or an AI image?",
-      a: "An AI preview. Every image and the reel are labelled 'AI preview, imagined at {your venue}', and the real space photo sits beside each one. Your architecture is never altered.",
+      a: "An AI preview. Images and reels are labelled as AI previews, and venue reference photos provide context. Generations are guided by your venue photos, but AI can make mistakes. Review the results before sharing them with a couple.",
     },
     {
       q: "Who owns the images?",

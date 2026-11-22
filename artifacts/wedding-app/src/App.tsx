@@ -45,7 +45,8 @@ function lazyRoute<T extends ComponentType>(loader: () => Promise<{ default: T }
 //
 // framer-motion is only used by the lazy product pages, so its MotionConfig
 // (reducedMotion="user") loads with them instead of sitting in the main chunk
-// ahead of the landing page's first paint. The landing page uses no JS motion.
+// ahead of the landing page's first paint. Its optional lens renderer is a
+// separate dynamic import; the landing page always has an ordinary image.
 const MotionShell = lazyRoute(() =>
   import("framer-motion").then((m) => ({
     default: function Shell({ children }: { children: ReactNode }) {

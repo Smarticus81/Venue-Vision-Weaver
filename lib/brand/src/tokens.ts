@@ -3,9 +3,9 @@
  * and motion across the web app, the API server's emails and rendered
  * assets, and any future surface.
  *
- * Venue sales platform: graphite, clean white and signal orange.
+ * Possibility lens: glacial surfaces, deep blue ink and refracted blue light.
  * Legacy scale identifiers are compatibility aliases, not retained colors.
- * Accent fills use graphite text; dark orange is reserved for text on white.
+ * Accent fills use white text; light cyan is reserved for dark surfaces.
  * Status colors retain their semantic meaning and contrast requirements.
  *
  * `tokens.css` is generated from this file (`pnpm --filter @workspace/brand run build`).
@@ -23,43 +23,44 @@ export const brand = {
 
 /* ---------------------------------------------------------------- color */
 
-export const orange = {
-  50: "#FFF2EB",
-  100: "#FFE1CF",
-  200: "#FFC5A3",
-  300: "#FFA375",
-  400: "#FF8B51",
-  500: "#FF793D",
-  600: "#F76B2D",
-  700: "#9B340D",
-  800: "#772809",
-  900: "#521B06",
+export const prism = {
+  50: "#EDF3FF",
+  100: "#DCE9FF",
+  200: "#C0DAF9",
+  300: "#A7CDF7",
+  400: "#92C9F0",
+  500: "#2A4FDC",
+  600: "#2144BF",
+  700: "#1639B6",
+  800: "#15338D",
+  900: "#112659",
 } as const;
 // Legacy identifiers are API compatibility only; no legacy palette is retained.
-export const lavender = orange;
-export const coral = orange;
+export const orange = prism;
+export const lavender = prism;
+export const coral = prism;
 
 export const ink = {
-  50: "#F0F1F1",
-  100: "#E0E3E3",
-  200: "#C5CCCC",
-  300: "#AAB6B6",
-  400: "#758383",
-  500: "#536060",
-  600: "#414D4D",
-  700: "#303C3C",
-  800: "#222D2D",
-  900: "#152020",
+  50: "#EDF3F5",
+  100: "#DAE7EB",
+  200: "#BDD2DA",
+  300: "#A4C1CC",
+  400: "#6A8A98",
+  500: "#4D6570",
+  600: "#384F5A",
+  700: "#294450",
+  800: "#173A49",
+  900: "#092C39",
 } as const;
 
 export const ivory = {
   0: "#FFFFFF",
-  50: "#FAFBFA",
-  100: "#FFFFFF",
-  200: "#EDF0ED",
-  300: "#D8DFDA",
-  400: "#AEBAB3",
-  500: "#89968D",
+  50: "#F6FAFA",
+  100: "#EFF5F5",
+  200: "#E7F0F2",
+  300: "#CDDEE3",
+  400: "#9BB4BE",
+  500: "#718D99",
 } as const;
 
 export const sea = {
@@ -96,7 +97,7 @@ export const error = {
   strong: "#7D1F1B",
 } as const;
 
-export const color = { orange, lavender, coral, ink, ivory, sea, success, warning, error } as const;
+export const color = { prism, orange, lavender, coral, ink, ivory, sea, success, warning, error } as const;
 
 /**
  * Semantic roles. Everything in the UI should reach for one of these rather
@@ -115,7 +116,7 @@ export const semantic = {
   textMuted: ink[500],
   textPlaceholder: ink[500],
   textDisabled: ivory[500],
-  textOnAccent: ink[900],
+  textOnAccent: ivory[0],
   textOnInk: ivory[100],
   accent: coral[500],
   accentHover: coral[600],
@@ -143,24 +144,26 @@ export const semantic = {
   inkBorder: ink[700],
   inkText: ivory[100],
   inkTextMuted: ink[300],
+  lensGlow: "#CBEAF0",
+  lensHaze: "#E0EDF2",
+  lensLine: "#CBDFE5",
 } as const;
 
 /* ----------------------------------------------------------------- type */
 
 /**
- * Barlow Condensed gives the platform a decisive, upright display voice.
- * IBM Plex Sans is the self-hosted workhorse for data, forms and body copy.
+ * Syne brings broad, sculptural geometry; Manrope keeps the interface quiet.
  */
 export const font = {
-  display: "'Barlow Condensed', 'Arial Narrow', ui-sans-serif, system-ui, sans-serif",
-  body: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+  display: "'Syne', ui-sans-serif, system-ui, sans-serif",
+  body: "'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
   mono: "ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace",
   /** Email clients can't load web fonts reliably; this stack degrades gracefully. */
-  email: "'IBM Plex Sans', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
+  email: "'Manrope', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
 } as const;
 
 export const fontImportUrl =
-  "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
+  "https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700&family=Manrope:wght@400;500;600&display=swap";
 
 /** Modular scale, 1.25 ratio from a 16px base, in px. */
 export const typeScale = {
@@ -240,6 +243,7 @@ function kebab(value: string): string {
 /** Every token as a flat `--dm-*` custom-property map. */
 export function cssVariables(): Record<string, string> {
   const flat: Flat = {};
+  flatten("prism", prism, flat);
   flatten("orange", orange, flat);
   flatten("lavender", lavender, flat);
   flatten("coral", coral, flat);
