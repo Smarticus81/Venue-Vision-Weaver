@@ -16,6 +16,8 @@ Useful routes:
 - `/create-venue`: signed-in venue form.
 - `/preview/willow`: a ready venue (booking link, incentive line, no Turnstile): welcome, photo slots, style selection and entered-data persistence.
 - `/v/demo`: the shared gallery with four stills at display order 1-4, scene titles, the real spaces beside each image and the incentive line.
+- `/v/reel`: gallery with a six-second synthetic H.264 playback/seek fixture. First run `node artifacts/wedding-app/qa/make-reel-fixture.mjs` from the repository root (requires ffmpeg). The generated video is ignored in `qa-output`, not shipped to production.
+- `/v/reel-error`: the same gallery with a deliberate video failure, for Retry/Open video recovery checks.
 - `/v/processing`: waiting state.
 - `/v/failed`: failed generation with the couple-facing likeness message.
 - `/find-my-gallery`: simulated recovery request failure.
@@ -26,4 +28,4 @@ Useful routes:
 - `/control#outreach/2`: a draft held by the daily cap, with vetting at review and a broken copy rule, so Retry send stays disabled and says why.
 - `/control#outreach`: the outreach email studio review screen. Run `pnpm run outreach:demo -- --out qa-output/outreach-demo --site <venue url>` first and the fixture renders those real samples (photos are swapped for the local sample image).
 
-All names, email addresses, balances, and dates are fixtures. Every `/api/storage` image is `public/brand/compare-room.webp`; no fixture video is included. Funnel and gallery tracking beacons (`POST /api/events`, `POST /api/sessions/by-token/*/events`) answer 202 and are dropped. The sign-in widget itself is not exercised. This preview provides layout and interaction checks, not end-to-end verification of production services.
+All names, email addresses, balances, and dates are fixtures. Every `/api/storage` image is `public/brand/compare-room.webp`; the optional synthetic reel is a playback test only, not an output-quality example. Funnel and gallery tracking beacons (`POST /api/events`, `POST /api/sessions/by-token/*/events`) answer 202 and are dropped. The sign-in widget itself is not exercised. This preview provides layout and interaction checks, not end-to-end verification of production services.

@@ -20,6 +20,7 @@ import {
   Share2,
 } from "lucide-react";
 import { CoupleChrome } from "@/components/layout/CoupleChrome";
+import { MotionReel } from "@/components/gallery/MotionReel";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -431,17 +432,11 @@ function GalleryView({
         <section className="gs-hero">
           <div className="gs-hero__media">
             {reelSrc ? (
-              <video
+              <MotionReel
+                key={reelSrc}
                 src={reelSrc}
                 poster={shareAssetUrl(stills[0]!.objectKey, token)}
-                autoPlay
-                muted
-                loop
-                playsInline
-                controls
-                preload="metadata"
-                aria-label={`Your reel at ${venueName}, AI preview`}
-                data-testid="gallery-reel"
+                venueName={venueName}
               />
             ) : (
               <img src={shareAssetUrl(stills[0]!.objectKey, token)} alt={`AI preview of the two of you at ${venueName}`} />

@@ -1,7 +1,7 @@
 import { ExternalLink, Loader2 } from "lucide-react";
 import { getGetOrgCreditHistoryQueryKey, useGetOrgCreditHistory } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { billingGuard, buildBillingCards, creditReasonLabel, type BillingCard } from "./billing";
+import { billingGuard, buildBillingCards, creditReasonLabel, type BillingCard } from "./billingModel";
 import { shortDate } from "./galleryStats";
 import { isSubscriptionPlan, planLabel } from "./plans";
 import type { DashboardContext } from "./types";

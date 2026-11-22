@@ -1,10 +1,9 @@
 /**
  * The Dreemer logo as geometry.
  *
- * Everything here is constructed, not traced: the wordmark is a monoline
- * geometric lowercase built from circles and stems (x-height 100, ascender
- * 150, stroke 19), and the mark is a soft coral squircle with a thin orbit
- * line and a four-point spark at its top right. Because the letterforms are
+ * The wordmark is a custom monoline lowercase with generous spacing. The
+ * architectural D frames an open arched doorway: a venue and a future moment
+ * in one compact silhouette. Because the letterforms are
  * paths, the logo renders identically with no web font loaded, in email
  * clients, in `sharp`, and in the browser.
  *
@@ -18,9 +17,9 @@ export type LogoVariant = "color" | "ink" | "reversed";
 
 /* ------------------------------------------------------------- wordmark */
 
-export const WORDMARK_STROKE = 22;
+export const WORDMARK_STROKE = 14;
 export const WORDMARK_HEIGHT = 150;
-const GAP = 12;
+const GAP = 20;
 const S = WORDMARK_STROKE / 2; // half stroke, so outer edges land on integers
 const R = 50 - S; // bowl centre-line radius: outer bowl = 100 wide
 
@@ -78,30 +77,25 @@ export const WORDMARK_PATHS: readonly string[] = layout.paths;
 /* ----------------------------------------------------------------- mark */
 
 /**
- * The mark, traced from the reference render (lib/brand/assets/logo/
- * dreemer-logo-midjourney.png) on a 100-unit grid.
- *
- * The filled shape is a heart's left lobe: a soft rounded top-left, a straight
- * top edge running down to the notch, a straight edge out to the right corner,
- * a straight edge down to the point, and a gentle curve back up the left side.
- * The thin line leaves the notch and traces where the right lobe would be,
- * ending open on the right; a small hand-drawn spark (two short crossing
- * strokes) sits on the line at its peak, top right.
+ * Original architectural D on a 100-unit grid. The counter uses even-odd
+ * filling; the interior arch and open door remain distinct at header sizes.
+ * Tiny favicons retain only the strong outer monogram.
  */
 export const ICON_SIZE = 100;
 
-/** Filled lobe. */
+/** Outer D and counter, rendered with even-odd fill. */
 export const ICON_BODY_PATH =
-  "M 47.5 36.5 L 77.5 65.25 L 48.75 95.25 C 30 82, 10 60, 3.5 42 C 0 24, 3 9, 13 5.5 Z";
+  "M 12 8 H 48 C 73 8 90 25 90 50 C 90 75 73 92 48 92 H 12 Z M 24 20 V 80 H 47 C 66 80 78 68 78 50 C 78 32 66 20 47 20 Z";
 
-/** The thin right-lobe line, from the notch up over the top right and back down. */
+/** Interior arch and open door. */
 export const ICON_LINE_PATHS: readonly string[] = [
-  "M 48.5 35.5 C 56 24, 66 13, 77 11.5 C 88 10, 97 20, 98 31 C 98.5 37, 97.5 42, 96.5 45.5",
+  "M 38 71 V 44 C 38 33 45 27 53 27 C 61 27 67 33 67 44 V 71",
+  "M 38 71 L 53 62 V 29",
 ];
-export const ICON_LINE_STROKE = 2.6;
+export const ICON_LINE_STROKE = 3.5;
 
-/** The spark: two short crossing strokes over the line's peak. */
-export const ICON_SPARK_PATHS: readonly string[] = ["M 64 8.5 L 85 14.5", "M 82.5 6 L 75.5 15"];
+/** Reserved detail paths; the aperture identity has no decorative spark. */
+export const ICON_SPARK_PATHS: readonly string[] = [];
 export const ICON_SPARK_STROKE = 2.4;
 
 /** A four-point star, used by the simplified favicon tile where the hairline strokes vanish. */
@@ -112,9 +106,9 @@ export function sparkPath(cx: number, cy: number, r: number): string {
 /* --------------------------------------------------------------- lockup */
 
 export const LOCKUP_GAP = 36;
-/** The mark spans y 5.5–95.25 (≈90 units); scale it to the 150-unit ascender. */
-export const LOCKUP_ICON_SCALE = 150 / 90;
-export const LOCKUP_ICON_OFFSET_Y = -5.5 * (150 / 90);
+/** The mark spans y 8–92; scale it to the 150-unit ascender. */
+export const LOCKUP_ICON_SCALE = 150 / 84;
+export const LOCKUP_ICON_OFFSET_Y = -8 * (150 / 84);
 export const LOCKUP_ICON_WIDTH = 100 * LOCKUP_ICON_SCALE;
 export const LOCKUP_WIDTH = LOCKUP_ICON_WIDTH + LOCKUP_GAP + WORDMARK_WIDTH;
 export const LOCKUP_HEIGHT = WORDMARK_HEIGHT;
@@ -139,7 +133,7 @@ const XMLNS = 'xmlns="http://www.w3.org/2000/svg"';
 function markGroup(colors: ReturnType<typeof logoColors>, transform?: string): string {
   const t = transform ? ` transform="${transform}"` : "";
   return `<g${t}>
-    <path d="${ICON_BODY_PATH}" fill="${colors.mark}"/>
+    <path d="${ICON_BODY_PATH}" fill="${colors.mark}" fill-rule="evenodd"/>
     <g fill="none" stroke="${colors.line}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
       ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
     </g>
@@ -193,8 +187,8 @@ export function lockupSvg(variant: LogoVariant = "color", options: { padding?: n
 }
 
 /**
- * Favicon / app-icon tile: ivory rounded tile with the mark. The thin orbit
- * line disappears below ~32px, so the tile drops it and keeps body + spark.
+ * Favicon / app-icon tile. Small sizes retain the D silhouette without the
+ * interior door, preserving a legible counter at 16px.
  */
 export function tileSvg(
   options: { size?: number; variant?: "light" | "dark"; simplified?: boolean; rounded?: boolean; inset?: number } = {},
@@ -210,7 +204,7 @@ export function tileSvg(
   const markScale = (100 - inset * 2) / 100;
   const r = rounded ? size * 0.22 : 0;
   const detail = simplified
-    ? `<path d="${sparkPath(80, 12, 9)}" fill="${colors.line}"/>`
+    ? ""
     : `<g fill="none" stroke="${colors.line}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
       ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n      ")}
     </g>
@@ -220,7 +214,7 @@ export function tileSvg(
   return `<svg ${XMLNS} viewBox="0 0 ${size} ${size}" role="img" aria-label="Dreemer">
   <rect width="${size}" height="${size}" rx="${r}" fill="${bg}"/>
   <g transform="scale(${scale}) translate(${inset} ${inset}) scale(${markScale})">
-    <path d="${ICON_BODY_PATH}" fill="${colors.mark}"/>
+    <path d="${ICON_BODY_PATH}" fill="${colors.mark}" fill-rule="evenodd"/>
     ${detail}
   </g>
 </svg>

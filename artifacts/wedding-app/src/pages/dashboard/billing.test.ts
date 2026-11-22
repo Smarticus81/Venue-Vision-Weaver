@@ -12,7 +12,7 @@ import {
   saveCheckoutSnapshot,
   takeCheckoutSnapshot,
   type SnapshotStorage,
-} from "./billing.ts";
+} from "./billingModel.ts";
 import { DEFAULT_PUBLIC_CONFIG } from "../../lib/publicConfig.ts";
 
 test("billing cards come from the published prices, never a constant", () => {

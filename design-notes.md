@@ -1,5 +1,31 @@
 # Design notes
 
+## 2026-11-21 — Overhaul: architectural aperture
+
+The acquisition page exists to get a venue operator to create and evaluate a
+first gallery, because seeing recognizable couples in the real venue makes
+the product's value concrete. Output examples, setup and cost must support
+that decision with evidence.
+
+New identity direction: a precise D enclosing an open arched doorway, paired
+with a lighter, more generously spaced custom lowercase wordmark. The mark
+connects the venue's architecture with a view into the couple's future.
+Small favicons use the outer D alone. Shared geometry drives React, SVG,
+email and application icons. The previous half-heart and decorative spark
+are retired from the active geometry. Palette and full website composition
+remain under development; the complete acceptance plan is in
+`docs/overhaul-execution.md`.
+
+Mobile gallery refinement: the reel keeps its 16:9 footprint before metadata
+arrives and uses native inline controls. A quiet 44px-minimum Play/Retry action
+sits below the image, never on top of the timeline. Autoplay is optional:
+reduced-motion and data-saving users start with a poster, rejected playback
+leaves a tap-to-play path, and failures retain the stills and direct video link.
+Hidden tabs pause rather than consume playback resources. Verified locally at
+360/375, 768 and 1440px with a synthetic H.264 fixture; real-device checks remain.
+Browser behavior reference: https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/play
+and https://webkit.org/blog/6784/new-video-policies-for-ios/.
+
 Working log of deliberate design decisions, effects killed, and directions tried.
 Future passes: read this first, build on it, and append — don't repeat.
 

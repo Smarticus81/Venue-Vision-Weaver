@@ -3,6 +3,7 @@ import config from "../vite.config";
 import path from "node:path";
 import fs from "node:fs";
 import { controlFixture } from "./control-fixture";
+import { parseByteRange } from "../../api-server/src/lib/byteRange";
 
 /*
  * Fixture payloads mirror the generated API types (lib/api-client-react
@@ -243,6 +244,32 @@ const qaConfig = mergeConfig(config, {
             }
           }
           if (u.startsWith("/storage")) {
+            if (u.includes("demo-reel.mp4")) {
+              const file = path.resolve(import.meta.dirname, "../../../qa-output/mobile-reel.mp4");
+              if (u.includes("shareToken=reel-error") || !fs.existsSync(file)) {
+                res.statusCode = 503;
+                res.end(JSON.stringify({ error: "Fixture reel unavailable" }));
+                return;
+              }
+              const bytes = fs.readFileSync(file);
+              res.setHeader("Content-Type", "video/mp4");
+              res.setHeader("Accept-Ranges", "bytes");
+              const range = req.headers.range ? parseByteRange(req.headers.range, bytes.length) : null;
+              if (req.headers.range && !range) {
+                res.statusCode = 416;
+                res.setHeader("Content-Range", `bytes */${bytes.length}`);
+                res.end();
+                return;
+              }
+              const body = range ? bytes.subarray(range.start, range.end + 1) : bytes;
+              if (range) {
+                res.statusCode = 206;
+                res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${bytes.length}`);
+              }
+              res.setHeader("Content-Length", body.length);
+              res.end(req.method === "HEAD" ? undefined : body);
+              return;
+            }
             res.setHeader("Content-Type", "image/webp");
             res.end(
               fs.readFileSync(
@@ -317,6 +344,15 @@ const qaConfig = mergeConfig(config, {
               errorMessage:
                 "We couldn't create a close enough likeness from these photos. Clear, sharp, well-lit photos where both faces are easy to see work best. Please try again with different photos.",
               generatedAssets: [],
+            };
+          else if (route === "/sessions/by-token/reel" || route === "/sessions/by-token/reel-error")
+            data = {
+              ...session,
+              shareToken: route.endsWith("reel-error") ? "reel-error" : "reel",
+              generatedAssets: [...session.generatedAssets, {
+                id: 5, sessionId: 1, assetType: "video", displayOrder: 5,
+                objectKey: "/objects/generated/demo-reel.mp4",
+              }],
             };
           else if (route.startsWith("/sessions/by-token/")) data = session;
           else {

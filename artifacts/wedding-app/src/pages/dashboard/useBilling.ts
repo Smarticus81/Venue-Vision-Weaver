@@ -16,7 +16,7 @@ import {
   takeCheckoutSnapshot,
   type BillingReturnState,
   type BillingSnapshot,
-} from "./billing";
+} from "./billingModel";
 import { apiErrorMessage } from "./errors";
 import type { BillingActions, BillingProductId } from "./types";
 

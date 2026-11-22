@@ -18,7 +18,7 @@ mkdirSync(assetDir, { recursive: true });
 mkdirSync(publicDir, { recursive: true });
 
 function write(dir: string, name: string, data: string | Buffer): void {
-  writeFileSync(path.join(dir, name), data);
+  writeFileSync(path.join(dir, name), typeof data === "string" ? data.replace(/[\t ]+$/gm, "") : data);
   console.log("wrote", path.relative(process.cwd(), path.join(dir, name)));
 }
 

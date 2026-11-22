@@ -43,7 +43,7 @@ export function DreemerLogo({
   const markFill = tone === "color" ? "var(--dm-accent)" : "currentColor";
   const mark = (
     <g>
-      <path d={ICON_BODY_PATH} fill={markFill} />
+      <path d={ICON_BODY_PATH} fill={markFill} fillRule="evenodd" />
       <g fill="none" stroke={markFill} strokeWidth={ICON_LINE_STROKE} strokeLinecap="round">
         {ICON_LINE_PATHS.map((d) => (
           <path key={d} d={d} />

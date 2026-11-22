@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 
 // The db package builds a lazy pg Pool at import time; no connection is ever
@@ -710,5 +711,5 @@ test("the runtime image carries the demo couple folder where sampleGallery looks
   const runtime = dockerfile.slice(dockerfile.indexOf("AS runtime"));
   assert.match(runtime, /COPY --from=builder[^\n]*\/app\/lib\/brand\/assets\/demo-couple \.\/lib\/brand\/assets\/demo-couple/);
   const { demoCoupleDirCandidates } = await import("./sampleGallery.js");
-  assert.ok(demoCoupleDirCandidates({}, "/app").includes("/app/lib/brand/assets/demo-couple"));
+  assert.ok(demoCoupleDirCandidates({}, "/app").includes(path.resolve("/app/lib/brand/assets/demo-couple")));
 });

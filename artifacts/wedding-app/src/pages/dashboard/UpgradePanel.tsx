@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { billingGuard, buildBillingCards } from "./billing";
+import { billingGuard, buildBillingCards } from "./billingModel";
 import { ownerSpendCopy } from "./errors";
 import type { SpendCheck } from "./activation";
 import type { BillingActions, DashboardContext } from "./types";

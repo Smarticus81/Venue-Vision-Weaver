@@ -980,6 +980,43 @@
 .gs-hero__media .gs-tag {
   top: 10px;
   bottom: auto;
+  pointer-events: none;
+}
+.gs-reel video {
+  aspect-ratio: 16 / 9;
+}
+.gs-reel__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  background: var(--dm-surface);
+  color: var(--dm-text);
+  font: 500 13px/1.5 var(--dm-font-body);
+}
+.gs-reel__actions > span {
+  flex: 1 1 170px;
+}
+.gs-reel__actions button,
+.gs-reel__actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--dm-border-strong);
+  border-radius: var(--dm-radius-md);
+  background: var(--dm-surface);
+  color: var(--dm-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gs-reel__actions :is(button, a):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
 }
 .gs-hero__copy {
   display: flex;

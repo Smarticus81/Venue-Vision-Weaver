@@ -20,7 +20,7 @@ import { track } from "@/lib/track";
 import { activationMilestones, localSpendCheck, venueReadiness, type VenueReadiness } from "./dashboard/activation";
 import { ActivationChecklist } from "./dashboard/ActivationChecklist";
 import { Billing } from "./dashboard/Billing";
-import { billingReturnMessage } from "./dashboard/billing";
+import { billingReturnMessage } from "./dashboard/billingModel";
 import { CoupleLinkCard } from "./dashboard/CoupleLinkCard";
 import { CreateGallery } from "./dashboard/CreateGallery";
 import { cleanedSearch, DASHBOARD_TABS, parseDashboardLocation, tabFromHash } from "./dashboard/dashboardRoute";
