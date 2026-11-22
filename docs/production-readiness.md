@@ -159,6 +159,21 @@ overhaul) and tick each one off.
    - `customer.subscription.paused`
    - `customer.subscription.resumed`
    - `customer.subscription.deleted`
+   - `charge.refunded`
+   - `charge.dispute.created`
+   - `radar.early_fraud_warning.created`
+
+   Enable the three risk events only after the build containing their handlers
+   is live. Each creates a human-only `payment_risk` task in Control -> Tasks,
+   using Stripe's charge/customer and invoice/subscription relationships (not
+   metadata ownership guesses). The event claim, task and audit entry commit
+   together. Transient lookup/write failures return 500 for retry; duplicates
+   do not create duplicate tasks. Unresolved or conflicting ownership is flagged
+   for manual matching. Review the payment, refund totals, credit ledger and any
+   dispute evidence deadline in Stripe, record the decision in Stripe,
+   and then mark it Done. This path does not automatically refund, remove
+   credits, cancel subscriptions or send messages. Operator monitoring remains
+   necessary even when the autonomous control plane is disabled.
 
    Renewals add the plan quota, clipped so plan credits never exceed
    `PLAN_CREDIT_ROLLOVER_CAP` (default 3) months of quota; pack credits are

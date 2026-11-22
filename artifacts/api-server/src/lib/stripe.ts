@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { randomInt } from "node:crypto";
 import { STARTER_MONTHLY_CREDITS, GROWTH_MONTHLY_CREDITS, CREDIT_PACK_AMOUNT } from "@workspace/db";
 import { logger } from "./logger.js";
 import { getAppBaseUrl as resolveAppBaseUrl } from "./appUrl.js";
@@ -6,6 +7,11 @@ import { getAppBaseUrl as resolveAppBaseUrl } from "./appUrl.js";
 const secretKey = process.env.STRIPE_SECRET_KEY;
 
 const stripe = secretKey ? new Stripe(secretKey) : null;
+
+// Stable for this process, distinct across releases/instances in Workbench.
+export const CHECKOUT_INTEGRATION_IDENTIFIER = `dreemer-hosted-${Array.from(
+  { length: 8 }, () => String.fromCharCode(97 + randomInt(26)),
+).join("")}`;
 
 export const STRIPE_PRICES = {
   starter: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "",

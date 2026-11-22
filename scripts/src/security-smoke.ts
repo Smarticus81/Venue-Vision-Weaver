@@ -1794,6 +1794,10 @@ try {
     const grants: Array<{ amount: number; eventId: string }> = [];
     let failNextLookup = false;
     const store = {
+      async retrieveCharge() { throw new Error("unexpected risk lookup in billing smoke"); },
+      async retrieveInvoice() { throw new Error("unexpected risk lookup in billing smoke"); },
+      async listPaidInvoiceIds() { return []; },
+      async recordRiskReview() { throw new Error("unexpected risk write in billing smoke"); },
       async recordStripeEvent(event: { id: string }) {
         if (recorded.has(event.id)) return false;
         recorded.add(event.id);

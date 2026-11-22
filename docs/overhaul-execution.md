@@ -45,6 +45,24 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: payment-risk handling
+
+- Updated Stripe Node to 23.2.0 and added refund, dispute and early-fraud-warning
+  handling. Stripe object relationships map payments to organizations; unknown,
+  conflicting and unmapped-subscription cases require human review. No automatic
+  refunds, cancellations, credit changes or messages are authorized by these events.
+- The risk event, operator task and audit entry commit in one database transaction.
+  Regression tests cover duplicate delivery, simulated failed writes, lookup
+  retries, partial refunds and modern multi-invoice payments. These are fake-store
+  tests, not proof of live PostgreSQL transaction behavior or Stripe delivery.
+- Fresh full tests, security smoke, codegen/drift check and build/typecheck exited
+  0 in terminal session 56967. The risk subscriptions are intentionally not yet
+  enabled on the live endpoint: deploy the handlers before subscribing to them.
+- Rechecked DNS: all three Resend verification records still return NXDOMAIN.
+  Railway still reports the failed main deployment as latest; this branch has
+  not replaced the old running application. Tax configuration, live checkout,
+  webhook signatures, email and real-reference quality remain launch gates.
+
 ### November 21 checkpoint: schema reconciliation and email/TLS setup
 
 - Added the ten missing billing, gallery, telemetry and growth tables plus the

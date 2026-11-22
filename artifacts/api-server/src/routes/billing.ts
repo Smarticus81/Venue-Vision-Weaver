@@ -7,6 +7,8 @@ import {
   venuesTable,
   creditTransactionsTable,
   stripeEventsTable,
+  agentTasksTable,
+  controlAuditEventsTable,
   type Organization,
   type BillingEventKind,
 } from "@workspace/db";
@@ -21,6 +23,7 @@ import {
   isStripeConfigured,
   isStripeClientConfigured,
   STRIPE_PRICES,
+  CHECKOUT_INTEGRATION_IDENTIFIER,
   getAppBaseUrl,
   isBillingProduct,
   isSubscriptionProduct,
@@ -56,6 +59,7 @@ import { recordFunnelEvent, type FunnelEventInput } from "../lib/funnelEvents.js
 import { recordAuditEvent } from "../control-plane/audit.js";
 import { UpdateOrganizationBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger.js";
+import { handleBillingRiskEvent, isBillingRiskEvent, type BillingRiskStore } from "../lib/billingRisk.js";
 
 const router: IRouter = Router();
 
@@ -307,6 +311,7 @@ router.post("/org/billing/checkout", async (req, res): Promise<void> => {
     }
 
     const session = await stripe.checkout.sessions.create({
+      integration_identifier: CHECKOUT_INTEGRATION_IDENTIFIER,
       customer: customerId,
       mode: isSubscription ? "subscription" : "payment",
       line_items: [{ price: priceId, quantity: 1 }],
@@ -413,7 +418,7 @@ export interface StripeEventLike {
   data: { object: unknown };
 }
 
-export interface BillingStore {
+export interface BillingStore extends BillingRiskStore {
   /** Record the event id before acting. Returns false when the id was already recorded (replay). */
   recordStripeEvent(event: StripeEventLike): Promise<boolean>;
   /** Undo recordStripeEvent so Stripe's retry of a failed delivery is processed. */
@@ -441,6 +446,51 @@ export interface BillingStore {
 
 export function createDbBillingStore(): BillingStore {
   return {
+    retrieveCharge: (id) => requireStripe().charges.retrieve(id),
+    retrieveInvoice: (id) => requireStripe().invoices.retrieve(id),
+    async listPaidInvoiceIds(paymentIntentId) {
+      const ids = new Set<string>();
+      for await (const payment of requireStripe().invoicePayments.list({
+        payment: { type: "payment_intent", payment_intent: paymentIntentId },
+        status: "paid",
+        limit: 100,
+      })) {
+        ids.add(typeof payment.invoice === "string" ? payment.invoice : payment.invoice.id);
+      }
+      return [...ids];
+    },
+    async recordRiskReview(event, review) {
+      return db.transaction(async (tx) => {
+        const claimed = await tx.insert(stripeEventsTable).values({
+          eventId: event.id, type: event.type, payload: { object: event.data.object },
+        }).onConflictDoNothing({ target: stripeEventsTable.eventId }).returning({ id: stripeEventsTable.id });
+        if (claimed.length === 0) return false;
+        await tx.insert(agentTasksTable).values({
+          agentKey: "finance",
+          category: "payment_risk",
+          priority: event.type === "charge.refunded" ? "high" : "critical",
+          title: `Payment review: ${event.type} (${event.id})`,
+          detail: [
+            "Human review required in Stripe. This task does not authorize an automated financial action.",
+            `Organizations: ${review.organizationIds.join(", ") || "unresolved — match the Stripe customer before acting"}`,
+            `Charge: ${review.chargeId ?? "unresolved"}; payment: ${review.paymentIntentId ?? "not provided"}`,
+            `Subscriptions: ${review.subscriptionIds.join(", ") || "none resolved (may be a credit pack)"}`,
+            `Amount in minor currency units: ${review.amountCents ?? "unknown"} ${review.currency ?? ""}`,
+            ...(review.amountBasis === "cumulative_refunded" ? ["The refund amount is the cumulative refunded total for this charge, not an additional refund to issue."] : []),
+            ...(review.evidenceDueAt ? [`Dispute evidence deadline: ${review.evidenceDueAt}`] : []),
+            ...(review.mappingNeedsReview ? ["Ownership mapping is missing or ambiguous. Resolve it manually before any action."] : []),
+            "Review the event, payment, refund status and credit ledger; document the reconciliation in Stripe. For a dispute, review the evidence deadline in Stripe. A fraud warning is a signal, not proof.",
+            "Do not refund, cancel, remove credits or issue make-good credits automatically. Record the human decision, then mark this task Done.",
+          ].join("\n"),
+          payload: { ...review, humanReviewRequired: true },
+        });
+        await tx.insert(controlAuditEventsTable).values({
+          actorType: "system", actor: "stripe-webhook", eventType: "billing_risk_review_created",
+          subjectType: "stripe_event", subjectId: event.id, detail: { ...review },
+        });
+        return true;
+      });
+    },
     async recordStripeEvent(event) {
       const inserted = await db
         .insert(stripeEventsTable)
@@ -524,6 +574,7 @@ export interface StripeEventOutcome {
   handled: string;
   organizationId?: number;
   grant?: PlanGrant;
+  duplicate?: boolean;
 }
 
 type LooseRecord = Record<string, unknown>;
@@ -1072,6 +1123,10 @@ async function handleSubscriptionDeleted(
  */
 export async function processStripeEvent(event: StripeEventLike, store: BillingStore): Promise<StripeEventOutcome> {
   switch (event.type) {
+    case "charge.refunded":
+    case "charge.dispute.created":
+    case "radar.early_fraud_warning.created":
+      return handleBillingRiskEvent(event, store);
     case "checkout.session.completed":
       return handleCheckoutCompleted(store, event);
     case "checkout.session.async_payment_succeeded":
@@ -1104,7 +1159,10 @@ export async function runStripeWebhookEvent(
   event: StripeEventLike,
   store: BillingStore,
 ): Promise<{ status: 200 | 500; body: Record<string, unknown> }> {
-  const fresh = await store.recordStripeEvent(event);
+  // Risk events claim their event and human-review task in ONE transaction.
+  // A crash or failed task insert must not leave a false "processed" marker.
+  const riskEvent = isBillingRiskEvent(event.type);
+  const fresh = riskEvent || await store.recordStripeEvent(event);
   if (!fresh) {
     logger.info({ eventId: event.id, type: event.type }, "Stripe event already processed");
     return { status: 200, body: { received: true, duplicate: true } };
@@ -1112,11 +1170,11 @@ export async function runStripeWebhookEvent(
   try {
     const outcome = await processStripeEvent(event, store);
     logger.info({ eventId: event.id, type: event.type, ...outcome }, "Stripe event processed");
-    return { status: 200, body: { received: true, handled: outcome.handled } };
+    return { status: 200, body: { received: true, handled: outcome.handled, ...(outcome.duplicate ? { duplicate: true } : {}) } };
   } catch (err) {
     logger.error({ err, eventId: event.id, type: event.type }, "Stripe webhook handler error");
     try {
-      await store.forgetStripeEvent(event.id);
+      if (!riskEvent) await store.forgetStripeEvent(event.id);
     } catch (forgetErr) {
       logger.error({ err: forgetErr, eventId: event.id }, "Could not release stripe_events row after failure");
     }

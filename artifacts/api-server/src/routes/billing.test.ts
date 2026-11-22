@@ -33,6 +33,10 @@ interface Ledger {
 }
 
 interface FakeStore extends BillingStore {
+  charges: Map<string, unknown>;
+  invoices: Map<string, unknown>;
+  paidInvoiceIds: Map<string, string[]>;
+  riskReviews: import("../lib/billingRisk.js").BillingRiskReview[];
   orgs: Map<number, BillingOrg>;
   stripeEvents: Set<string>;
   ledger: Ledger[];
@@ -63,6 +67,25 @@ function makeOrg(overrides: Partial<BillingOrg> = {}): BillingOrg {
 
 function makeStore(orgs: BillingOrg[], subscriptions: Record<string, unknown> = {}): FakeStore {
   const store: FakeStore = {
+    charges: new Map(),
+    invoices: new Map(),
+    paidInvoiceIds: new Map(),
+    riskReviews: [],
+    async retrieveCharge(id) {
+      if (!store.charges.has(id)) throw new Error("Stripe charge unavailable");
+      return store.charges.get(id);
+    },
+    async retrieveInvoice(id) {
+      if (!store.invoices.has(id)) throw new Error("Stripe invoice unavailable");
+      return store.invoices.get(id);
+    },
+    async listPaidInvoiceIds(id) { return store.paidInvoiceIds.get(id) ?? []; },
+    async recordRiskReview(event, review) {
+      if (store.stripeEvents.has(event.id)) return false;
+      store.riskReviews.push(review);
+      store.stripeEvents.add(event.id);
+      return true;
+    },
     orgs: new Map(orgs.map((org) => [org.id, { ...org }])),
     stripeEvents: new Set(),
     ledger: [],
@@ -925,4 +948,107 @@ test("subscription checkout with a delayed payment method does not lift the tria
   org = store.orgs.get(7)!;
   assert.equal(org.plan, "starter");
   assert.equal(org.subscriptionStatus, "active");
+});
+
+test("partial refunds create one human review and preserve credits, plan and subscription", async () => {
+  const original = makeOrg({ plan: "growth", creditsBalance: 53, stripeSubscriptionId: "sub_7" });
+  const store = makeStore([original]);
+  store.invoices.set("in_7", { subscription: "sub_7" });
+  const refund = event("evt_refund", "charge.refunded", {
+    id: "ch_7", invoice: "in_7", customer: "cus_7", amount: 39900, amount_refunded: 5000, currency: "usd",
+    metadata: { organizationId: "999" },
+  });
+  assert.equal((await billing.runStripeWebhookEvent(refund, store)).status, 200);
+  assert.equal((await billing.runStripeWebhookEvent(refund, store)).body.duplicate, true);
+  assert.equal(store.riskReviews.length, 1);
+  assert.equal(store.riskReviews[0]!.amountCents, 5000);
+  assert.equal(store.riskReviews[0]!.amountBasis, "cumulative_refunded");
+  assert.deepEqual(store.riskReviews[0]!.organizationIds, [7]);
+  assert.deepEqual(store.orgs.get(7), original);
+  assert.equal(store.ledger.length, 0);
+  assert.equal(store.billingEvents.length, 0, "a review does not count the refund as new revenue");
+});
+
+test("hosted Checkout has a traceable integration label with eight random letters", () => {
+  assert.match(stripeLib.CHECKOUT_INTEGRATION_IDENTIFIER, /^dreemer-hosted-[a-z]{8}$/);
+});
+
+test("modern disputed payments resolve every linked invoice and flag conflicting ownership", async () => {
+  const store = makeStore([
+    makeOrg({ stripeSubscriptionId: "sub_7" }),
+    makeOrg({ id: 8, stripeCustomerId: "cus_8", stripeSubscriptionId: "sub_8" }),
+  ]);
+  store.charges.set("ch_7", { id: "ch_7", customer: { id: "cus_7" }, payment_intent: { id: "pi_7" } });
+  store.paidInvoiceIds.set("pi_7", ["in_7", "in_8", "in_7"]);
+  store.invoices.set("in_7", { parent: { type: "subscription_details", subscription_details: { subscription: "sub_7" } } });
+  store.invoices.set("in_8", { parent: { type: "subscription_details", subscription_details: { subscription: { id: "sub_8" } } } });
+  await billing.runStripeWebhookEvent(event("evt_dispute", "charge.dispute.created", {
+    id: "dp_7", charge: "ch_7", payment_intent: null, amount: 14900, currency: "usd", reason: "fraudulent",
+    evidence_details: { due_by: 1800000000 },
+  }), store);
+  const review = store.riskReviews[0]!;
+  assert.deepEqual(review.invoiceIds, ["in_7", "in_8"]);
+  assert.deepEqual(review.subscriptionIds, ["sub_7", "sub_8"]);
+  assert.deepEqual(review.organizationIds, [7, 8]);
+  assert.equal(review.mappingNeedsReview, true);
+  assert.equal(review.evidenceDueAt, new Date(1800000000000).toISOString());
+  assert.equal(store.ledger.length, 0);
+});
+
+test("credit-pack fraud warnings map through the charge customer, not metadata", async () => {
+  const store = makeStore([makeOrg()]);
+  store.charges.set("ch_pack", { customer: "cus_7", payment_intent: "pi_pack", amount: 4900, currency: "usd" });
+  await billing.runStripeWebhookEvent(event("evt_warning", "radar.early_fraud_warning.created", {
+    id: "issfr_7", charge: "ch_pack", fraud_type: "card_never_received", metadata: { organizationId: "999" },
+  }), store);
+  assert.deepEqual(store.riskReviews[0]!.organizationIds, [7]);
+  assert.deepEqual(store.riskReviews[0]!.subscriptionIds, []);
+  assert.equal(store.riskReviews[0]!.mappingNeedsReview, false);
+  assert.equal(store.orgs.get(7)!.creditsBalance, 0);
+});
+
+test("unknown ownership still creates an actionable review without trusting metadata", async () => {
+  const store = makeStore([makeOrg()]);
+  await billing.runStripeWebhookEvent(event("evt_unknown", "charge.refunded", {
+    id: "ch_unknown", customer: "cus_unknown", amount_refunded: 200, metadata: { organizationId: "7" },
+  }), store);
+  assert.deepEqual(store.riskReviews[0]!.organizationIds, []);
+  assert.equal(store.riskReviews[0]!.mappingNeedsReview, true);
+});
+
+test("an unresolved subscription is flagged even when its customer is known", async () => {
+  const store = makeStore([makeOrg()]);
+  store.invoices.set("in_orphan", { subscription: "sub_not_mapped" });
+  await billing.runStripeWebhookEvent(event("evt_orphan", "charge.refunded", {
+    id: "ch_orphan", invoice: "in_orphan", customer: "cus_7", amount_refunded: 200,
+  }), store);
+  assert.deepEqual(store.riskReviews[0]!.organizationIds, [7]);
+  assert.equal(store.riskReviews[0]!.mappingNeedsReview, true);
+});
+
+test("Stripe lookup failures do not claim risk events and succeed on redelivery", async () => {
+  const store = makeStore([makeOrg()]);
+  const warning = event("evt_retry_risk", "radar.early_fraud_warning.created", { id: "issfr_7", charge: "ch_retry" });
+  assert.equal((await billing.runStripeWebhookEvent(warning, store)).status, 500);
+  assert.equal(store.stripeEvents.has(warning.id), false);
+  assert.equal(store.riskReviews.length, 0);
+  store.charges.set("ch_retry", { customer: "cus_7", amount: 100, currency: "usd" });
+  assert.equal((await billing.runStripeWebhookEvent(warning, store)).status, 200);
+  assert.equal(store.riskReviews.length, 1);
+});
+
+test("failed review transaction can retry and never uses the early processed marker", async () => {
+  const store = makeStore([makeOrg()]);
+  store.recordStripeEvent = async () => { throw new Error("must not preclaim risk events"); };
+  store.forgetStripeEvent = async () => { throw new Error("must not delete another atomic claim"); };
+  const atomicWrite = store.recordRiskReview;
+  store.recordRiskReview = async () => { throw new Error("transaction rolled back"); };
+  const refund = event("evt_task_retry", "charge.refunded", { id: "ch_retry", customer: "cus_7", amount_refunded: 300 });
+  assert.equal((await billing.runStripeWebhookEvent(refund, store)).status, 500);
+  assert.equal(store.stripeEvents.size, 0);
+  store.recordRiskReview = atomicWrite;
+  const results = await Promise.all([billing.runStripeWebhookEvent(refund, store), billing.runStripeWebhookEvent(refund, store)]);
+  assert.ok(results.every((r) => r.status === 200));
+  assert.equal(store.riskReviews.length, 1);
+  assert.equal(results.filter((r) => r.body.duplicate === true).length, 1);
 });
