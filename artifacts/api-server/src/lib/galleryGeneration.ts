@@ -240,7 +240,15 @@ export async function renderGalleryFrameWithQuality(
         signal,
       });
     } catch (err) {
-      if (signal?.aborted) throw err;
+      if (signal?.aborted) {
+        await deps.recordAttempt({
+          sessionId, sceneId: scene.id, attempt,
+          model: modelForError(err) ?? deps.primaryModel(),
+          latencyMs: deps.now() - started,
+          outcome: "timeout", errorClass: "session_aborted",
+        });
+        throw err;
+      }
       const { outcome, errorClass } = classifyRenderFailure(err);
       await deps.recordAttempt({
         sessionId,
@@ -283,6 +291,7 @@ export async function renderGalleryFrameWithQuality(
     }
 
     try {
+      signal?.throwIfAborted();
       const qualityReport = await deps.judgeFrame({
         sessionId,
         scene,
@@ -292,6 +301,7 @@ export async function renderGalleryFrameWithQuality(
         venueReferences: venueRefs,
         signal,
       });
+      signal?.throwIfAborted();
       await deps.recordAttempt({ ...renderTelemetry, judgeReport: reportJson(qualityReport), outcome: "accepted" });
       return {
         raw: generated.buffer,
@@ -303,7 +313,11 @@ export async function renderGalleryFrameWithQuality(
         fallbackUsed: generated.fallbackUsed,
       };
     } catch (err) {
-      if (signal?.aborted) throw err;
+      if (signal?.aborted) {
+        // The provider already returned an image, even if its usage is absent.
+        await deps.recordAttempt({ ...renderTelemetry, outcome: "timeout", errorClass: "aborted_after_render" });
+        throw err;
+      }
       if (err instanceof GalleryQualityError) {
         await deps.recordAttempt({
           ...renderTelemetry,

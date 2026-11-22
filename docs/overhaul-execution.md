@@ -45,6 +45,29 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: failed and cancelled render evidence
+
+- Gallery QA now keeps a run-wide attempt log before individual scenes finish.
+  Failed scenes retain their evidence in the failure report, and summary counts
+  include those attempts instead of counting only completed frames.
+- Live rendering records interrupted provider calls without inventing token
+  usage. Images returned before cancellation (including cancellation during
+  judging) retain their metadata and count toward configured image-cost
+  estimates even when the provider omits usage tokens. Cancellation does not
+  trigger another render. Known judge-error paths also retain these costs.
+- Added regression coverage for thrown scenes and cancellation during render,
+  judge failure and late judge success. All 48 pipeline tests, the full unit
+  suite and security smoke passed. Build/typecheck passed after a frozen-lockfile
+  install restored a locally unresolved Radix label dependency; no dependency
+  manifest or lockfile changed. No provider calls, emails or deployment occurred.
+- These are estimates of known returned images, not complete provider invoices
+  or measured profitability. Judge/selector/infrastructure costs and unknown
+  interrupted-call charges remain outside the image-cost roll-up.
+- Rechecked public health and readiness: both return HTTP 200, but Railway still
+  identifies the older release, not this overhaul. The real-reference QA report
+  and manual acceptance are absent. Consented photos, staged-email configuration
+  application, release deployment and live end-to-end checks remain required.
+
 ### November 21 checkpoint: verified email domain
 
 - Recovered native Chrome input and used the existing signed-in GoDaddy session.

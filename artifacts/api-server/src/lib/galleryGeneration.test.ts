@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
+import { appendQaAttempt, summarizeQaAttemptCounts, type QaRenderAttempt } from "../tools/galleryQaEvidence.js";
 
 // The db package builds a lazy pg Pool at import time; no connection is ever
 // opened by these tests (every collaborator is stubbed), but the module
@@ -237,7 +238,7 @@ test("provider timeouts are logged as timeouts and the best below-target frame s
   assert.equal(attempts.length, 4, "GALLERY_FRAME_ATTEMPTS defaults to four render attempts");
 });
 
-test("the session deadline aborts the render loop without logging a bogus attempt", async () => {
+test("the session deadline records an interrupted call without inventing usage", async () => {
   const controller = new AbortController();
   const { deps, attempts } = stubDeps({
     generateStill: async (params) => {
@@ -253,7 +254,9 @@ test("the session deadline aborts the render loop without logging a bogus attemp
     ),
     SessionDeadlineError,
   );
-  assert.equal(attempts.length, 0);
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0]!.errorClass, "session_aborted");
+  assert.equal(attempts[0]!.outputTokens, undefined);
 });
 
 /* ----------------------------------------------------------- semaphore */
@@ -684,6 +687,82 @@ test("a failed send falls back to the owner, and unjudged or sample galleries ar
 
 /* ------------------------------------------------------------ telemetry */
 
+test("QA retains attempts from a thrown scene, independently of completed frames", async () => {
+  const log: QaRenderAttempt[] = [];
+  const { deps } = stubDeps({
+    judgeFrame: async () => { throw qualityError({ ...goodReport, exactlyTwoPartners: false, pass: false }); },
+    recordAttempt: async (input) => { appendQaAttempt(log, input); },
+  });
+  await assert.rejects(renderGalleryFrameWithQuality(
+    { sessionId: 7, scene, style, sceneIndex: 0, coupleBuffers: [ref, ref], venueBuffers: [ref] }, deps,
+  ));
+  assert.ok(log.length > 0, "failed scenes must not lose their generated images");
+  assert.ok(log.every((attempt) => attempt.outcome === "rejected" && !("sessionId" in attempt)));
+  const persisted = JSON.parse(JSON.stringify({ frames: [], renderAttempts: log }));
+  assert.deepEqual(summarizeQaAttemptCounts(persisted.renderAttempts), {
+    totalAttempts: log.length, maxAttemptsOnFrame: log.length,
+  });
+  appendQaAttempt(log, { sessionId: 7, sceneId: "another-scene", attempt: 1, model: "test", outcome: "blocked" });
+  assert.equal(summarizeQaAttemptCounts(log).totalAttempts, log.length);
+  assert.equal(summarizeQaAttemptCounts(log).maxAttemptsOnFrame, log.length - 1);
+  assert.deepEqual(summarizeQaAttemptCounts([]), { totalAttempts: 0, maxAttemptsOnFrame: 0 });
+});
+
+test("cancellation records the interrupted provider attempt without retrying", async () => {
+  const controller = new AbortController();
+  const reason = new Error("session cancelled");
+  let renders = 0;
+  const { deps, attempts } = stubDeps({ generateStill: async () => {
+    renders++;
+    controller.abort(reason);
+    throw reason;
+  } });
+  await assert.rejects(renderGalleryFrameWithQuality(
+    { sessionId: 7, scene, style, sceneIndex: 0, coupleBuffers: [ref, ref], venueBuffers: [ref], signal: controller.signal }, deps,
+  ), (err) => err === reason);
+  assert.equal(renders, 1);
+  assert.deepEqual(attempts.map((a) => [a.outcome, a.errorClass]), [["timeout", "session_aborted"]]);
+});
+
+test("images returned before cancellation retain cost evidence without usage tokens", async () => {
+  for (const cancelAt of ["render", "judge-throw", "judge-return"] as const) {
+    const controller = new AbortController();
+    const reason = new Error("session cancelled");
+    let renders = 0;
+    let judges = 0;
+    const { deps, attempts } = stubDeps({
+      generateStill: async () => {
+        renders++;
+        if (cancelAt === "render") controller.abort(reason);
+        return { ...stillResult(), usage: null };
+      },
+      judgeFrame: async () => {
+        judges++;
+        controller.abort(reason);
+        if (cancelAt === "judge-throw") throw reason;
+        return goodReport;
+      },
+    });
+    await assert.rejects(renderGalleryFrameWithQuality(
+      { sessionId: 7, scene, style, sceneIndex: 0, coupleBuffers: [ref, ref], venueBuffers: [ref], signal: controller.signal }, deps,
+    ), (err) => err === reason);
+    assert.equal(renders, 1);
+    assert.equal(judges, cancelAt === "render" ? 0 : 1);
+    assert.equal(attempts.length, 1);
+    const attempt = attempts[0]!;
+    assert.equal(attempt.errorClass, "aborted_after_render");
+    assert.equal(attempt.outcome, "timeout");
+    const cost = summarizeRenderCost([{
+      ...attempt, fallbackUsed: attempt.fallbackUsed ?? false,
+      inputTokens: attempt.inputTokens ?? null, outputTokens: attempt.outputTokens ?? null,
+      latencyMs: attempt.latencyMs ?? null,
+    }], { RENDER_PRICE_GPT_IMAGE_2_5_SUNBURST: "0.25" });
+    assert.equal(cost.billableImages, 1);
+    assert.equal(cost.costUsd, 0.25);
+    assert.equal(cost.acceptedFrames, 0);
+  }
+});
+
 test("render cost uses configured per-image prices and counts only images the provider returned", () => {
   assert.equal(renderPriceEnvKey("gpt-image-2.5-sunburst"), "RENDER_PRICE_GPT_IMAGE_2_5_SUNBURST");
   const env = { RENDER_PRICE_GPT_IMAGE_2_5_SUNBURST: "0.25", RENDER_PRICE_GPT_IMAGE_2_5_FLARE: "0.1" };
@@ -720,6 +799,10 @@ test("render cost uses configured per-image prices and counts only images the pr
   assert.equal(summary.costComplete, false);
   assert.deepEqual(summary.unpricedModels, ["gemini-3-pro-image"]);
   assert.equal(summarizeRenderCost([row("a", 1, "gpt-image-2.5-sunburst", "accepted")], {}).costUsd, null, "no price, no invented cost");
+  const afterRenderErrors = ["judge_error", "judge_unavailable", "aborted_after_render"].map((errorClass) => ({
+    ...row("a", 1, "gpt-image-2.5-sunburst", "error", null), errorClass,
+  }));
+  assert.equal(summarizeRenderCost(afterRenderErrors, env).billableImages, 3, "returned images count even without token usage");
 });
 
 /* ---------------------------------------------------------------- reel */

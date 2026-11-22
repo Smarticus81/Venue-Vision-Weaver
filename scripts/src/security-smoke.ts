@@ -1469,6 +1469,11 @@ try {
   );
   assert.match(
     galleryQaSource,
+    /summarizeQaAttemptCounts\(report\.renderAttempts\)[\s\S]*renderAttempts: \[\][\s\S]*appendQaAttempt\(report\.renderAttempts, attempt\)[\s\S]*catch \(err\)[\s\S]*report\.summary = summarizeQa\(report\)/s,
+    "QA summary and failure reports retain the run-wide attempt log, including failed scenes",
+  );
+  assert.match(
+    galleryQaSource,
     /createHash\("sha256"\)\.update\(buffer\)\.digest\("hex"\)[\s\S]*couple: coupleRefs\.map[\s\S]*sha256: ref\.sha256[\s\S]*venue: venueRefs\.map[\s\S]*sha256: ref\.sha256/s,
     "gallery QA harness records SHA-256 fingerprints for agentic QA evidence",
   );

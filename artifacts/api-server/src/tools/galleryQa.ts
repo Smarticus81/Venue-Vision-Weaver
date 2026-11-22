@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { coral, font, ink, ivory, semantic } from "@workspace/brand";
 import { fileURLToPath } from "node:url";
+import { appendQaAttempt, summarizeQaAttemptCounts, type QaRenderAttempt } from "./galleryQaEvidence.js";
 
 const VENUE_QA_COVERAGE_ORDER = [
   "exterior",
@@ -239,6 +240,7 @@ function minNullable(values: Array<number | null>): number | null {
 
 function summarizeQa(report: {
   frames: FrameQaReport[];
+  renderAttempts: QaRenderAttempt[];
   reelPath?: string;
   failed?: string;
 }): QaSummary {
@@ -311,8 +313,7 @@ function summarizeQa(report: {
       warnings.length === 0,
     manualReviewRequired: true,
     reelReady: Boolean(report.reelPath),
-    totalAttempts: report.frames.reduce((sum, frame) => sum + frame.attempts, 0),
-    maxAttemptsOnFrame: Math.max(0, ...report.frames.map((frame) => frame.attempts)),
+    ...summarizeQaAttemptCounts(report.renderAttempts),
     minLikenessScore,
     minPartnerScore,
     minVenueScore,
@@ -365,6 +366,7 @@ async function writeHtmlReview(params: {
       consentConfirmed: boolean;
     };
     frames: FrameQaReport[];
+    renderAttempts: QaRenderAttempt[];
     summary?: QaSummary;
     reelPath?: string;
     failed?: string;
@@ -573,6 +575,7 @@ async function main(): Promise<void> {
       consentConfirmed: boolean;
     };
     frames: FrameQaReport[];
+    renderAttempts: QaRenderAttempt[];
     summary?: QaSummary;
     reelPath?: string;
     failed?: string;
@@ -601,6 +604,7 @@ async function main(): Promise<void> {
       consentConfirmed: options.consentConfirmed,
     },
     frames: [],
+    renderAttempts: [],
     operatorReview: [
       "Open each polished still and confirm both faces are instantly recognizable.",
       "Confirm the first five venue references map to exterior, ceremony, reception, detail, and natural-light coverage.",
@@ -631,8 +635,7 @@ async function main(): Promise<void> {
           // QA runs are not sessions: keep the attempt log in the report
           // instead of render_attempts / the audit trail.
           recordAttempt: async (attempt) => {
-            const { sessionId: _sessionId, ...rest } = attempt;
-            renderAttempts.push(rest);
+            renderAttempts.push(appendQaAttempt(report.renderAttempts, attempt));
           },
           recordFallback: async () => {},
         },

@@ -91,6 +91,15 @@ The output folder contains:
 - `quality-report.json` - model settings, input files with SHA-256 fingerprints, automated summary, scene venue refs, attempts, judge scores, each frame's judge status (`passed`, `below_target`, `unjudged`, `gate_off`), whether a fallback model rendered it, and the per-attempt log production stores in `render_attempts`
 - `review.html` - contact sheet with references, raw frames, polished frames, scores, used venue refs, and operator checklist
 
+The report's top-level `renderAttempts` array includes attempts from scenes that
+throw before producing a reviewable frame. Summary attempt counts use that full
+log, not just completed frames. Per-frame logs remain available for comparison.
+In the live session pipeline, cancellation during judging records the
+already-returned image, including when the provider supplies no token usage.
+Cancellation during generation is recorded without inventing output tokens or
+assuming the provider charged nothing. This does not promise report recovery
+after forcibly killing the QA process.
+
 The automated summary is a gate, not final approval. It reports:
 
 - whether all four frames passed the judge
@@ -115,10 +124,13 @@ report. Live sessions use the same renderer with production plumbing around it:
 - When a scene fails, the accepted frames stay stored, so a retry renders only
   the failed scene.
 - Every render attempt lands in `render_attempts` (model, fallback, size,
-  quality, tokens, latency, judge verdict, outcome). `sessionCostSummary()` in
-  `renderTelemetry.ts` turns those rows into measured cost per gallery using the
-  optional `RENDER_PRICE_<MODEL>` per-image prices; with no price configured the
-  cost is reported as unknown, never estimated.
+  quality, tokens, latency, judge verdict, outcome). `summarizeRenderCost()` in
+  `renderTelemetry.ts` estimates known returned-image costs from those rows and
+  optional `RENDER_PRICE_<MODEL>` prices. Missing prices remain unknown. A
+  complete price mapping is not a complete invoice: judge/selector calls,
+  infrastructure and potentially billed interrupted provider requests are
+  outside that image-cost estimate. Reconcile provider usage before claiming
+  measured total COGS or profitability.
 - A frame rendered by a model other than the primary is flagged
   (`fallback_used`) and audited once per session as `image_model_fallback`. Only
   explicit model-not-found codes, 404, 429, 5xx or no answer before the timeout

@@ -9,9 +9,9 @@ import { logger } from "./logger.js";
 /*
  * Render telemetry: one render_attempts row per image render attempt
  * (accepted, rejected by the judge, provider error, blocked, timed out), so
- * first-pass rate, latency and cost per gallery are measured instead of
- * estimated. Unit prices come from RENDER_PRICE_<MODEL> env vars (USD per
- * image); nothing here invents a price.
+ * first-pass rate and render latency can be measured. Image-cost estimates use
+ * RENDER_PRICE_<MODEL> env vars (USD per image); nothing here invents a price.
+ * Provider invoices remain authoritative, especially for interrupted calls.
  */
 
 export interface RenderAttemptInput {
@@ -125,11 +125,12 @@ export interface RenderAttemptRow {
   outputTokens: number | null;
   latencyMs: number | null;
   outcome: string;
+  errorClass?: string | null;
 }
 
 export interface RenderCostSummary {
   attempts: number;
-  /** Attempts where the provider returned an image (what the provider bills). */
+  /** Images known to have been returned; not an invoice reconciliation. */
   billableImages: number;
   acceptedFrames: number;
   /** Scenes whose accepted frame came from attempt 1. */
@@ -142,14 +143,15 @@ export interface RenderCostSummary {
   renderLatencyMs: number;
   /** USD for billable images whose model has a configured price; null when none is priced. */
   costUsd: number | null;
-  /** True when every billable image had a configured price. */
+  /** Every known returned image had a price; excludes judge/infra and unknown cancellation charges. */
   costComplete: boolean;
   unpricedModels: string[];
   byModel: Record<string, { billableImages: number; unitPriceUsd: number | null }>;
 }
 
 function isBillable(row: RenderAttemptRow): boolean {
-  return row.outcome === "accepted" || row.outcome === "rejected" || (row.outputTokens ?? 0) > 0;
+  return row.outcome === "accepted" || row.outcome === "rejected" || (row.outputTokens ?? 0) > 0 ||
+    ["aborted_after_render", "judge_unavailable", "judge_error"].includes(row.errorClass ?? "");
 }
 
 /** Pure COGS roll-up over a session's render attempts. */
