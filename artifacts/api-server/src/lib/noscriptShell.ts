@@ -1,4 +1,4 @@
-import { font, semantic } from "@workspace/brand";
+import { brand, font, semantic } from "@workspace/brand";
 import type { PublicConfig } from "./publicConfig.js";
 
 /*
@@ -84,9 +84,9 @@ export function renderNoscriptShell(config: PublicConfig, path: string): string 
   } else {
     const { pricing, trial } = config;
     const money = (amount: number) => escapeHtml(formatMoney(amount, pricing.currency));
-    parts.push(`<h1>Turn tours into bookings.</h1>`);
+    parts.push(`<h1>${escapeHtml(brand.tagline)}</h1>`);
     parts.push(
-      `<p>A couple tours your venue. Before they leave, they see realistic images and a short reel of themselves getting married there, with your date link attached.</p>`,
+      `<p>${escapeHtml(brand.description)}</p>`,
     );
     const priceItems = [
       `<li>Starter ${money(pricing.starterMonthly)} a month, ${pricing.starterCredits} galleries</li>`,

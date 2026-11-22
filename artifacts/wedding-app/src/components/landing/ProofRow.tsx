@@ -1,5 +1,4 @@
 import type { PublicConfig } from "@workspace/api-client-react";
-import { GALLERY_FRAMES } from "@/lib/brandAssets";
 
 /*
  * Proof row (funnel-ux.md 3.4). Partner mode until enough venues opt in to
@@ -16,8 +15,8 @@ export function ProofRow({ config }: { config: PublicConfig }) {
     <section className="proof-section page-width" aria-labelledby="proof-heading" id="proof">
       <div className="proof-grid">
         <div>
-          <p className="eyebrow">Proof</p>
-          <h2 id="proof-heading">Numbers, not adjectives.</h2>
+          <p className="eyebrow">Measure what happens next</p>
+          <h2 id="proof-heading">Follow the interest.<br />Learn what works.</h2>
           {aggregates ? (
             <p className="section-copy">
               These figures come from venues that opted in to share anonymised results. They update as
@@ -25,9 +24,9 @@ export function ProofRow({ config }: { config: PublicConfig }) {
             </p>
           ) : (
             <p className="section-copy">
-              Dreemer is new. We would rather show one venue's real before-and-after tour-to-booking
-              rate than invent a statistic. Venues that opt in to share anonymised results will appear
-              here, as numbers.
+              See which galleries were opened, which couples clicked to check a date, and which
+              bookings your team records. Compare the results with your own tour history—booking
+              improvements are not guaranteed.
             </p>
           )}
         </div>
@@ -74,21 +73,6 @@ export function ProofRow({ config }: { config: PublicConfig }) {
         ) : null}
       </div>
 
-      <div className="sample-gallery" aria-label="Example gallery frames">
-        {GALLERY_FRAMES.map((frame, i) => (
-          <figure key={frame.index}>
-            <img src={frame.src} alt={frame.alt} loading="lazy" decoding="async" width="600" height="750" />
-            <figcaption>
-              <span>0{i + 1}</span>
-              {frame.label}
-            </figcaption>
-          </figure>
-        ))}
-      </div>
-      <p className="caption">
-        Example gallery, AI preview. Real product output from a demo couple's photos and an example
-        venue's own photos.
-      </p>
     </section>
   );
 }

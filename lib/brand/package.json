@@ -13,7 +13,7 @@
     "build": "node ./node_modules/tsx/dist/cli.mjs ./scripts/build-css.ts",
     "build:logo": "node ./node_modules/tsx/dist/cli.mjs ./scripts/build-logo.ts",
     "build:og": "node ./node_modules/tsx/dist/cli.mjs ./scripts/build-og.ts",
-    "test": "node ./node_modules/tsx/dist/cli.mjs --test ./src/tokens.test.ts"
+    "test": "node ./node_modules/tsx/dist/cli.mjs --test ./src/tokens.test.ts ./src/logo.test.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

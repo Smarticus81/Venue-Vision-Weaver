@@ -30,9 +30,10 @@ test("placeholder text reaches AA on raised and card surfaces", () => {
   assert.ok(contrastRatio(semantic.textPlaceholder, semantic.surface) >= AA_TEXT);
 });
 
-test("ink text on the coral primary action is AA", () => {
+test("ink text on every lavender primary action state is AA", () => {
   assert.ok(contrastRatio(semantic.textOnAccent, semantic.accent) >= AA_TEXT);
   assert.ok(contrastRatio(semantic.textOnAccent, semantic.accentHover) >= AA_TEXT);
+  assert.ok(contrastRatio(semantic.textOnAccent, semantic.accentActive) >= AA_TEXT);
 });
 
 test("ivory text on ink surfaces is AA", () => {
@@ -63,7 +64,8 @@ test("focus ring is visible against every surface (3:1 non-text)", () => {
 
 test("generated css contains the brand anchors", () => {
   const css = cssText();
-  assert.match(css, /--dm-coral-500: #F07B64;/);
-  assert.match(css, /--dm-ink-900: #061219;/);
-  assert.match(css, /--dm-ivory-200: #E9E6DB;/);
+  assert.match(css, /--dm-lavender-500: #C6C4FA;/);
+  assert.match(css, /--dm-coral-500: #C6C4FA;/);
+  assert.match(css, /--dm-ink-900: #202A44;/);
+  assert.match(css, /--dm-ivory-200: #E8ECF4;/);
 });

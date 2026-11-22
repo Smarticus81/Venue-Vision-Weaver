@@ -122,7 +122,7 @@ export function logoColors(variant: LogoVariant): { mark: string; line: string; 
     case "reversed":
       return { mark: coral[500], line: coral[400], word: ivory[100], background: ink[900] };
     default:
-      return { mark: coral[500], line: coral[500], word: ink[900], background: null };
+      return { mark: coral[700], line: coral[700], word: ink[900], background: null };
   }
 }
 

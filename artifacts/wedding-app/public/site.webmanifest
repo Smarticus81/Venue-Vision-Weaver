@@ -1,11 +1,11 @@
 {
   "name": "Dreemer",
   "short_name": "Dreemer",
-  "description": "Turn tours into bookings. Couples see themselves married at your venue.",
+  "description": "Let them see their day here. Personalized AI wedding galleries for venues.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#E9E6DB",
-  "theme_color": "#E9E6DB",
+  "background_color": "#E8ECF4",
+  "theme_color": "#E8ECF4",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },

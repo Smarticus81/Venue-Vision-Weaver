@@ -1,11 +1,11 @@
 const VALUE_POINTS = [
   {
     title: "Your real rooms",
-    body: "Images are built from photos of your own ceremony, reception and outdoor spaces. We never change your architecture, only the couple, the light and the decor.",
+    body: "Your ceremony, reception and outdoor photos guide the rendering. Review your sample for an accurate sense of place.",
   },
   {
     title: "Their real faces",
-    body: "The couple adds two or three photos of themselves. Every image is checked for likeness before you see it.",
+    body: "Two or three clear photos guide both partners' likeness. Quality checks and owner review help catch mismatches.",
   },
   {
     title: "Your date link",

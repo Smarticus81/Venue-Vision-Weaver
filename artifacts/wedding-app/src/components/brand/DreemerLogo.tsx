@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 type DreemerLogoProps = {
   /** `lockup` = mark + wordmark (default), `mark` = icon only, `wordmark` = text only. */
   variant?: "lockup" | "mark" | "wordmark";
-  /** `color` paints the mark coral and the wordmark in the current text color; `mono` uses currentColor for everything. */
+  /** `color` uses the text-safe brand accent; `mono` uses currentColor throughout. */
   tone?: "color" | "mono";
   className?: string;
   /** Pass `null` to render without a link. */
@@ -40,7 +40,7 @@ export function DreemerLogo({
   className,
   href = "/",
 }: DreemerLogoProps) {
-  const markFill = tone === "color" ? "var(--dm-accent)" : "currentColor";
+  const markFill = tone === "color" ? "var(--dm-accent-text)" : "currentColor";
   const mark = (
     <g>
       <path d={ICON_BODY_PATH} fill={markFill} fillRule="evenodd" />

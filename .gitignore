@@ -62,3 +62,6 @@ qa-output/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Supabase CLI local cache (not deployment configuration)
+supabase/.temp/

@@ -1,5 +1,43 @@
 # Design notes
 
+## 2026-11-21 — Blue-hour album and honest economics
+
+Direction: midnight ink, silver paper and a restrained lavender accent. The
+architectural D and lighter custom wordmark now share this palette across
+React, email, raster exports, app icons and the social card. Legacy token names
+remain compatibility aliases so product surfaces change together.
+
+Layout: copy and primary action precede an arched portrait on mobile/tablet;
+desktop uses an asymmetric two-column album cover. A source-photo card sits
+below the portrait, not over the couple. The first tablet check caught an
+overlap; moving the card into document flow and stacking below 900px fixed it.
+
+Signature: an explicit, keyboard-operable contact sheet, not an automatic
+carousel. Scene changes use only a 260ms opacity transition, disabled with
+reduced motion. Removed the duplicate gallery in the proof section and
+unverified competitor comparisons. Examples remain illustrative, not a claim
+that this build produced a consistent real-couple benchmark.
+
+The calculator now exposes uplift as an editable assumption (including zero),
+caps bookings at tours, includes extra credit packs, and compares subscription
+costs. Revenue is calculated before rounding booking counts and explicitly
+does not mean profit. Negative/scientific numeric input is parsed correctly;
+the explanation uses the same clamped values as the calculation.
+
+Brand exports preserve lockup proportions; the email image no longer forces
+a distorted height. The social card builds locally without browser/font
+downloads. A visual inspection caught an unsupported embedded WebP: converting
+the embedded source to PNG fixed it, with a photo-region variance regression
+test to prevent a blank portrait returning. Obsolete OG HTML was replaced by
+generated SVG; prior artwork remains historical only.
+
+Evidence: full tests, security smoke, typecheck, build and API codegen drift
+pass. Browser screenshots at 375, 768 and 1440px; 375px has no horizontal
+overflow. Zero-uplift and capped 99% booking scenarios work interactively.
+Screenshots (local, ignored): qa-output/blue-hour-landing-mobile.jpg and
+qa-output/blue-hour-landing-desktop.jpg. Production mobile performance metrics,
+physical-device checks and real gallery benchmarks remain outstanding.
+
 ## 2026-11-21 — Overhaul: architectural aperture
 
 The acquisition page exists to get a venue operator to create and evaluate a

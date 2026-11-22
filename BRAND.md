@@ -1,175 +1,109 @@
 # Dreemer brand
 
-Dreemer sells to wedding venue owners. A couple touring a venue uploads a few
-photos and gets realistic images and a short reel of themselves getting
-married in that exact venue. Venue owners care about one thing: more tours
-turning into booked dates. Everything below serves that.
+Dreemer helps venue teams give touring couples a personalized AI wedding
+gallery and a clear path back to the venue. The images are imagined previews,
+not photographs of a real wedding or guarantees of venue fidelity or bookings.
 
-**Theme:** Turn tours into bookings.
-**Feel:** calm, confident, warm, modern, premium. A business tool, not a
-wedding blog. No decorative hearts, rings, script faces, gold foil, or
-glitter.
+Tagline: **Let them see their day here.**
+Direction: **blue-hour wedding album** — midnight ink, silver paper and a
+restrained lavender accent. Calm, architectural and photographic.
 
-## Where the tokens live
+## Source of truth
 
-One module, imported by every surface:
-
-| | Path |
+| Surface | Source |
 | --- | --- |
-| Source of truth (TypeScript) | `lib/brand/src/tokens.ts` |
-| Generated CSS custom properties (`--dm-*`) | `lib/brand/tokens.css` (`pnpm --filter @workspace/brand run build`) |
-| Logo geometry | `lib/brand/src/logo.ts` |
-| Logo files (SVG, PNG, ICO, OG card) | `lib/brand/assets/logo/` (`build:logo`, `build:og`) |
-| Contrast tests | `lib/brand/src/tokens.test.ts` (`pnpm --filter @workspace/brand run test`) |
+| Colors, type, shape, motion and brand copy | `lib/brand/src/tokens.ts` |
+| Generated CSS | `lib/brand/tokens.css` |
+| Custom vector mark and wordmark | `lib/brand/src/logo.ts` |
+| Email roles and mark | `lib/brand/src/email.ts` |
+| Export scripts | `lib/brand/scripts/build-logo.ts`, `build-og.ts` |
+| Contrast and exported-artwork tests | `lib/brand/src/tokens.test.ts`, `logo.test.ts` |
 
-Consumers:
+Web, email and reel renderers import this package. Add a semantic token before
+introducing a color in a consumer. Legacy `coral` and `ivory` export names
+remain for compatibility: they now resolve to lavender and pearl/silver,
+not the previous coral-and-cream palette.
 
-- **Web app** – `artifacts/wedding-app/src/index.css` imports
-  `@workspace/brand/tokens.css` and maps the variables onto Tailwind's theme
-  (`bg-primary`, `text-brand`, `bg-band`, `text-success`, …). Components that
-  need a raw value (Clerk appearance, QR colors, the error boundary) import
-  from `@workspace/brand`.
-- **Emails, reel title card, QA page** – `artifacts/api-server` imports
-  `semantic`, `font`, `brand` and the logo geometry from `@workspace/brand`.
-  esbuild bundles it into the server build.
+## Color roles
 
-Add a token before you add a color. Never write a hex value in a page.
-
-## Color
-
-Values are sRGB hex. Every text pairing listed here passes WCAG AA (4.5:1)
-and is asserted by the test suite; the ratios below are from that run.
-
-### Coral — the signature accent
-
-| Token | Hex | Use |
+| Role | Value | Usage |
 | --- | --- | --- |
-| `coral.500` | `#F07B64` | The mark. Primary action fill. Running / active indicators. |
-| `coral.600` | `#D8634C` | Primary action hover. |
-| `coral.700` | `#A8412D` | Coral **as text** on ivory (4.6:1 on `ivory.200`, 5.2:1 on `ivory.100`). Also the focus ring. |
-| `coral.400` | `#F28D77` | Coral on ink surfaces (8:1 on `ink.900`). |
-| `coral.50` / `100` | `#FDF1ED` / `#FBDFD7` | Soft tints, text selection. |
+| Midnight ink | `#202A44` | Primary text, wordmark, dark surfaces |
+| Pearl paper | `#F7F8FC` | Main canvas |
+| Silver | `#E8ECF4` | Bands, email background, app tiles |
+| Pale lavender | `#C6C4FA` | Primary action fill with midnight text |
+| Deep lavender | `#5351A2` | Accent text, light-surface mark, focus ring |
+| Muted ink | `#58647B` | Supporting text and captions |
 
-Coral never carries body text on a light surface: `coral.500` on ivory is
-2.2:1. Reach for `coral.700` (`text-brand` in the app) when the words need
-to read as coral. Keep coral under about a tenth of any screen: one primary
-button per view, the eyebrow or figure that matters, nothing else.
+Use semantic roles (`canvas`, `text`, `accent`, `accentText`, `focusRing`)
+rather than scale values in new UI. Pale lavender is not body text on a light
+surface. Accent occupies roughly a tenth of a screen; status colors have
+meaning, never a decorative role. Existing sea, success, warning and error
+scales remain in the shared module. Contrast tests assert AA text pairings
+on each supported light surface and dark email surface, including buttons'
+hover and active states.
 
-### Ink — text
+## Typography
 
-| Token | Hex | Use |
-| --- | --- | --- |
-| `ink.900` | `#061219` | Headlines, body, icons, dark surfaces, the wordmark. |
-| `ink.600` | `#425056` | Secondary text (6.7:1 on `ivory.200`). |
-| `ink.500` | `#56656B` | Muted text and placeholders (4.6:1 on `ivory.200`). |
-| `ink.300` | `#98A3A6` | Muted text on ink surfaces (7.3:1 on `ink.900`). |
-| `ink.800` / `700` | `#17262D` / `#2C3A41` | Raised surface and hairlines on ink. |
+Outfit carries the geometric wordmark into headings and figures; Figtree is
+the interface and body face. System monospace is reserved for IDs and
+operator data. Both variable web faces are self-hosted Latin WOFF2 subsets
+under `artifacts/wedding-app/public/fonts/`, preloaded by `index.html`,
+with `font-display: swap`. No third-party font request blocks the web app.
 
-### Ivory — surfaces
+Emails use the shared fallback stack. The deterministic social-card generator
+uses system Arial/Helvetica for copy and the custom vector wordmark; it needs
+no browser or network font download.
 
-| Token | Hex | Use |
-| --- | --- | --- |
-| `ivory.200` | `#E9E6DB` | **Brand ivory.** Hero band, workspace sidebar, email body, app-icon tile. |
-| `ivory.100` | `#F6F4EE` | Page canvas for product screens. |
-| `ivory.50` | `#FCFBF8` | Cards, email card. |
-| `ivory.0` | `#FFFFFF` | Inputs, popovers, modals. |
-| `ivory.300` / `400` | `#DCD8CA` / `#C9C4B2` | Hairlines / strong borders and input borders. |
+Use sentence case, plain verbs and real numbers. Buttons describe the action.
+Marketing examples must be visibly labelled as AI previews. Do not claim
+measured booking lift, exact likeness or unchanged architecture without evidence.
 
-### Sea — the secondary color
+## Layout and motion
 
-A cool counterweight to the warm page. `sea.600` `#25645E` for links in
-running text and secondary emphasis (5.5:1 on `ivory.200`); `sea.700`
-`#1E524D` hover; `sea.50` `#EEF5F4` tint. Charts and informational states
-use the sea scale before they ever borrow coral.
+The public landing page pairs left-aligned copy with an arched photographic
+portrait. The mobile order is copy, primary action, then photography. The
+signature interaction is a user-controlled contact sheet: native buttons,
+visible selection and a short opacity transition. No automatic carousel,
+scroll hijacking, background video or motion library on the landing route.
+Reduced-motion users get an instant scene change.
 
-### Status
-
-| Role | Text (AA on ivory) | Fill | Soft tint |
-| --- | --- | --- | --- |
-| Success | `#1E6E43` | `#26804F` (white text, 4.5:1) | `#DCEFE2` |
-| Warning | `#7A5200` | `#E2A42B` (ink text, 8.6:1) | `#FBECC6` |
-| Error | `#A82E28` | `#C9403A` (white text, 4.9:1) | `#F9DDD9` |
-
-Status colors carry meaning only: a "ready" pill, a failed render, a low
-credit balance. They are never decoration.
-
-### Semantic roles
-
-`semantic` in `tokens.ts` names the roles the UI should actually reach for:
-`canvas`, `band`, `surface`, `surfaceRaised`, `border`, `borderStrong`,
-`text`, `textSecondary`, `textMuted`, `textOnAccent`, `accent`,
-`accentHover`, `accentText`, `secondary`, `focusRing`, `successText`, …
-and the `ink*` roles for dark surfaces. Retheme a role once; every surface
-follows.
-
-## Type
-
-| Role | Face | Weights | Notes |
-| --- | --- | --- | --- |
-| Display (`font.display`) | **Outfit** | 500, 600 | Geometric, matches the constructed wordmark. Headlines, large figures. Tracking −0.025em, leading 1.08–1.2. |
-| Body (`font.body`) | **Figtree** | 400, 500, 600 | Same geometric family feel, better at 13–16px. Everything else. Leading 1.6. |
-| Mono (`font.mono`) | system monospace | — | IDs, links shown as text, operator-console labels. |
-
-Both are open-source (SIL OFL). The web app self-hosts latin subsets of the
-two variable faces (`artifacts/wedding-app/public/fonts/outfit-latin-variable.woff2`
-and `figtree-latin-variable.woff2`): `@font-face` lives in
-`artifacts/wedding-app/src/index.css` with `font-display: swap`, and
-`index.html` preloads both, so no page waits on a third-party stylesheet.
-`fontImportUrl` in `tokens.ts` (Google Fonts) is kept only for surfaces that
-cannot use the app's files: the OG card renderer (`scripts/build-og.ts`) and
-the email `<link>`. Email uses the `font.email` stack and degrades to
-Helvetica/Arial when a client blocks web fonts.
-
-Scale (px, 1.25 ratio): 12, 14, 16, 18, 20, 25, 31, 39, 49, 61. Labels
-(`.eyebrow`) are 12px Figtree 600, uppercase, +0.08em tracking, muted ink.
-
-Writing style is part of the type system: sentence case everywhere, plain
-verbs, short sentences, numbers only when they are real. Buttons say what
-happens ("Start free", "Email gallery", "Create gallery").
-
-## Shape, elevation, motion
-
-- Radii: 4 (xs), 6 (sm), 8 (md: buttons, inputs), 12 (lg: cards), 20 (xl:
-  hero media, bands). Nothing is a full pill except badge counts.
-- Shadows are rare: `shadow.md` on hero media and modals, nothing on cards
-  (cards use a 1px `ivory.300` border on the canvas instead).
-- Motion: 150ms for hover, 220ms for state changes, 420ms for section
-  reveals, easing `cubic-bezier(0.16, 1, 0.3, 1)`. Transform and opacity
-  only. `prefers-reduced-motion` collapses everything to instant.
-- Focus: 2px `coral.700` outline, 3px offset, on every interactive element.
+Product controls retain shared compact radii; the landing CTA may use a pill
+and album media larger rounded/arched corners. Focus uses a 2px deep-lavender
+outline with a 3px offset. Preserve touch targets and native video controls.
 
 ## Logo
 
-The mark is the left lobe of a soft coral heart: a rounded top-left, a
-straight edge into the notch, a straight edge out to the right corner and
-down to the point, and a gentle curve back up the left side. A thin coral
-line leaves the notch and traces where the right lobe would be, ending open
-on the right, with a small two-stroke spark at its peak, top right. The
-wordmark is a lowercase monoline geometric "dreemer" built from circles and
-stems (x-height 100, ascender 150, stroke 22), matched to the original
-render's weight and spacing, so it renders identically everywhere without
-a web font. The original render lives at
-`lib/brand/assets/logo/dreemer-logo-midjourney.png`.
+The mark is an architectural D enclosing an open arched doorway. Its outer
+counter uses even-odd fill in every renderer. The lowercase wordmark is custom
+monoline geometry (150-unit ascender, 14-unit stroke, 20-unit letter spacing):
+never substitute a font or stretch its proportions.
 
-Variants, all generated from `lib/brand/src/logo.ts`:
+- Color: deep-lavender mark with midnight wordmark.
+- Ink: monochrome midnight.
+- Reversed: pale-lavender mark and pearl wordmark on midnight.
+- Small favicons: the outer D alone, without the interior door.
+- Larger app icons: the full architectural mark, with maskable safe insets.
 
-- `dreemer-lockup-{color,ink,reversed}.svg` — mark + wordmark. Default.
-- `dreemer-icon-{color,ink,reversed}.svg` — mark alone (avatars, favicons).
-- `dreemer-wordmark-{color,ink,reversed}.svg` — text alone.
-- `color` = coral mark + ink wordmark; `ink` = everything ink; `reversed` =
-  coral mark + ivory wordmark on an ink background.
-- App icons, favicon (`.svg` and `.ico`), apple-touch-icon, maskable icon
-  and the 1200×630 OG card live beside them and are copied into
-  `artifacts/wedding-app/public/` by the same scripts.
+Keep clear space at least a quarter of the mark's width around the lockup;
+at compact sizes use the mark alone when the wordmark cannot remain legible.
+Do not add the tagline inside the lockup. React consumers use
+`DreemerLogo`; all exports use the same geometry.
 
-Rules: clear space equal to the mark's width on all sides; minimum lockup
-height 20px; below 32px use the simplified tile (hairline and spark replaced
-by a solid star). Never
-recolor the mark outside the three variants, never set the wordmark in a
-font, never add a tagline inside the lockup.
+## Rebuild and verify
 
-In React use `<DreemerLogo variant="lockup|mark|wordmark" tone="color|mono" />`
-from `@/components/brand/DreemerLogo`; it reads the same geometry.
+```sh
+pnpm --filter @workspace/brand run build
+pnpm --filter @workspace/brand run build:logo
+pnpm --filter @workspace/brand run build:og
+pnpm run test:brand
+```
+
+Commit the generated assets and public copies together. The social card's SVG
+embeds a PNG derived from the committed illustrative WebP, since SVG
+rasterizers do not consistently decode embedded WebP. Its tests check dimensions
+and photo-region variance to catch silently missing images. Logo tests check
+the D counter and raster aspect ratios. Visual inspection remains necessary.
 
 ## Deliberate leftovers from the rename
 

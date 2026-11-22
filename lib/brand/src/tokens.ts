@@ -3,14 +3,11 @@
  * and motion across the web app, the API server's emails and rendered
  * assets, and any future surface.
  *
- * Rules of the system (see BRAND.md):
- *  - Coral is the signature accent. It is used for the primary action, the
- *    focus ring, and small moments of emphasis — never for body text on
- *    ivory (it fails AA). Text that needs to read as coral uses `coral[700]`.
- *  - Ink is for text and icons.
- *  - Ivory is for surfaces. The brand ivory (`ivory[200]`) is the band color
- *    (hero backdrop, sidebar, email body); product pages sit on `ivory[100]`
- *    with cards one step lighter so dense screens stay legible.
+ * Blue-hour album: midnight ink, silver paper and a lavender accent.
+ * Legacy `coral` and `ivory` exports/CSS keys remain compatibility aliases
+ * for lavender and pearl so every app, email and renderer changes together.
+ * Lavender fill carries midnight text; deep lavender is used for text and
+ * the logo on light surfaces. Never use the pale fill as body text.
  *  - Sea is the secondary color: links inside running text, informational
  *    states, charts. Calm and cool against the warm page.
  *  - success / warning / error carry meaning only. Each has a text value that
@@ -24,47 +21,48 @@ export const brand = {
   wordmark: "dreemer",
   domain: "dreemer.co",
   url: "https://www.dreemer.co",
-  tagline: "Turn tours into bookings.",
+  tagline: "Let them see their day here.",
   description:
-    "Dreemer shows a touring couple realistic images and a short reel of themselves getting married at your venue, so more tours turn into booked dates.",
+    "Personalized AI wedding galleries for your venue. Give touring couples four imagined moments, a motion reel and a way to check their date.",
 } as const;
 
 /* ---------------------------------------------------------------- color */
 
-export const coral = {
-  50: "#FDF1ED",
-  100: "#FBDFD7",
-  200: "#F8C5B8",
-  300: "#F5A48F",
-  400: "#F28D77",
-  500: "#F07B64", // brand coral — the logo mark
-  600: "#D8634C",
-  700: "#A8412D", // coral as text on ivory (AA)
-  800: "#873525",
-  900: "#5B2318",
+export const lavender = {
+  50: "#F2F1FD",
+  100: "#E9E7FC",
+  200: "#DDD9FC",
+  300: "#D3CEFB",
+  400: "#CBC7FA",
+  500: "#C6C4FA",
+  600: "#B4AFE9",
+  700: "#5351A2",
+  800: "#403E84",
+  900: "#302E63",
 } as const;
+export const coral = lavender;
 
 export const ink = {
-  50: "#F1F3F3",
-  100: "#DDE2E3",
-  200: "#BCC4C6",
-  300: "#98A3A6",
-  400: "#75838A",
-  500: "#56656B", // muted text (AA on ivory)
-  600: "#425056",
-  700: "#2C3A41",
-  800: "#17262D",
-  900: "#061219", // brand ink — text, icons, dark surfaces
+  50: "#F0F2F7",
+  100: "#E0E5EF",
+  200: "#C2CBDE",
+  300: "#A6B2CA",
+  400: "#7886A1",
+  500: "#58647B",
+  600: "#46516A",
+  700: "#35405A",
+  800: "#28344F",
+  900: "#202A44",
 } as const;
 
 export const ivory = {
   0: "#FFFFFF",
-  50: "#FCFBF8", // cards, inputs, modals
-  100: "#F6F4EE", // the page canvas for dense product screens
-  200: "#E9E6DB", // brand ivory — bands, sidebars, hero backdrops, email body
-  300: "#DCD8CA", // hairlines
-  400: "#C9C4B2", // strong borders, dividers on cards
-  500: "#AFA996", // disabled text on ivory (decorative only)
+  50: "#FCFCFE", // cards, inputs, modals
+  100: "#F7F8FC", // pearl paper canvas
+  200: "#E8ECF4", // silver bands, sidebars and email body
+  300: "#D8DEEA", // hairlines
+  400: "#BAC3D5", // strong borders
+  500: "#949EB2", // disabled text, decorative only
 } as const;
 
 export const sea = {
@@ -101,7 +99,7 @@ export const error = {
   strong: "#7D1F1B",
 } as const;
 
-export const color = { coral, ink, ivory, sea, success, warning, error } as const;
+export const color = { lavender, coral, ink, ivory, sea, success, warning, error } as const;
 
 /**
  * Semantic roles. Everything in the UI should reach for one of these rather
@@ -124,13 +122,13 @@ export const semantic = {
   textOnInk: ivory[100],
   accent: coral[500],
   accentHover: coral[600],
-  accentActive: coral[700],
+  accentActive: coral[600],
   accentText: coral[700],
   accentSoft: coral[50],
   secondary: sea[600],
   secondaryHover: sea[700],
   secondarySoft: sea[50],
-  focusRing: coral[700], // coral-500 is only 2.2:1 on ivory; the ring uses the text coral
+  focusRing: coral[700],
   selectionBackground: coral[100],
   selectionText: ink[900],
   successText: success.text,
@@ -246,6 +244,7 @@ function kebab(value: string): string {
 /** Every token as a flat `--dm-*` custom-property map. */
 export function cssVariables(): Record<string, string> {
   const flat: Flat = {};
+  flatten("lavender", lavender, flat);
   flatten("coral", coral, flat);
   flatten("ink", ink, flat);
   flatten("ivory", ivory, flat);

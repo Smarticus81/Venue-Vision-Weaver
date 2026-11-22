@@ -75,7 +75,7 @@ function emailLayout(title: string, bodyHtml: string): string {
           <tr>
             <td style="padding:28px 32px 0;">
               <a href="${safeSite}" style="display:inline-block;text-decoration:none;">
-                <img src="${safeSite}/dreemer-lockup-email.png" width="140" height="21" alt="${escapeHtml(brand.name)}" style="display:block;border:0;outline:none;width:140px;height:21px;font-family:${font.email};font-size:16px;font-weight:600;line-height:21px;color:${semantic.text};" />
+                <img src="${safeSite}/dreemer-lockup-email.png" width="140" alt="${escapeHtml(brand.name)}" style="display:block;border:0;outline:none;width:140px;height:auto;font-family:${font.email};font-size:16px;font-weight:600;line-height:21px;color:${semantic.text};" />
               </a>
               <h1 style="margin:24px 0 0;font-family:${font.email};font-size:24px;font-weight:600;line-height:1.25;color:${semantic.text};">${safeTitle}</h1>
             </td>

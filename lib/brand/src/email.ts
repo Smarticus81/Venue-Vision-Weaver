@@ -31,8 +31,8 @@ export const BRAND = {
 
 /**
  * Palette roles for email. `accent` is used for both links and button fills,
- * so it is the text-safe coral (`coral.700`, 4.6:1 on brand ivory) with white
- * on top (5.7:1); on dark it is `coral.400` with ink on top (8:1).
+ * so it is deep lavender (legacy key `coral.700`) with white on top;
+ * on dark it is pale lavender (`coral.400`) with ink on top. Contrast is tested.
  */
 export const BRAND_COLORS = {
   light: {
@@ -108,5 +108,5 @@ export const BRAND_EMAIL = {
 export function brandMarkSvg(color: string, size = 20): string {
   const lines = ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("");
   const spark = ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${ICON_SIZE} ${ICON_SIZE}" aria-hidden="true"><path d="${ICON_BODY_PATH}" fill="${color}"/><g fill="none" stroke="${color}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">${lines}</g><g fill="none" stroke="${color}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">${spark}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${ICON_SIZE} ${ICON_SIZE}" aria-hidden="true"><path d="${ICON_BODY_PATH}" fill="${color}" fill-rule="evenodd"/><g fill="none" stroke="${color}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">${lines}</g><g fill="none" stroke="${color}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">${spark}</g></svg>`;
 }

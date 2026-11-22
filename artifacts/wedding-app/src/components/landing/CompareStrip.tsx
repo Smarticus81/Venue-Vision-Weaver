@@ -1,30 +1,28 @@
 import { COMPARE_IMAGES } from "@/lib/brandAssets";
 
 /*
- * Compare strip (funnel-ux.md 3.8). The 2-up at the top is the reveal hero's
- * fallback: the two halves of the committed diptych side by side, handle
- * hidden, because no same-composition before/after pair exists yet. No
- * competitor names; AI previews are labelled as previews.
+ * Explain inputs, outputs and human review responsibilities. Illustrative
+ * imagery is labelled; no unverified competitor or fidelity guarantees.
  */
 
-const COLUMNS = ["360° virtual tours", "Decor renderers", "Dreemer"] as const;
+const COLUMNS = ["You provide", "Dreemer creates", "You review"] as const;
 
 const ROWS: Array<{ label: string; cells: [string, string, string] }> = [
   {
-    label: "Who is in the picture",
-    cells: ["Nobody", "Nobody, new decor", "This couple, likeness-checked"],
+    label: "The couple",
+    cells: ["Two or three clear photos, with both partners' consent", "Personalized AI previews guided by their photos", "Both partners' likeness and natural details"],
   },
   {
-    label: "When the couple sees it",
-    cells: ["Before the tour", "During the tour", "Minutes after the tour, at home, with family"],
+    label: "The setting",
+    cells: ["Photos of your venue's real spaces", "Wedding scenes using those spaces as references", "Architecture, layout and recognizable features"],
   },
   {
-    label: "Where it ends",
-    cells: ["Your website", "A download", "Your date link, with their month"],
+    label: "The gallery",
+    cells: ["Your venue details and date link", "Four stills and a motion reel on a private-link page", "The complete result before sending, if enabled"],
   },
   {
-    label: "Your rooms",
-    cells: ["Unchanged", "Restyled", "Unchanged: only the couple, light and decor"],
+    label: "The follow-up",
+    cells: ["Your team's booking updates", "Gallery activity in your dashboard", "Opens, date-link clicks and recorded bookings"],
   },
 ];
 
@@ -33,8 +31,8 @@ export function CompareStrip() {
     <section className="compare-section page-width" aria-labelledby="compare-heading" id="compare">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Compare</p>
-          <h2 id="compare-heading">Room renderers show the room. Dreemer shows the couple in the room.</h2>
+          <p className="eyebrow">Built from what makes you, you</p>
+          <h2 id="compare-heading">Your real venue.<br />A carefully imagined day.</h2>
         </div>
       </div>
 
@@ -49,7 +47,7 @@ export function CompareStrip() {
             decoding="async"
           />
           <figcaption>
-            <span>What a room renderer shows</span>
+            <span>Example source photo</span>
             The room
           </figcaption>
         </figure>
@@ -63,7 +61,7 @@ export function CompareStrip() {
             decoding="async"
           />
           <figcaption>
-            <span>What the couple takes home · AI preview</span>
+            <span>Illustrative AI preview</span>
             The couple in the room
           </figcaption>
         </figure>
@@ -95,7 +93,7 @@ export function CompareStrip() {
           ))}
         </tbody>
       </table>
-      <p className="caption">AI previews are labelled as previews everywhere they appear.</p>
+      <p className="caption">AI can change details or likeness. Preview your results; these images are inspirations, not photographs or promises of the finished event.</p>
     </section>
   );
 }

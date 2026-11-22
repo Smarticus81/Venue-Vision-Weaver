@@ -1,11 +1,10 @@
-import { ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { track } from "@/lib/track";
 
 const STEPS = [
   {
     title: "Set up once",
-    body: "Add your website. We pull photos of your spaces for you to confirm, you add your booking link, and you print the tour card. A few minutes.",
+    body: "Import or upload your venue photos, confirm the spaces, and add your date link. Check a sample before inviting couples.",
   },
   {
     title: "End the tour with the card",
@@ -13,7 +12,7 @@ const STEPS = [
   },
   {
     title: "They see themselves married at your venue",
-    body: "A few minutes later: four images and a short reel, at your real spaces, on a private page they can share with parents and friends.",
+    body: "Dreemer builds four AI stills and a motion reel. You can review the gallery before delivery; the couple gets a private link to revisit and share.",
   },
   {
     title: "They check their date. You see it happen.",
@@ -27,7 +26,7 @@ export function HowItWorks() {
       <div className="how-section page-width">
         <div>
           <p className="eyebrow">How it works</p>
-          <h2>Add it to the end of every tour.</h2>
+          <h2>From a venue visit<br />to a personal keepsake.</h2>
           <p className="section-copy">
             The tour already does the hard work. Dreemer gives the couple something to take home that
             puts them in your space, and gives you a reason to follow up the same day.
@@ -37,7 +36,7 @@ export function HowItWorks() {
             className="text-link mt-6"
             onClick={() => track("cta_click", { placement: "how_it_works" })}
           >
-            Set up your venue <ArrowRight size={17} aria-hidden />
+            Set up your venue
           </Link>
         </div>
         <ol className="journey-list">

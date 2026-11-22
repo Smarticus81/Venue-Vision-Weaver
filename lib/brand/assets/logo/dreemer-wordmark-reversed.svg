@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 846 198" role="img" aria-label="dreemer">
-  <rect x="-24" y="-24" width="846" height="198" fill="#061219"/>
-  <g fill="none" stroke="#F6F4EE" stroke-width="14" stroke-linejoin="round">
+  <rect x="-24" y="-24" width="846" height="198" fill="#202A44"/>
+  <g fill="none" stroke="#F7F8FC" stroke-width="14" stroke-linejoin="round">
     <path d="M 7 100 A 43 43 0 1 0 93 100 A 43 43 0 1 0 7 100 Z M 93 0 V 150"/>
     <path d="M 127 150 V 50 M 127 88 A 38 38 0 0 1 165 50 H 174"/>
     <path d="M 291 100 A 43 43 0 1 0 282.75 125.33 M 207 100 H 291"/>

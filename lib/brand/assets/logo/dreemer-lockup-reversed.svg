@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 1060.5714285714284 198" role="img" aria-label="Dreemer">
-  <rect x="-24" y="-24" width="1060.5714285714284" height="198" fill="#061219"/>
+  <rect x="-24" y="-24" width="1060.5714285714284" height="198" fill="#202A44"/>
   <g transform="translate(0 -14.29) scale(1.7857)">
-    <path d="M 12 8 H 48 C 73 8 90 25 90 50 C 90 75 73 92 48 92 H 12 Z M 24 20 V 80 H 47 C 66 80 78 68 78 50 C 78 32 66 20 47 20 Z" fill="#F07B64" fill-rule="evenodd"/>
-    <g fill="none" stroke="#F28D77" stroke-width="3.5" stroke-linecap="round">
+    <path d="M 12 8 H 48 C 73 8 90 25 90 50 C 90 75 73 92 48 92 H 12 Z M 24 20 V 80 H 47 C 66 80 78 68 78 50 C 78 32 66 20 47 20 Z" fill="#C6C4FA" fill-rule="evenodd"/>
+    <g fill="none" stroke="#CBC7FA" stroke-width="3.5" stroke-linecap="round">
       <path d="M 38 71 V 44 C 38 33 45 27 53 27 C 61 27 67 33 67 44 V 71"/>
       <path d="M 38 71 L 53 62 V 29"/>
     </g>
-    <g fill="none" stroke="#F28D77" stroke-width="2.4" stroke-linecap="round">
+    <g fill="none" stroke="#CBC7FA" stroke-width="2.4" stroke-linecap="round">
 
     </g>
   </g>
-  <g transform="translate(214.57 0)" fill="none" stroke="#F6F4EE" stroke-width="14" stroke-linejoin="round">
+  <g transform="translate(214.57 0)" fill="none" stroke="#F7F8FC" stroke-width="14" stroke-linejoin="round">
     <path d="M 7 100 A 43 43 0 1 0 93 100 A 43 43 0 1 0 7 100 Z M 93 0 V 150"/>
     <path d="M 127 150 V 50 M 127 88 A 38 38 0 0 1 165 50 H 174"/>
     <path d="M 291 100 A 43 43 0 1 0 282.75 125.33 M 207 100 H 291"/>

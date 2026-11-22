@@ -24,7 +24,7 @@ function write(dir: string, name: string, data: string | Buffer): void {
 
 async function png(svg: string, width: number, height?: number): Promise<Buffer> {
   return sharp(Buffer.from(svg), { density: 384 })
-    .resize(width, height ?? width, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(width, height, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer();
 }

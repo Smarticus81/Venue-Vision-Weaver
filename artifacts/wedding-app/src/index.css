@@ -11,6 +11,7 @@
 @import "@workspace/brand/tokens.css";
 @import "./styles/dashboard.css";
 @import "./styles/couple.css";
+@import "./styles/landing.css";
 
 /*
  * Self-hosted faces (public/fonts): latin subsets of the same Outfit and

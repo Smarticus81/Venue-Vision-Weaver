@@ -58,7 +58,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer page-width">
       <DreemerLogo className="text-[1.25rem]" />
-      <p>Turn tours into bookings.</p>
+      <p>Let them see their day here.</p>
       <Link href="/pricing">Pricing</Link>
       <Link href="/privacy">Privacy &amp; AI previews</Link>
       {config.contactEmail ? <a href={`mailto:${config.contactEmail}`}>Email us</a> : null}

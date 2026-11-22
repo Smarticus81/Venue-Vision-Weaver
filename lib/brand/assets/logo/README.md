@@ -14,18 +14,16 @@ hand-edit the exports.
 | `dreemer-lockup-*@2x.png`, `dreemer-icon-*-512.png` | Raster exports for decks and partners who cannot take SVG. |
 | `dreemer-lockup-email.png` | 560px lockup referenced by transactional email headers. |
 | `dreemer-tile-{light,dark}.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` | App icons (web manifest, iOS home screen). |
-| `favicon.svg`, `favicon.ico`, `dreemer-favicon.svg` | Browser tab icons. Simplified mark: the thin orbit line is dropped below 32px. |
-| `og-image.png` (+ `og-image.html` source) | 1200×630 Open Graph / Twitter card. |
+| `favicon.svg`, `favicon.ico`, `dreemer-favicon.svg` | Browser tab icons. Simplified outer D without the interior door. |
+| `og-image.png` (+ generated `og-image.svg`) | 1200×630 Open Graph / Twitter card. |
 
 The web app's deploy copies (`artifacts/wedding-app/public/`) are written by
 the same scripts, so the two locations cannot drift.
 
 ## Reference artwork
 
-`dreemer-logo-midjourney.png` is the original render the brand was built
-from. The SVGs above are traced from it on a 100-unit grid in
-`lib/brand/src/logo.ts`: the filled left lobe of a heart with a straight
-notch edge and point, the thin line that outlines the missing right lobe,
-and the two crossing strokes of the spark at its peak. The wordmark is a
-constructed monoline geometric lowercase matched to the render's weight and
-spacing so it needs no font file.
+`dreemer-logo-midjourney.png` is retained historical artwork, not the current
+identity. The active mark is an original architectural D enclosing an open
+arched doorway, constructed on a 100-unit grid in `lib/brand/src/logo.ts`.
+The lighter custom lowercase wordmark needs no font file. See `BRAND.md`
+for the blue-hour palette and usage rules.

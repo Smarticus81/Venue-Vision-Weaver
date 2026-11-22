@@ -1,32 +1,20 @@
-import { ArrowRight, Check } from "lucide-react";
 import { Link } from "wouter";
 import type { TrialConfig } from "@workspace/api-client-react";
-import { HERO_IMAGE } from "@/lib/brandAssets";
+import { COMPARE_IMAGES } from "@/lib/brandAssets";
 import { track } from "@/lib/track";
 
 /*
- * Hero (funnel-ux.md 3.2, fallback variant). No same-composition before/after
- * pair exists among the committed assets, so the reveal handle is not built;
- * the figure is the committed diptych — the empty space on the left, the
- * couple in it on the right — which carries the same argument statically.
- * Nothing here waits on JavaScript: the headline, the CTA and the image are
- * in the first paint, and the image is the LCP element.
+ * Architectural album cover. Reference and preview are different compositions,
+ * clearly labelled, never presented as an aligned before/after comparison.
  */
 export function Hero({ trial }: { trial: TrialConfig }) {
   return (
-    <section className="venue-hero page-width">
-      <div className="hero-copy">
-        <p className="eyebrow">For wedding venues</p>
-        <h1>
-          Turn tours
-          <br />
-          into <em>bookings.</em>
-        </h1>
-        <p className="hero-description">
-          A couple tours your venue. Before they leave, they see realistic images and a short reel of
-          themselves getting married there, with your date link attached. They send it to family.
-          They pick you.
-        </p>
+    <section className="album-hero page-width" aria-labelledby="hero-heading">
+      <div className="album-hero__copy">
+        <p className="eyebrow">A new way to remember the venue tour</p>
+        <h1 id="hero-heading">Let them see<br />their day <em>here.</em></h1>
+        <p className="album-hero__description">Your venue. The two of them. A wedding they can picture.</p>
+        <p className="album-hero__detail">Create personalized AI wedding galleries from your venue photos and the couple's own pictures—with a motion reel to share and your date link built in.</p>
         <div className="action-row">
           <Link
             href="/create-venue"
@@ -34,33 +22,25 @@ export function Hero({ trial }: { trial: TrialConfig }) {
             data-testid="venue-hero-register"
             onClick={() => track("cta_click", { placement: "hero" })}
           >
-            Start free — {trial.credits} galleries <ArrowRight size={18} aria-hidden />
+            Create your first gallery
           </Link>
-          <a href="#how-it-works" className="text-link">
-            See how it works
+          <a href="#gallery-examples" className="text-link">
+            Explore the examples
           </a>
         </div>
-        <p className="hero-note">
-          <Check size={15} aria-hidden /> No card. Setup takes a few minutes. {trial.days}-day trial.
-        </p>
+        <p className="album-hero__terms">{trial.credits} galleries included · {trial.days} days free · No card needed</p>
       </div>
-      <figure className="hero-photo">
-        <img
-          src={HERO_IMAGE.src}
-          srcSet={HERO_IMAGE.srcSet}
-          sizes={HERO_IMAGE.sizes}
-          width={HERO_IMAGE.width}
-          height={HERO_IMAGE.height}
-          alt={HERO_IMAGE.alt}
-          fetchPriority="high"
-          loading="eager"
-          decoding="async"
-        />
-        <figcaption>
-          <span>An example venue, empty</span>
-          <span>The couple in it · AI preview</span>
-        </figcaption>
-      </figure>
+      <div className="album-hero__visual">
+        <figure className="album-portrait">
+          <img {...COMPARE_IMAGES.couple} fetchPriority="high" loading="eager" decoding="async" />
+          <figcaption><span>A possibility worth picturing</span><strong>Imagined here.</strong></figcaption>
+        </figure>
+        <div className="album-source">
+          <img {...COMPARE_IMAGES.room} loading="lazy" decoding="async" />
+          <div><span>The starting point</span><strong>The venue's own photos</strong></div>
+        </div>
+        <p className="album-hero__disclosure">Example venue &amp; demo couple · AI preview</p>
+      </div>
     </section>
   );
 }

@@ -1,12 +1,8 @@
 import type { PricingConfig } from "@workspace/api-client-react";
 
 /*
- * ROI math for the landing page calculator (funnel-ux.md 3.6). Pure, so the
- * default worked example is computed at module load and rendered into the
- * static markup; JavaScript only makes it live.
- *
- * Every figure here is an estimate from the visitor's own inputs plus one
- * clearly labelled assumption (LIFT_POINTS). No invented statistics.
+ * Pure scenario math. Every figure uses editable visitor assumptions;
+ * defaults are illustrative, not observed product performance.
  */
 
 export interface RoiInput {
@@ -25,14 +21,15 @@ export interface RoiOutput {
   galleriesPerYear: number;
   planSuggestion: "starter" | "growth";
   planCostPerYear: number;
-  /** Bookings needed to cover a year of the suggested plan; null when the booking value is zero. */
-  paybackBookings: number | null;
+  extraPacksPerMonth: number;
+  /** Normalized inputs used by both the calculation and its explanation. */
+  assumptions: Required<RoiInput>;
 }
 
-/** The assumption printed beside the result: +3 points of tour-to-booking. */
+/** Editable illustrative uplift, not a measured conversion claim. */
 export const LIFT_POINTS = 3;
 
-/** Defaults from the research worked example, labelled as defaults in the UI. */
+/** Illustrative defaults, labelled in the UI. */
 export const ROI_DEFAULTS: Required<RoiInput> = {
   toursPerMonth: 8,
   tourToBookingPercent: 35,
@@ -44,6 +41,7 @@ export const ROI_LIMITS = {
   toursPerMonth: { min: 0, max: 500 },
   tourToBookingPercent: { min: 0, max: 100 },
   averageBookingValue: { min: 0, max: 1_000_000 },
+  liftPoints: { min: 0, max: 100 },
 } as const;
 
 export function clamp(value: number, min: number, max: number): number {
@@ -58,7 +56,7 @@ function round1(value: number): number {
 /** Parse a form field into a number; blank or junk becomes 0. */
 export function parseRoiNumber(raw: string | number | null | undefined): number {
   if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
-  const text = (raw ?? "").toString().replace(/[^0-9.]/g, "");
+  const text = (raw ?? "").toString().replace(/[$,\s]/g, "");
   if (!text) return 0;
   const n = Number(text);
   return Number.isFinite(n) ? n : 0;
@@ -76,19 +74,25 @@ export function computeRoi(input: RoiInput, pricing: PricingConfig): RoiOutput {
     ROI_LIMITS.averageBookingValue.min,
     ROI_LIMITS.averageBookingValue.max,
   );
-  const lift = clamp(input.liftPoints ?? LIFT_POINTS, 0, 100);
+  const lift = clamp(input.liftPoints ?? LIFT_POINTS, 0, 100 - percent);
 
   const galleriesPerYear = Math.round(tours * 12);
   const bookingsNowPerYear = round1((galleriesPerYear * percent) / 100);
   const extraBookingsPerYear = round1((galleriesPerYear * lift) / 100);
-  const bookingsAfterPerYear = round1(bookingsNowPerYear + extraBookingsPerYear);
-  const extraRevenuePerYear = Math.round(extraBookingsPerYear * value);
+  const bookingsAfterPerYear = round1((galleriesPerYear * (percent + lift)) / 100);
+  const extraRevenuePerYear = Math.round((galleriesPerYear * lift * value) / 100);
 
-  const planSuggestion: RoiOutput["planSuggestion"] =
-    tours <= pricing.starterCredits ? "starter" : "growth";
-  const monthly = planSuggestion === "starter" ? pricing.starterMonthly : pricing.growthMonthly;
-  const planCostPerYear = Math.round(monthly * 12);
-  const paybackBookings = value > 0 ? Math.max(1, Math.ceil(planCostPerYear / value)) : null;
+  // Model a full calendar without relying on previously accumulated credits.
+  // Choose the less expensive subscription + monthly top-up combination.
+  const candidates = (["starter", "growth"] as const).map((plan) => {
+    const included = plan === "starter" ? pricing.starterCredits : pricing.growthCredits;
+    const base = plan === "starter" ? pricing.starterMonthly : pricing.growthMonthly;
+    const packs = Math.ceil(Math.max(0, tours - included) / pricing.creditPackCredits);
+    return { plan, packs, monthly: base + packs * pricing.creditPack };
+  }).sort((a, b) => a.monthly - b.monthly);
+  const choice = candidates[0]!;
+  const planSuggestion = choice.plan;
+  const planCostPerYear = Math.round(choice.monthly * 12);
 
   return {
     bookingsNowPerYear,
@@ -98,6 +102,7 @@ export function computeRoi(input: RoiInput, pricing: PricingConfig): RoiOutput {
     galleriesPerYear,
     planSuggestion,
     planCostPerYear,
-    paybackBookings,
+    extraPacksPerMonth: choice.packs,
+    assumptions: { toursPerMonth: tours, tourToBookingPercent: percent, averageBookingValue: value, liftPoints: lift },
   };
 }

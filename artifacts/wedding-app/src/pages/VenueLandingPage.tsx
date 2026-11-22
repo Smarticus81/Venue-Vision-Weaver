@@ -1,8 +1,8 @@
-import { ArrowRight } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "wouter";
 import { SiteHeader, SiteFooter } from "@/components/layout/SiteChrome";
 import { Hero } from "@/components/landing/Hero";
+import { GalleryExamples } from "@/components/landing/GalleryExamples";
 import { ValueStrip } from "@/components/landing/ValueStrip";
 import { ProofRow } from "@/components/landing/ProofRow";
 import { HowItWorks } from "@/components/landing/HowItWorks";
@@ -20,12 +20,9 @@ import { track, trackOnce } from "@/lib/track";
  * the next one is more likely to book, and the venue can finally see which
  * toured couples opened, shared, clicked for a date, and booked.
  *
- * Signature moment: the room, then the couple in the room — the hero diptych.
- * It ships static (no same-composition before/after pair exists among the
- * committed assets, so the spec's reveal handle slipped; see design-notes.md).
- * The ROI readout is the page's only live element: the venue's own numbers
- * in, bookings and money out. Everything else is quiet: no entrance reveals,
- * no parallax, no scroll scrubbing, no JS motion library on this route.
+ * Signature: an arched photographic album and user-controlled contact sheet.
+ * The revenue calculator uses editable, explicitly hypothetical assumptions.
+ * No entrance reveals, parallax, scroll scrubbing or JS motion library.
  *
  * Honesty rules: prices and trial terms come from the public config (meta tag
  * or GET /public/config), proof is partner mode until opted-in aggregates
@@ -41,7 +38,7 @@ export default function VenueLandingPage() {
   }, []);
 
   return (
-    <div className="site-page">
+    <div className="site-page landing-page">
       <div className="hero-band">
         <SiteHeader />
       </div>
@@ -52,9 +49,11 @@ export default function VenueLandingPage() {
 
         <ValueStrip />
 
-        <ProofRow config={config} />
+        <GalleryExamples />
 
         <HowItWorks />
+
+        <ProofRow config={config} />
 
         <RoiCalculator pricing={config.pricing} />
 
@@ -78,18 +77,18 @@ export default function VenueLandingPage() {
 
         <section className="start-section page-width">
           <p className="eyebrow">Start today</p>
-          <h2>Give the next couple a reason to pick you.</h2>
+          <h2>The next chapter<br />starts at your venue.</h2>
           <Link
             href="/create-venue"
             className="action-primary"
             data-testid="venue-trial-register"
             onClick={() => track("cta_click", { placement: "final_ask" })}
           >
-            Start free <ArrowRight size={18} aria-hidden />
+            Create your first gallery
           </Link>
           <p className="caption">
-            {config.trial.credits} galleries free. Setup is your website, your booking link, and the
-            tour card.
+            {config.trial.credits} galleries included for {config.trial.days} days. Add your venue's photos,
+            check a sample, and bring it to your next tour.
           </p>
           <Link href="/login" className="text-link" data-testid="venue-trial-sign-in">
             Already set up? Sign in

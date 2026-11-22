@@ -45,6 +45,63 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: brand, marketing and production audit
+
+- Implemented the blue-hour album landing, contact-sheet interaction, shared
+  lavender/midnight palette, deterministic illustrated social card, corrected
+  raster-logo proportions, and editable revenue scenarios with capped uplift
+  and required top-up costs. See BRAND.md and design-notes.md.
+- Full test/security/build run 75235 exited 0; follow-up codegen + build 83395
+  exited 0 after the tablet layout fix. Generated API outputs have no drift.
+  Browser checks at 375/768/1440 pass the inspected layouts and calculator
+  scenarios. No production performance or physical-device claim is implied.
+- Railway CLI authentication is restored. Local checkout linked explicitly to
+  the project, production environment and dreamweever service listed above.
+  Variable values were inspected only in memory, never saved or printed.
+- APP_BASE_URL is correctly https://www.dreemer.co. Boot still rejects the
+  placeholder EMAIL_FROM and absent RESEND_WEBHOOK_SECRET. Read-only Resend
+  domains/webhooks requests return HTTP 400, "API key is invalid"; the configured
+  key is only six characters. Resend browser sign-in is now awaiting the user
+  so the actual sender, key and webhook can be recovered/configured.
+- Read-only model retrieval returns HTTP 200 for gpt-image-2.5-sunburst using
+  the configured OpenAI credential and gemini-2.5-pro using the Google key.
+  This verifies credential/model visibility, NOT image generation permission,
+  quota, output quality or cost. No paid generation or email was triggered.
+- Supabase project brtghcerldjsjqduqvvj is the configured dreamweever database.
+  Existing configured buckets venue-vision (private) and venue-vision-public
+  (public) exist. No bucket contents or permissions were changed.
+- Security audit found all 26 public tables had RLS disabled and broad grants
+  to anon/authenticated. No public views, functions or policies existed. The
+  configured backend role is postgres, with bypassrls, matching the documented
+  Clerk-protected/server-only access model.
+- Applied the repository's server-only access contract with the idempotent SQL
+  in supabase/migrations/20261122042650_protect_server_only_tables.sql through
+  execute_sql (not a recorded Supabase migration-history entry). Enabled RLS
+  on the 26 audited tables, revoked anon/authenticated table privileges, and
+  revoked their future default table privileges for postgres. No rows or
+  tables were deleted. Legacy credentials remain pending a separate retirement
+  and exposure review; do not infer that historical access did not occur.
+- Verification: 26 tables, zero without RLS, zero public-role table privileges,
+  backend SELECT access retained. Actual SELECT probes as anon and authenticated
+  return 42501 permission denied. Security advisors now report only expected
+  INFO "RLS Enabled No Policy", appropriate to server-only access:
+  https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy
+- Read-only schema snapshot (qa-output/production-schema-snapshot.json, ignored)
+  evaluated against the application readiness contract reports 28 violations:
+  three missing tables (gallery_events, render_attempts, funnel_events), their
+  columns, couple_sessions.delivery_hold_reason, and the partial unique trial
+  grantee index. Further full schema reconciliation is needed: this minimum
+  contract is not proof that every billing/growth table is present.
+- Control-plane agents/outreach policies are enabled in production; no
+  autonomous_mode override exists (default is true). Before starting a repaired
+  service, keep automated outbound activity disabled until launch authority
+  and integration safety are verified. No policy was changed during this audit.
+- Still outstanding: production email configuration, remaining schema migration,
+  verified DB TLS configuration, full workflow/provider benchmarks, deployed
+  end-to-end checks, and performance/economics evidence. Goal remains active.
+
+### Earlier checkpoint
+
 - Repository and production target recovered; locked dependencies installed.
 - New architectural D/aperture identity being implemented in shared geometry.
 - Generated logo assets and brand checks pass. Full production build passes

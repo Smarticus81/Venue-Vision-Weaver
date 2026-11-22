@@ -1,13 +1,11 @@
 import { useId, useMemo, useState } from "react";
 import type { PricingConfig } from "@workspace/api-client-react";
 import { formatMoney } from "@/lib/publicConfig";
-import { computeRoi, LIFT_POINTS, parseRoiNumber, ROI_DEFAULTS, ROI_LIMITS } from "@/lib/roi";
+import { computeRoi, parseRoiNumber, ROI_DEFAULTS, ROI_LIMITS } from "@/lib/roi";
 
 /*
- * ROI calculator (funnel-ux.md 3.6) — the page's one live element. Three
- * inputs in the venue's own units, one output in bookings and money. The
- * default worked example is a pure computation, so the static markup already
- * holds a correct result before React hydrates; typing only re-runs the math.
+ * Four editable assumptions drive a gross-revenue scenario, not a forecast
+ * or a profit/payback promise. Plan costs include monthly top-ups.
  */
 
 const PLAN_NAMES = { starter: "Starter", growth: "Growth" } as const;
@@ -21,35 +19,31 @@ export function RoiCalculator({ pricing }: { pricing: PricingConfig }) {
   const [tours, setTours] = useState(String(ROI_DEFAULTS.toursPerMonth));
   const [percent, setPercent] = useState(String(ROI_DEFAULTS.tourToBookingPercent));
   const [value, setValue] = useState(String(ROI_DEFAULTS.averageBookingValue));
+  const [lift, setLift] = useState(String(ROI_DEFAULTS.liftPoints));
 
   const input = useMemo(
     () => ({
       toursPerMonth: parseRoiNumber(tours),
       tourToBookingPercent: parseRoiNumber(percent),
       averageBookingValue: parseRoiNumber(value),
+      liftPoints: parseRoiNumber(lift),
     }),
-    [tours, percent, value],
+    [tours, percent, value, lift],
   );
   const out = useMemo(() => computeRoi(input, pricing), [input, pricing]);
   const currency = pricing.currency;
   const plan = PLAN_NAMES[out.planSuggestion];
-  const payback =
-    out.paybackBookings === null
-      ? null
-      : out.paybackBookings === 1
-        ? "paid back by the first booking."
-        : `paid back by booking ${out.paybackBookings}.`;
 
   return (
     <section className="roi-section page-width" aria-labelledby={`${ids}-heading`} id="roi">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">What one more booking is worth</p>
-          <h2 id={`${ids}-heading`}>Do the math for your venue.</h2>
+          <p className="eyebrow">Make the decision with your numbers</p>
+          <h2 id={`${ids}-heading`}>What would make it worthwhile?</h2>
         </div>
         <p>
-          Three numbers you already know. The result is in bookings, not galleries. Defaults are
-          placeholders, not your figures.
+          Explore a revenue scenario against the subscription and credits you would need.
+          Every default is illustrative, not measured venue performance.
         </p>
       </div>
 
@@ -108,33 +102,41 @@ export function RoiCalculator({ pricing }: { pricing: PricingConfig }) {
               Default {formatMoney(ROI_DEFAULTS.averageBookingValue, currency)}
             </small>
           </div>
+          <div className="roi-field">
+            <label htmlFor={`${ids}-lift`}>Possible booking-rate increase</label>
+            <div className="roi-unit">
+              <input id={`${ids}-lift`} type="number" inputMode="decimal" min={0} max={100} step={0.5}
+                value={lift} onChange={(e) => setLift(e.target.value)} aria-describedby={`${ids}-lift-hint`} />
+              <span aria-hidden>points</span>
+            </div>
+            <small id={`${ids}-lift-hint`}>Your assumption. Try 0 to see the cost without any increase.</small>
+          </div>
         </form>
 
         <output
           className="roi-output"
           aria-live="polite"
-          htmlFor={`${ids}-tours ${ids}-percent ${ids}-value`}
+          htmlFor={`${ids}-tours ${ids}-percent ${ids}-value ${ids}-lift`}
         >
           <p className="roi-figure">
             <strong>+{formatNumber(out.extraBookingsPerYear)}</strong>
-            <span>more bookings a year</span>
+            <span>possible extra bookings a year</span>
           </p>
           <p className="roi-money">
-            about <strong>{formatMoney(out.extraRevenuePerYear, currency)}</strong> a year
+            <strong>{formatMoney(out.extraRevenuePerYear, currency)}</strong> potential gross revenue a year
           </p>
           <p className="roi-detail">
-            At {formatNumber(input.toursPerMonth)} tours a month and {formatNumber(input.tourToBookingPercent)}%
-            booking, you book about {formatNumber(out.bookingsNowPerYear)} weddings a year. If seeing
-            themselves here moves {LIFT_POINTS} couples in a hundred to yes, that is{" "}
-            {formatNumber(out.extraBookingsPerYear)} more bookings, about{" "}
-            {formatMoney(out.extraRevenuePerYear, currency)} a year. {plan} costs{" "}
-            {formatMoney(out.planCostPerYear, currency)} a year{payback ? `, ${payback}` : "."}
+            At {formatNumber(out.assumptions.toursPerMonth)} tours a month and {formatNumber(out.assumptions.tourToBookingPercent)}%
+            booking, the starting point is about {formatNumber(out.bookingsNowPerYear)} weddings a year.
+            The modeled increase is {formatNumber(out.assumptions.liftPoints)} percentage points, capped at a 100% booking rate. The lower-cost subscription
+            combination for this tour volume is {plan}{out.extraPacksPerMonth > 0 ? ` plus ${out.extraPacksPerMonth} credit pack(s) per month` : ""}:
+            {" "}{formatMoney(out.planCostPerYear, currency)} a year before tax.
           </p>
         </output>
       </div>
       <p className="caption">
-        Assumption: +{LIFT_POINTS} points of tour-to-booking. The other numbers are yours; we will
-        replace the assumption with opted-in venue data when we have it.
+        Revenue is not profit. This scenario excludes the cost of hosting extra weddings, your team's
+        time and taxes. It assumes one gallery per tour and no carried-over credits. No booking uplift is guaranteed.
       </p>
     </section>
   );
