@@ -45,6 +45,49 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: schema reconciliation and email/TLS setup
+
+- Added the ten missing billing, gallery, telemetry and growth tables plus the
+  missing columns and indexes with the additive migration
+  `20261122043110_reconcile_application_schema.sql`. Ran it first in a rolled-back
+  transaction, then committed the reviewed SQL through execute_sql. Like the
+  earlier RLS migration, this is not a Supabase migration-history entry; do not
+  assume the CLI history reflects the live changes.
+- Readiness now derives every table, column and NOT NULL requirement from the
+  exported Drizzle schema instead of a hand-maintained subset. Live metadata
+  satisfies all 33 application tables, 419 columns and the critical-index checks.
+  Legacy owner-auth tables remain intact and are not application requirements.
+- Post-migration counts are unchanged: 14 venues, 6 organizations, 7 sessions,
+  35 assets, 110 credit transactions, and 95 organization credits. All 36 public
+  tables have RLS enabled; anon/authenticated have zero table grants. Advisors
+  report only intentional server-only RLS-without-policy notices, not an
+  application-tenant-isolation guarantee for the privileged backend role.
+- Full tests (session 13302) and production build/typecheck (92193) exited 0.
+  The new readiness regression covers billing/growth tables and previously
+  omitted ORM columns.
+- User approved a new sending-only Resend key and delivery webhook. Created
+  `Dreemer production sending`, retaining all prior keys. The UI currently
+  offers only `All domains` for sending access; domain restriction is not yet
+  configured. Added dreemer.co and the seven supported delivery events at
+  https://www.dreemer.co/api/webhooks/resend. No emails were sent.
+- RESEND_API_KEY and RESEND_WEBHOOK_SECRET are staged in Railway, not deployed.
+  EMAIL_FROM is saved as `Dreemer <notifications@dreemer.co>` and
+  CONTROL_PLANE_ENABLED=off is saved for the next deployment. These values do
+  not imply a change to the old container's running environment. DNS remains
+  unverified: the user has been asked to add the three exact Resend records
+  in GoDaddy after native browser controls failed. No existing DNS was changed.
+- Downloaded the public CA certificate linked by this project's Supabase
+  Database Settings and saved DATABASE_SSL_CA in Railway without deployment.
+  A fresh node-postgres connection using the saved CA and
+  rejectUnauthorized=true verifies the client-to-session-pooler TLS connection
+  (encrypted=true, authorized=true). pg_stat_ssl describes the pooler-to-DB
+  hop, not this client connection; do not conflate the two.
+- Remaining launch gates include DNS verification, applying staged email
+  secrets, deployed runtime checks, billing/Clerk workflow validation and
+  consented real-reference image-quality/cost benchmarks. Consented reference
+  sets have been requested; existing customer photos are not authorized QA
+  fixtures. The goal is not complete.
+
 ### November 21 checkpoint: brand, marketing and production audit
 
 - Implemented the blue-hour album landing, contact-sheet interaction, shared

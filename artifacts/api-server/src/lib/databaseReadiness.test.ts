@@ -50,6 +50,17 @@ test("a database matching the contract has no readiness findings", () => {
   assert.deepEqual(readiness.evaluateRequiredDatabaseSchema(completeIntrospection()), []);
 });
 
+test("readiness covers billing, growth and full ORM column requirements", () => {
+  const fixture = completeIntrospection();
+  for (const name of ["stripe_events", "billing_events", "control_prospect_vetting", "control_copy_variants", "control_digests"]) {
+    assert.ok(readiness.REQUIRED_DATABASE_TABLES.includes(name), `${name} is required`);
+  }
+  const missing = ["organizations.subscription_status", "organizations.trial_ends_at", "couple_sessions.consent_at", "venues.review_before_send"];
+  fixture.columns = fixture.columns.filter((row) => !missing.includes(`${row.table_name}.${row.column_name}`));
+  const findings = readiness.evaluateRequiredDatabaseSchema(fixture);
+  for (const name of missing) assert.ok(findings.includes(`column:${name}`), `${name} is required`);
+});
+
 test("missing organizations table and columns degrade readiness", () => {
   const fixture = completeIntrospection();
   fixture.tables = fixture.tables.filter((row) => row.table_name !== "organizations");
@@ -87,8 +98,8 @@ test("control-plane tables, organization_id columns and funnel tables are requir
   ]) {
     assert.ok(tables.has(table), `${table} must be required`);
   }
-  assert.ok(readiness.REQUIRED_DATABASE_COLUMNS.venues.includes("organization_id"));
-  assert.ok(readiness.REQUIRED_DATABASE_COLUMNS.credit_transactions.includes("organization_id"));
+  assert.ok(readiness.REQUIRED_DATABASE_COLUMNS.venues!.includes("organization_id"));
+  assert.ok(readiness.REQUIRED_DATABASE_COLUMNS.credit_transactions!.includes("organization_id"));
 
   const fixture = completeIntrospection();
   fixture.columns = fixture.columns.filter(
