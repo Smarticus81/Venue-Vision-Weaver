@@ -45,6 +45,29 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: verified email domain
+
+- Recovered native Chrome input and used the existing signed-in GoDaddy session.
+  Reviewed all 16 existing DNS records before adding only the three Resend
+  records: TXT `resend._domainkey` with Resend's public DKIM value, CNAME `rsend`
+  to `rsend.forge.rmta.net`, and CNAME `send` to `send.forge.rmta.net`. New records
+  use GoDaddy's 30-minute TTL. Existing A, NS, Clerk, www, DMARC and verification
+  records were not edited or deleted.
+- GoDaddy confirmed the save. Both authoritative nameservers (ns33 and ns34)
+  return the expected records. Resend reports the domain **Verified**, Forge
+  **Ready**, and "Your domain is ready to send emails". This resolves the DNS
+  setup blocker; it is not an end-to-end email-delivery test.
+- Restricted the already-created `Dreemer production sending` API key from all
+  domains to `dreemer.co`, retaining sending-only permission. No new key was
+  created and no older key was changed. Resend shows zero uses/no activity.
+- Railway confirms exactly two staged, non-destructive variable changes:
+  RESEND_API_KEY and RESEND_WEBHOOK_SECRET. They are still staged, not applied
+  to the running service. No deployment or email was triggered.
+- Local evidence (ignored): `qa-output/resend-domain-verified.jpg` and
+  `qa-output/resend-key-domain-scope.jpg`. Remaining launch gates include
+  applying those secrets with the release, consented real-reference gallery
+  QA, deployment/runtime checks and live Clerk/billing/mobile workflows.
+
 ### November 21 checkpoint: non-destructive venue photo workflow
 
 - Replaced the delete/re-upload retag workflow with OpenAPI-first
@@ -63,8 +86,9 @@ quality and measurable unit economics. A passing build alone is not completion.
   found at phone width. Inspected 375/768/1440px with no horizontal overflow.
 - Fresh codegen/no-drift and build/typecheck passed in session 29987 after the
   final CSS adjustments; full tests and security smoke passed in session 89746.
-  GitHub checks are the next gate. Real Clerk authorization and deployed workflow
-  checks remain launch gates.
+  Commit `8bdaaf8` is pushed and GitHub CI run `44987867367` passed every step,
+  including actual reel encoding/decoding. Real Clerk authorization and deployed
+  workflow checks remain launch gates.
 - Production recheck: Railway still lists the October 9 failed deployment as
   its latest attempt. Public DNS still returns NXDOMAIN for resend._domainkey,
   rsend and send under dreemer.co. No deployment or email was triggered.
