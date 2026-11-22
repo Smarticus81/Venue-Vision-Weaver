@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type RequestHandler } from "express";
 import { eq, and, sql, gte, isNull, isNotNull } from "drizzle-orm";
 import {
   db,
@@ -11,6 +11,8 @@ import {
   uploadIntentsTable,
   coupleMediaTable,
   funnelEventsTable,
+  type VenueMedia,
+  type VenueMediaCoverage,
 } from "@workspace/db";
 import {
   CreateVenueBody,
@@ -19,6 +21,8 @@ import {
   ListVenueMediaParams,
   AddVenueMediaParams,
   AddVenueMediaBody,
+  UpdateVenueMediaParams,
+  UpdateVenueMediaBody,
   DeleteVenueMediaParams,
   UpdateVenueParams,
   UpdateVenueBody,
@@ -639,6 +643,50 @@ router.post("/venues/:slug/media", async (req, res): Promise<void> => {
 
   res.status(201).json(media);
 });
+
+/** A single scoped UPDATE preserves the image, order, hash and dimensions. */
+export function updateVenueMediaCoverageQuery(venueId: number, mediaId: number, coverage: VenueMediaCoverage) {
+  return db.update(venueMediaTable)
+    .set({ coverage })
+    .where(and(eq(venueMediaTable.id, mediaId), eq(venueMediaTable.venueId, venueId)))
+    .returning();
+}
+
+interface UpdateVenueMediaDeps {
+  authorizeVenue(req: Request, res: Response, slug: string): Promise<{ id: number } | null>;
+  updateCoverage(venueId: number, mediaId: number, coverage: VenueMediaCoverage): Promise<VenueMedia | null>;
+}
+
+export function createUpdateVenueMediaHandler(deps: UpdateVenueMediaDeps = {
+  authorizeVenue: requireOrgVenue,
+  async updateCoverage(venueId, mediaId, coverage) {
+    const [updated] = await updateVenueMediaCoverageQuery(venueId, mediaId, coverage);
+    return updated ?? null;
+  },
+}): RequestHandler {
+  return async (req, res): Promise<void> => {
+    const params = UpdateVenueMediaParams.safeParse(req.params);
+    if (!params.success || !Number.isSafeInteger(params.data.mediaId)) {
+      res.status(400).json({ error: "Choose a valid venue photo." });
+      return;
+    }
+    const body = UpdateVenueMediaBody.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Choose one of the five photo views. Only the coverage role can be changed." });
+      return;
+    }
+    const venue = await deps.authorizeVenue(req, res, params.data.slug);
+    if (!venue) return;
+    const updated = await deps.updateCoverage(venue.id, params.data.mediaId, body.data.coverage);
+    if (!updated) {
+      res.status(404).json({ error: "Venue photo not found." });
+      return;
+    }
+    res.json(updated);
+  };
+}
+
+router.patch("/venues/:slug/media/:mediaId", createUpdateVenueMediaHandler());
 
 // DELETE /venues/:slug/media/:mediaId (owner session)
 router.delete("/venues/:slug/media/:mediaId", async (req, res): Promise<void> => {

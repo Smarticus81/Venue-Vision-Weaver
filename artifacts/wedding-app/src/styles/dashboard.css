@@ -519,11 +519,11 @@
 }
 .coverage-tile-media {
   display: grid;
+  align-content: start;
   gap: 8px;
 }
 .coverage-thumb {
   position: relative;
-  aspect-ratio: 4 / 3;
   overflow: hidden;
   border-radius: var(--dm-radius-md);
   background: var(--dm-band);
@@ -531,21 +531,24 @@
 }
 .coverage-thumb img {
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   display: block;
 }
 .coverage-thumb-actions {
-  position: absolute;
-  inset: auto 6px 6px 6px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 6px;
   gap: 6px;
 }
+.coverage-thumb-actions > div {
+  justify-content: flex-end;
+}
 .coverage-thumb-actions select {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  min-height: 32px;
+  min-height: 44px;
   max-width: 100%;
   padding: 0 8px;
   border-radius: var(--dm-radius-sm);
@@ -558,8 +561,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--dm-radius-sm);
   background: var(--dm-ink-surface);
   color: var(--dm-ink-text);
@@ -1401,6 +1404,17 @@
   .dash-mobile-nav {
     display: grid;
     gap: 4px;
+  }
+  .dash-nav > a {
+    min-width: 0;
+  }
+  .dash-nav > a > span {
+    width: 100%;
+    max-width: 150px;
+  }
+  .dash-nav > a svg {
+    width: 100%;
+    height: auto;
   }
   .dash-mobile-nav label {
     font-size: 11px;

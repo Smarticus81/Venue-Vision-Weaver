@@ -290,6 +290,7 @@ export * from "./trialConfig";
 export * from "./trialState";
 export * from "./updateOrganizationBody";
 export * from "./updateVenueBody";
+export * from "./updateVenueMediaBody";
 export * from "./uploadUrlRequest";
 export * from "./uploadUrlRequestContentType";
 export * from "./uploadUrlRequestPurpose";

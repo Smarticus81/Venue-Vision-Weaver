@@ -290,6 +290,34 @@ const qaConfig = mergeConfig(config, {
             res.end(JSON.stringify({ recorded: true }));
             return;
           }
+          // In-memory retag flow; ?fixtureMediaError=1 exercises failure.
+          // This development-only server never touches production data/storage.
+          const mediaPatch = u.match(/^\/venues\/(willow)\/media\/(\d+)$/);
+          if (req.method === "PATCH" && mediaPatch) {
+            let body = "";
+            req.on("data", (chunk) => { body += chunk.toString(); });
+            req.on("end", () => {
+              try {
+                if (new URL(req.headers.referer ?? "http://localhost").searchParams.get("fixtureMediaError") === "1") {
+                  throw new Error("Fixture write failure");
+                }
+                const { coverage } = JSON.parse(body);
+                if (!["exterior", "ceremony", "reception", "detail", "natural_light"].includes(coverage)) {
+                  res.statusCode = 400;
+                  res.end(JSON.stringify({ error: "Invalid coverage" }));
+                  return;
+                }
+                const item = media.find((photo) => photo.id === Number(mediaPatch[2]));
+                if (!item) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+                item.coverage = coverage;
+                res.end(JSON.stringify(item));
+              } catch {
+                res.statusCode = 503;
+                res.end(JSON.stringify({ error: "Fixture: photo update unavailable. Original photo retained." }));
+              }
+            });
+            return;
+          }
           if (req.method !== "GET") {
             res.statusCode = 503;
             res.end(

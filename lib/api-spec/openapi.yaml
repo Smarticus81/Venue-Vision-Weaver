@@ -446,6 +446,51 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
   /venues/{slug}/media/{mediaId}:
+    patch:
+      operationId: updateVenueMedia
+      tags: [venues]
+      summary: Change a venue photo's coverage without replacing its stored image
+      description: Organization members only. Updates only the coverage role of a photo belonging to the authorized venue. Image identity, object key, order and quality metadata are preserved.
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: mediaId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVenueMediaBody"
+      responses:
+        "200":
+          description: Updated photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueMediaItem"
+        "400":
+          description: Invalid photo ID or coverage role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Organization access or mutation origin refused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Venue or photo not found within the authorized organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
     delete:
       operationId: deleteVenueMedia
       tags: [venues]
@@ -2751,6 +2796,14 @@ components:
           $ref: "#/components/schemas/VenueMediaCoverage"
         displayOrder:
           type: integer
+
+    UpdateVenueMediaBody:
+      type: object
+      additionalProperties: false
+      required: [coverage]
+      properties:
+        coverage:
+          $ref: "#/components/schemas/VenueMediaCoverage"
 
     VenueDashboardResponse:
       type: object

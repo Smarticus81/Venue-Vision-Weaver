@@ -45,6 +45,30 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: non-destructive venue photo workflow
+
+- Replaced the delete/re-upload retag workflow with OpenAPI-first
+  `PATCH /venues/{slug}/media/{mediaId}`. The existing Clerk organization and
+  mutation-origin guard authorizes the venue; the SQL update also matches both
+  venue and photo IDs. Only coverage can change. No storage calls, migration,
+  public grants, RLS changes or new credentials are required.
+- HTTP tests cover valid/repeated edits, unknown fields, invalid IDs/categories,
+  authorization refusal, missing/foreign IDs and failed writes. A separate
+  SQL-shape assertion checks the actual Drizzle update predicate. A PostgreSQL
+  transaction using a temporary LIKE-table and synthetic rows confirmed the
+  scoped write and preservation of reference metadata; the transaction was
+  rolled back and no production photo rows or objects were modified.
+- Browser fixture confirms category changes and failure retention. Moved photo
+  actions below images, made touch targets 44px and fixed the logo/picker overlap
+  found at phone width. Inspected 375/768/1440px with no horizontal overflow.
+- Fresh codegen/no-drift and build/typecheck passed in session 29987 after the
+  final CSS adjustments; full tests and security smoke passed in session 89746.
+  GitHub checks are the next gate. Real Clerk authorization and deployed workflow
+  checks remain launch gates.
+- Production recheck: Railway still lists the October 9 failed deployment as
+  its latest attempt. Public DNS still returns NXDOMAIN for resend._domainkey,
+  rsend and send under dreemer.co. No deployment or email was triggered.
+
 ### November 21 checkpoint: real motion-reel encoding
 
 - Added `pnpm run test:reel-encode`, using geometric fixtures rather than any

@@ -1718,6 +1718,11 @@ try {
   );
   assert.match(
     venuesRoute,
+    /createUpdateVenueMediaHandler[\s\S]*authorizeVenue: requireOrgVenue[\s\S]*await deps\.authorizeVenue\(req, res, params\.data\.slug\)[\s\S]*if \(!venue\) return;[\s\S]*deps\.updateCoverage\(venue\.id, params\.data\.mediaId, body\.data\.coverage\)[\s\S]*router\.patch\("\/venues\/:slug\/media\/:mediaId", createUpdateVenueMediaHandler\(\)\)/s,
+    "photo retag route binds the Clerk/organization/origin guard before its scoped update",
+  );
+  assert.match(
+    venuesRoute,
     /DELETE \/venues\/:slug\/media\/:mediaId \(owner session\)[\s\S]*select\(\)[\s\S]*eq\(venueMediaTable\.venueId, venue\.id\)[\s\S]*deleteObjectEntity\(media\.objectKey\)[\s\S]*delete\(venueMediaTable\)/s,
     "venue media deletion removes the backing storage object before deleting the database row",
   );

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import express from "express";
+import { once } from "node:events";
 
 // The db package builds a lazy pg Pool at import time; no connection is ever
 // opened by these tests, but the module refuses to load without a URL.
@@ -9,11 +11,83 @@ const setup = await import("../lib/venueSetup.js");
 const sample = await import("../lib/sampleGallery.js");
 const zod = await import("@workspace/api-zod");
 const { summarizeSessionQuality } = await import("./sessions.js");
+const { createUpdateVenueMediaHandler, updateVenueMediaCoverageQuery } = await import("./venues.js");
 
 type Session = import("../lib/venueSetup.js").BookableSession & { weddingMonth?: string | null };
 
 const NOW = new Date("2026-10-09T12:00:00Z");
 const READY_MEDIA = ["exterior", "ceremony", "reception", "detail", "natural_light"].map((coverage) => ({ coverage }));
+
+test("venue photo retag SQL updates only coverage and scopes the write by photo AND venue", () => {
+  const query = updateVenueMediaCoverageQuery(3, 7, "ceremony").toSQL();
+  assert.deepEqual(query.params, ["ceremony", 7, 3]);
+  assert.match(query.sql, /update "venue_media" set "coverage" = \$1 where \("venue_media"\."id" = \$2 and "venue_media"\."venue_id" = \$3\)/);
+});
+
+test("venue photo retag HTTP path preserves the image and refuses invalid, foreign and unauthorized updates", async (t) => {
+  const original: import("@workspace/db").VenueMedia = {
+    id: 7, venueId: 3, objectKey: "/objects/uploads/original", coverage: "exterior",
+    displayOrder: 4, createdAt: NOW, perceptualHash: "abcdef", width: 2048, height: 1365, contentType: "image/jpeg",
+  };
+  let row = { ...original };
+  let allow = true;
+  let failWrite = false;
+  let writes = 0;
+  const app = express();
+  app.use(express.json());
+  app.patch("/venues/:slug/media/:mediaId", createUpdateVenueMediaHandler({
+    async authorizeVenue(_req, res, slug) {
+      if (!allow) { res.status(403).json({ error: "Denied" }); return null; }
+      if (slug !== "my-venue") { res.status(404).json({ error: "Not found" }); return null; }
+      return { id: 3 };
+    },
+    async updateCoverage(venueId, mediaId, coverage) {
+      writes += 1;
+      if (failWrite) throw new Error("simulated write failure");
+      if (row.venueId !== venueId || row.id !== mediaId) return null;
+      row = { ...row, coverage };
+      return row;
+    },
+  }));
+  app.use((_err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(500).json({ error: "Could not save" });
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise<void>((resolve, reject) => {
+    server.closeAllConnections();
+    server.close((err) => err ? reject(err) : resolve());
+  }));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const patch = (body: unknown, id = "7", slug = "my-venue") => fetch(`http://127.0.0.1:${address.port}/venues/${slug}/media/${id}`, {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  const saved = await patch({ coverage: "ceremony" });
+  assert.equal(saved.status, 200);
+  const savedPhoto = await saved.json() as { objectKey: string };
+  assert.equal(savedPhoto.objectKey, original.objectKey);
+  assert.deepEqual(row, { ...original, coverage: "ceremony" });
+  assert.equal((await patch({ coverage: "ceremony" })).status, 200, "repeat is safe");
+  const beforeInvalid = writes;
+  for (const body of [{}, { coverage: "unknown" }, { coverage: "detail", objectKey: "replacement" }, { coverage: "detail", venueId: 9 }]) {
+    assert.equal((await patch(body)).status, 400);
+  }
+  for (const id of ["abc", "0", "-1", "1.5", "9007199254740992"]) {
+    assert.equal((await patch({ coverage: "detail" }, id)).status, 400);
+  }
+  assert.equal(writes, beforeInvalid);
+  assert.equal((await patch({ coverage: "detail" }, "8")).status, 404, "foreign or missing photo is not updated");
+  const beforeDenied = writes;
+  assert.equal((await patch({ coverage: "detail" }, "7", "other-venue")).status, 404);
+  allow = false;
+  assert.equal((await patch({ coverage: "detail" })).status, 403);
+  assert.equal(writes, beforeDenied, "authorization refusal must never reach the writer");
+  allow = true;
+  failWrite = true;
+  assert.equal((await patch({ coverage: "reception" })).status, 500);
+  assert.deepEqual(row, { ...original, coverage: "ceremony" }, "failed update leaves the original reference intact");
+});
 
 /* ————— Request validation (generated zod) ————— */
 

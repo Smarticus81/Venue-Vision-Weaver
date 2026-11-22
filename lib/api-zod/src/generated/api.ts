@@ -569,6 +569,37 @@ export const AddVenueMediaBody = zod.object({
 });
 
 /**
+ * Organization members only. Updates only the coverage role of a photo belonging to the authorized venue. Image identity, object key, order and quality metadata are preserved.
+ * @summary Change a venue photo's coverage without replacing its stored image
+ */
+
+export const UpdateVenueMediaParams = zod.object({
+  slug: zod.coerce.string(),
+  mediaId: zod.coerce.number().min(1),
+});
+
+export const UpdateVenueMediaBody = zod.object({
+  coverage: zod
+    .enum(["exterior", "ceremony", "reception", "detail", "natural_light"])
+    .describe(
+      "Coverage role of the venue reference photo for scene-specific generation.",
+    ),
+});
+
+export const UpdateVenueMediaResponse = zod.object({
+  id: zod.number(),
+  venueId: zod.number(),
+  objectKey: zod.string(),
+  coverage: zod
+    .enum(["exterior", "ceremony", "reception", "detail", "natural_light"])
+    .describe(
+      "Coverage role of the venue reference photo for scene-specific generation.",
+    ),
+  displayOrder: zod.number(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
  * @summary Delete a venue media item (owner session)
  */
 export const DeleteVenueMediaParams = zod.object({

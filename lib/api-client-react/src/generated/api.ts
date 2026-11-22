@@ -108,6 +108,7 @@ import type {
   SetSessionBookedBody,
   UpdateOrganizationBody,
   UpdateVenueBody,
+  UpdateVenueMediaBody,
   UploadUrlRequest,
   UploadUrlResponse,
   VenueDashboardResponse,
@@ -1220,6 +1221,95 @@ export const useAddVenueMedia = <
   TContext
 > => {
   return useMutation(getAddVenueMediaMutationOptions(options));
+};
+
+/**
+ * Organization members only. Updates only the coverage role of a photo belonging to the authorized venue. Image identity, object key, order and quality metadata are preserved.
+ * @summary Change a venue photo's coverage without replacing its stored image
+ */
+export const getUpdateVenueMediaUrl = (slug: string, mediaId: number) => {
+  return `/api/venues/${slug}/media/${mediaId}`;
+};
+
+export const updateVenueMedia = async (
+  slug: string,
+  mediaId: number,
+  updateVenueMediaBody: UpdateVenueMediaBody,
+  options?: RequestInit,
+): Promise<VenueMediaItem> => {
+  return customFetch<VenueMediaItem>(getUpdateVenueMediaUrl(slug, mediaId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateVenueMediaBody),
+  });
+};
+
+export const getUpdateVenueMediaMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateVenueMedia>>,
+    TError,
+    { slug: string; mediaId: number; data: BodyType<UpdateVenueMediaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateVenueMedia>>,
+  TError,
+  { slug: string; mediaId: number; data: BodyType<UpdateVenueMediaBody> },
+  TContext
+> => {
+  const mutationKey = ["updateVenueMedia"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateVenueMedia>>,
+    { slug: string; mediaId: number; data: BodyType<UpdateVenueMediaBody> }
+  > = (props) => {
+    const { slug, mediaId, data } = props ?? {};
+
+    return updateVenueMedia(slug, mediaId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateVenueMediaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateVenueMedia>>
+>;
+export type UpdateVenueMediaMutationBody = BodyType<UpdateVenueMediaBody>;
+export type UpdateVenueMediaMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Change a venue photo's coverage without replacing its stored image
+ */
+export const useUpdateVenueMedia = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateVenueMedia>>,
+    TError,
+    { slug: string; mediaId: number; data: BodyType<UpdateVenueMediaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateVenueMedia>>,
+  TError,
+  { slug: string; mediaId: number; data: BodyType<UpdateVenueMediaBody> },
+  TContext
+> => {
+  return useMutation(getUpdateVenueMediaMutationOptions(options));
 };
 
 /**

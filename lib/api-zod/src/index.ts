@@ -1,5 +1,6 @@
 import {
   AddVenueMediaBody as AddVenueMediaBodySchema,
+  UpdateVenueMediaBody as UpdateVenueMediaBodySchema,
   CreateSessionBody as CreateSessionBodySchema,
   CreateVenueBody as CreateVenueBodySchema,
   ListVenueMediaResponse as ListVenueMediaResponseSchema,
@@ -14,6 +15,7 @@ import {
 
 import type {
   AddVenueMediaBody as AddVenueMediaBodyType,
+  UpdateVenueMediaBody as UpdateVenueMediaBodyType,
   CreateSessionBody as CreateSessionBodyType,
   CreateVenueBody as CreateVenueBodyType,
   ListVenueMediaResponse as ListVenueMediaResponseType,
@@ -89,6 +91,10 @@ export * from "./generated/api";
 // Explicitly export merged values and types to resolve shadowing
 export const AddVenueMediaBody = AddVenueMediaBodySchema;
 export type AddVenueMediaBody = AddVenueMediaBodyType;
+
+// Orval does not emit strict objects for additionalProperties:false.
+export const UpdateVenueMediaBody = UpdateVenueMediaBodySchema.strict();
+export type UpdateVenueMediaBody = UpdateVenueMediaBodyType;
 
 export const CreateSessionBody = CreateSessionBodySchema;
 export type CreateSessionBody = CreateSessionBodyType;

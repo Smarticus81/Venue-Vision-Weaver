@@ -1,5 +1,24 @@
 # Design notes
 
+## 2026-11-21 — Safer venue photo categorization
+
+The venue-photo page exists to help an operator supply accurate coverage of
+the real venue, because scene generation depends on those references. Category
+changes now update the same photo rather than deleting and re-uploading it.
+The API preserves its object key, ordering, dimensions and perceptual hash.
+
+The mobile browser pass exposed two usability problems: the wordmark overlapped
+the section picker, and overlaid category controls abbreviated labels to one or
+two letters. The logo now scales within its grid column. Photo actions sit below
+the image, with a full-width category selector and 44px touch targets. No extra
+animation or decorative element was added.
+
+Checked success and simulated failure through the isolated UI fixture. All six
+photos survive, successful edits move the original to its new category, and a
+failed write retains its original category. No horizontal overflow at 375,
+768 or 1440px. Local mobile evidence: qa-output/venue-photo-retag-mobile.jpg.
+This does not verify live Clerk sessions or production data mutations.
+
 ## 2026-11-21 — Blue-hour album and honest economics
 
 Direction: midnight ink, silver paper and a restrained lavender accent. The

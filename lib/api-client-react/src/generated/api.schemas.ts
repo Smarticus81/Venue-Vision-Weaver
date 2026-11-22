@@ -339,6 +339,10 @@ export interface AddVenueMediaBody {
   displayOrder?: number;
 }
 
+export interface UpdateVenueMediaBody {
+  coverage: VenueMediaCoverage;
+}
+
 export type SessionSummaryStatus =
   (typeof SessionSummaryStatus)[keyof typeof SessionSummaryStatus];
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Globe, ImagePlus, Loader2, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import {
   useAddVenueMedia,
+  useUpdateVenueMedia,
   useDeleteVenueMedia,
   useImportVenueWebsiteMedia,
   type VenueMediaItem,
@@ -15,7 +16,7 @@ import { normalizeWebsiteInput } from "@/lib/venueSlug";
 import { isCoverage, type Coverage } from "./activation";
 import { apiErrorMessage, describeApiError } from "./errors";
 import { COVERAGE_TILES, coverageLabel, groupByCoverage, planUploads, ACCEPTED_IMAGE_TYPES } from "./photoQueue";
-import { objectKeyFileName, venueReferenceUrl } from "./storageUrls";
+import { venueReferenceUrl } from "./storageUrls";
 import type { DashboardContext } from "./types";
 import { Note, SectionHead, formatBytes } from "./ui";
 
@@ -55,6 +56,7 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
   queueRef.current = queue;
 
   const addMedia = useAddVenueMedia();
+  const updateMedia = useUpdateVenueMedia();
   const deleteMedia = useDeleteVenueMedia();
   const importMedia = useImportVenueWebsiteMedia();
   const { uploadFile, progress } = useUpload({ purpose: "venue", venueSlug: slug });
@@ -161,32 +163,12 @@ export function VenuePhotos({ ctx, importRequested }: { ctx: DashboardContext; i
     }
   };
 
-  /**
-   * There is no endpoint to change a photo's coverage in place, so retagging
-   * re-uploads the same image under the new role and removes the old row.
-   */
+  /** Retag in place; no re-upload, storage deletion or new image identity. */
   const retag = async (item: VenueMediaItem, next: Coverage) => {
     if (next === item.coverage) return;
     setBusyMediaId(item.id);
     try {
-      const response = await fetch(venueReferenceUrl(item.objectKey, slug), { credentials: "same-origin" });
-      if (!response.ok) throw new Error("Could not read the photo to retag it.");
-      const blob = await response.blob();
-      const type = (ACCEPTED_IMAGE_TYPES as readonly string[]).includes(blob.type) ? blob.type : "image/jpeg";
-      const file = new File([blob], objectKeyFileName(item.objectKey), { type });
-      const uploaded = await uploadFile(file);
-      if (!uploaded) throw new Error("Upload failed while retagging.");
-      await deleteMedia.mutateAsync({ slug, mediaId: item.id });
-      try {
-        await registerPhoto(uploaded.objectPath, next, item.displayOrder);
-      } catch (err) {
-        toast({
-          title: "The photo was removed but not re-added",
-          description: `${apiErrorMessage(err, "Upload it again.")} Upload it again under ${coverageLabel(next)}.`,
-          variant: "destructive",
-        });
-        return;
-      }
+      await updateMedia.mutateAsync({ slug, mediaId: item.id, data: { coverage: next } });
       toast({ title: `Moved to ${coverageLabel(next)}` });
     } catch (err) {
       toast({ title: "Could not retag the photo", description: apiErrorMessage(err, "Try again."), variant: "destructive" });
