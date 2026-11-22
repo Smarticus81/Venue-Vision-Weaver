@@ -1,4 +1,3 @@
-import { ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import type { PricingConfig, TrialConfig } from "@workspace/api-client-react";
 import { formatMoney, perGalleryPrice } from "@/lib/publicConfig";
@@ -97,7 +96,7 @@ export function PricingCards({
             <li key={card.product} className={card.recommended ? "is-recommended" : undefined} data-product={card.product}>
               <div className="pricing-card-head">
                 <h3>{card.name}</h3>
-                {card.recommended ? <span className="pill">Recommended</span> : null}
+                {card.recommended ? <span className="plan-label">For growing teams</span> : null}
                 {isCurrent ? <span className="pill">Your plan</span> : null}
               </div>
               <p className="pricing-price">
@@ -123,7 +122,7 @@ export function PricingCards({
                   className={className}
                   onClick={() => track("cta_click", { placement, product: card.product })}
                 >
-                  Start free {primary ? <ArrowRight size={18} aria-hidden /> : null}
+                  Start free
                 </Link>
               )}
             </li>

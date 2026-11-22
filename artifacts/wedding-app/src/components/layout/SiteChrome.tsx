@@ -26,7 +26,7 @@ export function SiteHeader() {
         <DreemerLogo />
         <nav aria-label="Main navigation">
           <a href={onHome ? "#how-it-works" : "/#how-it-works"} className="nav-anchor">
-            How it works
+            Workflow
           </a>
           <a href={onHome ? "#pricing" : "/#pricing"} className="nav-anchor">
             Pricing
@@ -58,7 +58,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer page-width">
       <DreemerLogo className="text-[1.25rem]" />
-      <p>Let them see their day here.</p>
+      <p>The visual sales platform for venues.</p>
       <Link href="/pricing">Pricing</Link>
       <Link href="/privacy">Privacy &amp; AI previews</Link>
       {config.contactEmail ? <a href={`mailto:${config.contactEmail}`}>Email us</a> : null}

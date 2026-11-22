@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Dreemer">
-  <rect width="64" height="64" rx="14.08" fill="#E8ECF4"/>
-  <g transform="scale(0.64) translate(12 12) scale(0.76)">
-    <path d="M 12 8 H 48 C 73 8 90 25 90 50 C 90 75 73 92 48 92 H 12 Z M 24 20 V 80 H 47 C 66 80 78 68 78 50 C 78 32 66 20 47 20 Z" fill="#5351A2" fill-rule="evenodd"/>
-
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="Dreemer"><rect width="64" height="64" rx="3.84" fill="#FF793D"/><g transform="scale(0.64) translate(10 10) scale(0.8)"><path d="M8 12H48L86 50L48 88H8L46 50Z M30 24L56 50L30 76H43L69 50L43 24Z" fill="#152020" fill-rule="evenodd"/></g></svg>

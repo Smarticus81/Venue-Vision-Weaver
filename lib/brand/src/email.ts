@@ -20,7 +20,7 @@ import { brand, coral, font, fontImportUrl, ink, ivory, radius, semantic } from 
 export const BRAND = {
   /** Product name as written in running text and sign-offs. */
   name: brand.name,
-  /** Lowercase wordmark used in logotype positions. */
+  /** Uppercase wordmark used in logotype positions. */
   wordmark: brand.wordmark,
   domain: brand.domain,
   /** The one-line promise every marketing surface is tested against. */
@@ -31,8 +31,8 @@ export const BRAND = {
 
 /**
  * Palette roles for email. `accent` is used for both links and button fills,
- * so it is deep lavender (legacy key `coral.700`) with white on top;
- * on dark it is pale lavender (`coral.400`) with ink on top. Contrast is tested.
+ * so it is deep orange (legacy key `coral.700`) with white on top;
+ * on dark it is signal orange (`coral.400`) with ink on top. Contrast is tested.
  */
 export const BRAND_COLORS = {
   light: {

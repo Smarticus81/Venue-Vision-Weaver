@@ -177,7 +177,7 @@ function indexHtml(): string | null {
 
 // The landing hero is the LCP element; preload it only when the built asset
 // exists so a missing file never costs a wasted request.
-const HERO_IMAGE_PATH = "/brand/hero-couple.webp";
+const HERO_IMAGE_PATH = "/brand/product-tour-poster.webp";
 let heroPreloadTag: string | null = null;
 function heroPreload(): string {
   if (heroPreloadTag === null) {

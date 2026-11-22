@@ -1,13 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dreemer">
-  <rect width="512" height="512" rx="112.64" fill="#E8ECF4"/>
-  <g transform="scale(5.12) translate(12 12) scale(0.76)">
-    <path d="M 12 8 H 48 C 73 8 90 25 90 50 C 90 75 73 92 48 92 H 12 Z M 24 20 V 80 H 47 C 66 80 78 68 78 50 C 78 32 66 20 47 20 Z" fill="#5351A2" fill-rule="evenodd"/>
-    <g fill="none" stroke="#5351A2" stroke-width="3.5" stroke-linecap="round">
-      <path d="M 38 71 V 44 C 38 33 45 27 53 27 C 61 27 67 33 67 44 V 71"/>
-      <path d="M 38 71 L 53 62 V 29"/>
-    </g>
-    <g fill="none" stroke="#5351A2" stroke-width="2.4" stroke-linecap="round">
-
-    </g>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="Dreemer"><rect width="512" height="512" rx="30.72" fill="#FF793D"/><g transform="scale(5.12) translate(10 10) scale(0.8)"><path d="M8 12H48L86 50L48 88H8L46 50Z M30 24L56 50L30 76H43L69 50L43 24Z" fill="#152020" fill-rule="evenodd"/></g></svg>

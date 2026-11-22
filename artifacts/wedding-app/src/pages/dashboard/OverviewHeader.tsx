@@ -4,9 +4,8 @@ import { summarizeGalleries } from "./galleryStats";
 import type { DashboardContext } from "./types";
 
 /**
- * The first screen: venue name, readiness, credits (the one coral figure),
- * the trial clock, the plan, and this month's proof in the venue's unit:
- * galleries sent, viewed, clicked for a date, booked.
+ * Lead with venue sales activity; keep plan, credits and trial time accessible.
+ * Counts describe recorded gallery activity, not inferred conversion uplift.
  */
 export function OverviewHeader({ ctx }: { ctx: DashboardContext }) {
   const { organization, venue, sessions, readiness, publicConfig, billing } = ctx;
@@ -46,82 +45,25 @@ export function OverviewHeader({ ctx }: { ctx: DashboardContext }) {
 
   return (
     <section className="dash-overview" aria-labelledby="dash-venue-name">
+      <p className="revenue-eyebrow">VENUE SALES WORKSPACE</p>
       <div className="dash-overview-row">
         <h1 id="dash-venue-name">{venue.name}</h1>
         <p className={readiness.ready ? "dash-status text-success" : "dash-status text-brand"}>
-          {readiness.ready
-            ? "Ready for couples"
-            : readiness.count === 0
-              ? "Needs venue photos"
-              : `${readiness.missing.length} ${readiness.missing.length === 1 ? "view" : "views"} still missing`}
+          {readiness.ready ? "Ready for tours" : readiness.count === 0 ? "Needs venue photos" : `${readiness.missing.length} views still missing`}
         </p>
       </div>
-
       <div className="dash-stat-row">
-        <div className="dash-stat dash-stat-hero">
-          <p className="eyebrow text-muted-foreground">Credits</p>
-          <p className="dash-stat-value" data-testid="dash-credits">
-            {organization.creditsBalance}
-          </p>
-          <p className="dash-stat-note">{creditNote}</p>
-          {(trial.expired || organization.creditsBalance === 0) && (
-            <Button
-              type="button"
-              variant="brand"
-              size="sm"
-              className="mt-1 w-fit"
-              onClick={() => ctx.goTo("billing")}
-              data-testid="dash-credits-upgrade"
-            >
-              {billing.billingConfigured ? "Add credits" : "See plans"}
-            </Button>
-          )}
+        <div className="dash-stat"><p className="eyebrow">Galleries sent</p><p className="dash-stat-value">{stats.sent}</p><p className="dash-stat-note">{stats.inProgress > 0 ? `${stats.inProgress} rendering now` : `${stats.ready} galleries ready`}</p></div>
+        <div className="dash-stat"><p className="eyebrow">Viewed</p><p className="dash-stat-value">{stats.viewed}</p><p className="dash-stat-note">Couples who opened their gallery.</p></div>
+        <div className="dash-stat"><p className="eyebrow">Date-link clicks</p><p className="dash-stat-value">{stats.clicked}</p><p className="dash-stat-note">Couples who took the next step.</p></div>
+        <div className="dash-stat"><p className="eyebrow">Marked booked</p><p className="dash-stat-value text-brand">{stats.booked}</p><p className="dash-stat-note">Bookings recorded by your team.</p></div>
+      </div>
+      <div className="dash-account-strip">
+        <div><strong data-testid="dash-credits">{organization.creditsBalance}</strong> credits available <span>{creditNote}</span></div>
+        <div><strong>{planLabel(organization.plan)}</strong><span>{planNote}</span>
+          {clockPct !== null && <div className="dash-clock" data-low={daysLeft !== null && daysLeft <= 3 ? "true" : "false"} role="progressbar" aria-label="Trial time remaining" aria-valuemin={0} aria-valuemax={100} aria-valuenow={clockPct}><span style={{width:`${clockPct}%`}}/></div>}
         </div>
-
-        <div className="dash-stat">
-          <p className="eyebrow text-muted-foreground">Plan</p>
-          <p className="dash-stat-value text-[22px]">{planLabel(organization.plan)}</p>
-          <p className="dash-stat-note">{planNote}</p>
-          {clockPct !== null && (
-            <div
-              className="dash-clock"
-              data-low={daysLeft !== null && daysLeft <= 3 ? "true" : "false"}
-              role="progressbar"
-              aria-label="Trial time remaining"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={clockPct}
-            >
-              <span style={{ width: `${clockPct}%` }} />
-            </div>
-          )}
-        </div>
-
-        <div className="dash-stat">
-          <p className="eyebrow text-muted-foreground">Galleries</p>
-          <p className="dash-stat-value">{stats.couples}</p>
-          <p className="dash-stat-note">
-            {stats.inProgress > 0
-              ? `${stats.inProgress} rendering now`
-              : stats.failed > 0
-                ? `${stats.failed} failed, credits refunded`
-                : stats.ready > 0
-                  ? `${stats.ready} ready`
-                  : "Your first one starts here."}
-          </p>
-        </div>
-
-        <div className="dash-stat">
-          <p className="eyebrow text-muted-foreground">Booked dates</p>
-          <p className="dash-stat-value">{stats.booked}</p>
-          <p className="dash-stat-note">
-            {stats.bookedRate !== null
-              ? `${stats.bookedRate}% of ready galleries`
-              : stats.clicked > 0
-                ? `${stats.clicked} ${stats.clicked === 1 ? "couple" : "couples"} clicked for a date`
-                : "Mark a couple as booked when they sign."}
-          </p>
-        </div>
+        <Button type="button" variant={lowCredits || trial.expired ? "brand" : "outline"} size="sm" onClick={()=>ctx.goTo("billing")} data-testid="dash-credits-upgrade">{billing.billingConfigured ? "Manage credits" : "See plans"}</Button>
       </div>
     </section>
   );

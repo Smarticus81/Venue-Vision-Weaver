@@ -88,7 +88,7 @@ export const brandAppearance: Appearance = {
     colorSuccess: semantic.successText,
     colorWarning: semantic.warningText,
     colorNeutral: semantic.text,
-    borderRadius: "8px",
+    borderRadius: "4px",
     fontFamily: font.body,
   },
   elements: {

@@ -949,3 +949,46 @@ final ask. CTAs escalate: "Start free" (header) → "Start with 5 free galleries
   same treatment needed there.
 - Consider a scroll-scrubbed gallery-develop moment using real generated assets
   (Higgsfield) once budget for bespoke hero media is approved.
+# November 22, 2026 — Venue sales platform: visual reset
+
+The user rejected the prior album direction as insufficiently different. This
+revision replaces it; previous entries above are historical, not the brief.
+
+Conversion spine: get venue owners and sales teams to create a workspace because
+personalized visual follow-up gives prospects a reason to re-engage and gives the
+team observable engagement signals. No quantified booking uplift is claimed.
+
+Direction: product-led venue sales software. Graphite #152020, white #FFFFFF,
+equipment-grey #EDF0ED, signal orange #FF793D, text-safe orange #9B340D.
+Barlow Condensed 600/700 headings, IBM Plex Sans variable body. Upright only.
+New solid uppercase vector wordmark and forward-frame symbol replace all old
+letterforms and the architectural-arch mark. Small rectangular controls replace
+pill shapes. Shared tokens propagate into forms, dashboard, email and video.
+
+Layout: large left-aligned business claim beside the mechanism/CTA, a full-width
+product video, the sales argument, three workflow steps, an interactive product
+illustration, revenue assumptions, pricing and final business CTA. No arched
+photo hero, bridal editorial typography, italic emphasis or floating badges.
+
+Signature: product walkthrough plus a user-controlled three-view illustration.
+The 15-second silent H.264 video is built from CUA-captured illustrative interface
+screens, with a poster, captions, native mobile controls and direct-file fallback.
+The user requested Seedance: the connected Higgsfield account reports 0 credits
+and no active unlimited entitlement. No Seedance job or trial was submitted.
+The interface video is explicitly NOT Seedance footage. Existing labelled AI
+output examples illustrate the product; they are not new customer results.
+
+The dashboard now leads with sent/viewed/date-click/booked activity. Plan and
+credits remain in an account strip rather than displacing sales outcomes.
+
+Validation must include 375/768/1440px layouts, actual playback and interaction,
+brand contrast/export tests, full tests, security smoke, typecheck and build.
+Do not describe synthetic screenshots or example counts as live customer proof.
+
+Validation: full unit suite, security smoke, typecheck/build and the real synthetic
+motion-reel encode/decode passed locally. The 15-second walkthrough fully decodes
+with ffmpeg; its screenshot sources are checked for blank captures. Browser
+checks covered 375, 768 and 1440px, inline playback, product-view switching and
+mobile dashboard-to-billing navigation. These fixture checks do not claim a live
+payment, real-customer generation, physical iPhone test or measured mobile Core
+Web Vitals. Seedance remains unavailable due to the account's zero balance.

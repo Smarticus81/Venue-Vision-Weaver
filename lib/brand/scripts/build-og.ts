@@ -1,36 +1,27 @@
-/**
- * Build the 1200x630 social card locally, with no browser, network or font fetch.
- * The logo is shared vector geometry; the photo is the committed labelled demo.
- */
+/** Generate the product-led social card from the captured illustrative interface. */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { lockupSvg } from "../src/logo.js";
-import { brand, semantic } from "../src/tokens.js";
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const assetDir = path.resolve(here, "../assets/logo");
-const publicDir = path.resolve(here, "../../../artifacts/wedding-app/public");
-mkdirSync(assetDir, { recursive: true });
-// SVG rasterizers do not consistently decode embedded WebP; PNG is portable.
-const image = (await sharp(path.join(publicDir, "brand/compare-couple.webp")).png().toBuffer()).toString("base64");
-const logo = lockupSvg("color").replace("<svg ", '<svg x="72" y="65" width="265" height="55" ');
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
-<defs><clipPath id="portrait"><path d="M 790 220 A 170 170 0 0 1 1130 220 V 555 Q 1130 575 1110 575 H 810 Q 790 575 790 555 Z"/></clipPath></defs>
-<rect width="1200" height="630" fill="${semantic.canvas}"/>
-${logo}
-<g font-family="Arial, Helvetica, sans-serif" fill="${semantic.text}">
-<text x="72" y="248" font-size="76" letter-spacing="-3">Let them see</text>
-<text x="72" y="334" font-size="76" letter-spacing="-3">their day <tspan fill="${semantic.accentText}">here.</tspan></text>
-<text x="76" y="410" font-size="28" fill="${semantic.textSecondary}">Personalized AI wedding galleries</text>
-<text x="76" y="450" font-size="28" fill="${semantic.textSecondary}">for your venue.</text>
-<text x="76" y="565" font-size="23" fill="${semantic.accentText}">${brand.domain}</text>
-</g>
-<image x="790" y="50" width="340" height="525" preserveAspectRatio="xMidYMid slice" xlink:href="data:image/png;base64,${image}" clip-path="url(#portrait)"/>
-<text x="960" y="604" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="${semantic.textMuted}">Example venue and couple · AI preview</text>
+import { semantic } from "../src/tokens.js";
+const here=path.dirname(fileURLToPath(import.meta.url));
+const assetDir=path.resolve(here,"../assets/logo");
+const publicDir=path.resolve(here,"../../../artifacts/wedding-app/public");
+mkdirSync(assetDir,{recursive:true});
+const image=(await sharp(path.join(publicDir,"brand/product-sales.jpg")).png().toBuffer()).toString("base64");
+const logo=lockupSvg("reversed").replace("<svg ",'<svg x="60" y="48" width="250" height="40" ');
+const svg=`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630">
+<rect width="1200" height="630" fill="${semantic.inkSurface}"/>${logo}
+<g font-family="Arial, Helvetica, sans-serif"><text x="60" y="168" fill="#C5CCCC" font-size="18">VISUAL SALES SOFTWARE FOR VENUES</text>
+<text x="60" y="258" fill="white" font-weight="bold" font-size="58">TURN INTEREST</text>
+<text x="60" y="330" fill="${semantic.accent}" font-weight="bold" font-size="58">INTO INTENT.</text>
+<text x="60" y="412" fill="#C5CCCC" font-size="21">Personalized galleries.</text><text x="60" y="448" fill="#C5CCCC" font-size="21">Engagement signals.</text><text x="60" y="484" fill="#C5CCCC" font-size="21">Your next booking conversation.</text>
+<text x="60" y="574" fill="white" font-size="20">dreemer.co</text></g>
+<image x="590" y="180" width="570" height="350" preserveAspectRatio="xMidYMid meet" xlink:href="data:image/png;base64,${image}"/>
+<text x="600" y="570" fill="#AAB6B6" font-family="Arial" font-size="14">Illustrative product interface · AI preview imagery</text>
 </svg>`;
-const png = await sharp(Buffer.from(svg)).png().toBuffer();
-writeFileSync(path.join(assetDir, "og-image.svg"), svg);
-for (const directory of [assetDir, publicDir]) writeFileSync(path.join(directory, "og-image.png"), png);
-console.log("Wrote social card and public copy.");
+const png=await sharp(Buffer.from(svg)).png().toBuffer();
+writeFileSync(path.join(assetDir,"og-image.svg"),svg);
+for(const dir of [assetDir,publicDir]) writeFileSync(path.join(dir,"og-image.png"),png);
+console.log("Wrote product-led social card.");

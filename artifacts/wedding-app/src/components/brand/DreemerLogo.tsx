@@ -14,7 +14,7 @@ import {
   LOCKUP_WIDTH,
   WORDMARK_HEIGHT,
   WORDMARK_PATHS,
-  WORDMARK_STROKE,
+  WORDMARK_OFFSETS,
   WORDMARK_WIDTH,
 } from "@workspace/brand";
 import { cn } from "@/lib/utils";
@@ -57,9 +57,9 @@ export function DreemerLogo({
     </g>
   );
   const word = (
-    <g fill="none" stroke="currentColor" strokeWidth={WORDMARK_STROKE} strokeLinejoin="round">
-      {WORDMARK_PATHS.map((d) => (
-        <path key={d} d={d} />
+    <g fill="currentColor" fillRule="evenodd">
+      {WORDMARK_PATHS.map((d, i) => (
+        <path key={i} d={d} transform={`translate(${WORDMARK_OFFSETS[i]} 0)`} />
       ))}
     </g>
   );

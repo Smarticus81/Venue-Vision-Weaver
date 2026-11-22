@@ -18,7 +18,7 @@ import {
   LOCKUP_ICON_WIDTH,
   LOCKUP_WIDTH,
   WORDMARK_PATHS,
-  WORDMARK_STROKE,
+  WORDMARK_OFFSETS,
   coral,
   font,
   ink,
@@ -218,7 +218,7 @@ function reelLockupSvg(top: number): string {
   const wordX = LOCKUP_ICON_WIDTH + LOCKUP_GAP;
   return `<g transform="translate(${left} ${top}) scale(${scale})">
         <g transform="translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})">
-          <path d="${ICON_BODY_PATH}" fill="${coral[500]}"/>
+          <path d="${ICON_BODY_PATH}" fill="${coral[500]}" fill-rule="evenodd"/>
           <g fill="none" stroke="${coral[400]}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
             ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
           </g>
@@ -226,8 +226,8 @@ function reelLockupSvg(top: number): string {
             ${ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
           </g>
         </g>
-        <g transform="translate(${wordX} 0)" fill="none" stroke="${ivory[100]}" stroke-width="${WORDMARK_STROKE}" stroke-linejoin="round">
-          ${WORDMARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n          ")}
+        <g transform="translate(${wordX} 0)" fill="${ivory[100]}" fill-rule="evenodd">
+          ${WORDMARK_PATHS.map((d, i) => `<path transform="translate(${WORDMARK_OFFSETS[i]} 0)" d="${d}"/>`).join("\n          ")}
         </g>
       </g>`;
 }

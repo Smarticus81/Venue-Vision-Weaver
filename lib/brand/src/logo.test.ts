@@ -6,7 +6,7 @@ import { iconSvg, lockupSvg, logoColors, LOCKUP_HEIGHT, LOCKUP_WIDTH } from "./l
 import { contrastRatio } from "./contrast.js";
 import { semantic } from "./tokens.js";
 
-test("every logo renderer preserves the architectural D counter", () => {
+test("every logo renderer preserves the forward-frame counter", () => {
   for (const svg of [iconSvg(), lockupSvg(), brandMarkSvg(semantic.text)]) {
     assert.match(svg, /fill-rule="evenodd"/);
   }
@@ -31,13 +31,22 @@ test("exported lockups preserve their wide aspect ratio and app icons remain squ
   assert.equal(icon.height, 192);
 });
 
-test("social card contains a rendered photograph, not a silently missing embedded image", async () => {
+test("social card contains the product illustration, not a missing embedded image", async () => {
   const { fileURLToPath } = await import("node:url");
   const file = fileURLToPath(new URL("../assets/logo/og-image.png", import.meta.url));
   const meta = await sharp(file).metadata();
   assert.equal(meta.width, 1200);
   assert.equal(meta.height, 630);
-  // Entire crop is inside the portrait, away from captions and the arch edge.
-  const stats = await sharp(file).extract({ left: 820, top: 250, width: 280, height: 280 }).stats();
-  assert.ok(stats.channels.slice(0, 3).every((channel) => channel.stdev > 20), "portrait area is blank or nearly uniform");
+  // Crop the product window including its dark rail and screenshot detail.
+  const stats = await sharp(file).extract({ left: 600, top: 240, width: 520, height: 240 }).stats();
+  assert.ok(stats.channels.slice(0, 3).every((channel) => channel.stdev > 20), "product area is blank or nearly uniform");
+});
+
+test("every walkthrough source panel has visible content", async () => {
+  const { fileURLToPath } = await import("node:url");
+  for (const name of ["library", "gallery", "sales"]) {
+    const file = fileURLToPath(new URL(`../../../artifacts/wedding-app/public/brand/product-${name}.jpg`, import.meta.url));
+    const stats = await sharp(file).stats();
+    assert.ok(stats.channels.slice(0, 3).every(channel => channel.stdev > 20), `${name}: blank screenshot`);
+  }
 });

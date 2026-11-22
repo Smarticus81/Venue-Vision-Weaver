@@ -3,66 +3,63 @@
  * and motion across the web app, the API server's emails and rendered
  * assets, and any future surface.
  *
- * Blue-hour album: midnight ink, silver paper and a lavender accent.
- * Legacy `coral` and `ivory` exports/CSS keys remain compatibility aliases
- * for lavender and pearl so every app, email and renderer changes together.
- * Lavender fill carries midnight text; deep lavender is used for text and
- * the logo on light surfaces. Never use the pale fill as body text.
- *  - Sea is the secondary color: links inside running text, informational
- *    states, charts. Calm and cool against the warm page.
- *  - success / warning / error carry meaning only. Each has a text value that
- *    passes 4.5:1 on ivory, a fill value, and a soft tint for backgrounds.
+ * Venue sales platform: graphite, clean white and signal orange.
+ * Legacy scale identifiers are compatibility aliases, not retained colors.
+ * Accent fills use graphite text; dark orange is reserved for text on white.
+ * Status colors retain their semantic meaning and contrast requirements.
  *
  * `tokens.css` is generated from this file (`pnpm --filter @workspace/brand run build`).
  */
 
 export const brand = {
   name: "Dreemer",
-  wordmark: "dreemer",
+  wordmark: "DREEMER",
   domain: "dreemer.co",
   url: "https://www.dreemer.co",
-  tagline: "Let them see their day here.",
+  tagline: "Turn venue interest into booking intent.",
   description:
-    "Personalized AI wedding galleries for your venue. Give touring couples four imagined moments, a motion reel and a way to check their date.",
+    "The visual sales platform for venues. Create personalized previews, track engagement and give every tour a compelling next step.",
 } as const;
 
 /* ---------------------------------------------------------------- color */
 
-export const lavender = {
-  50: "#F2F1FD",
-  100: "#E9E7FC",
-  200: "#DDD9FC",
-  300: "#D3CEFB",
-  400: "#CBC7FA",
-  500: "#C6C4FA",
-  600: "#B4AFE9",
-  700: "#5351A2",
-  800: "#403E84",
-  900: "#302E63",
+export const orange = {
+  50: "#FFF2EB",
+  100: "#FFE1CF",
+  200: "#FFC5A3",
+  300: "#FFA375",
+  400: "#FF8B51",
+  500: "#FF793D",
+  600: "#F76B2D",
+  700: "#9B340D",
+  800: "#772809",
+  900: "#521B06",
 } as const;
-export const coral = lavender;
+// Legacy identifiers are API compatibility only; no legacy palette is retained.
+export const lavender = orange;
+export const coral = orange;
 
 export const ink = {
-  50: "#F0F2F7",
-  100: "#E0E5EF",
-  200: "#C2CBDE",
-  300: "#A6B2CA",
-  400: "#7886A1",
-  500: "#58647B",
-  600: "#46516A",
-  700: "#35405A",
-  800: "#28344F",
-  900: "#202A44",
+  50: "#F0F1F1",
+  100: "#E0E3E3",
+  200: "#C5CCCC",
+  300: "#AAB6B6",
+  400: "#758383",
+  500: "#536060",
+  600: "#414D4D",
+  700: "#303C3C",
+  800: "#222D2D",
+  900: "#152020",
 } as const;
 
 export const ivory = {
   0: "#FFFFFF",
-  50: "#FCFCFE", // cards, inputs, modals
-  100: "#F7F8FC", // pearl paper canvas
-  200: "#E8ECF4", // silver bands, sidebars and email body
-  300: "#D8DEEA", // hairlines
-  400: "#BAC3D5", // strong borders
-  500: "#949EB2", // disabled text, decorative only
+  50: "#FAFBFA",
+  100: "#FFFFFF",
+  200: "#EDF0ED",
+  300: "#D8DFDA",
+  400: "#AEBAB3",
+  500: "#89968D",
 } as const;
 
 export const sea = {
@@ -99,7 +96,7 @@ export const error = {
   strong: "#7D1F1B",
 } as const;
 
-export const color = { lavender, coral, ink, ivory, sea, success, warning, error } as const;
+export const color = { orange, lavender, coral, ink, ivory, sea, success, warning, error } as const;
 
 /**
  * Semantic roles. Everything in the UI should reach for one of these rather
@@ -151,20 +148,19 @@ export const semantic = {
 /* ----------------------------------------------------------------- type */
 
 /**
- * Outfit carries the wordmark's geometric construction into headings and
- * numerals; Figtree is the body and interface face — same geometric family
- * feel, better at 13–16px. Both are open-source (Google Fonts).
+ * Barlow Condensed gives the platform a decisive, upright display voice.
+ * IBM Plex Sans is the self-hosted workhorse for data, forms and body copy.
  */
 export const font = {
-  display: "'Outfit', 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
-  body: "'Figtree', 'Outfit', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+  display: "'Barlow Condensed', 'Arial Narrow', ui-sans-serif, system-ui, sans-serif",
+  body: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
   mono: "ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace",
   /** Email clients can't load web fonts reliably; this stack degrades gracefully. */
-  email: "'Figtree', 'Outfit', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
+  email: "'IBM Plex Sans', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
 } as const;
 
 export const fontImportUrl =
-  "https://fonts.googleapis.com/css2?family=Outfit:wght@500;600&family=Figtree:wght@400;500;600&display=swap";
+  "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
 
 /** Modular scale, 1.25 ratio from a 16px base, in px. */
 export const typeScale = {
@@ -181,7 +177,7 @@ export const typeScale = {
 } as const;
 
 export const letterSpacing = {
-  display: "-0.025em",
+  display: "-0.015em",
   body: "0",
   label: "0.08em",
 } as const;
@@ -196,12 +192,12 @@ export const lineHeight = {
 /* ---------------------------------------------------------------- shape */
 
 export const radius = {
-  xs: 4,
-  sm: 6,
-  md: 8,
-  lg: 12,
-  xl: 20,
-  pill: 999,
+  xs: 2,
+  sm: 3,
+  md: 4,
+  lg: 6,
+  xl: 8,
+  pill: 4,
 } as const;
 
 export const shadow = {
@@ -244,6 +240,7 @@ function kebab(value: string): string {
 /** Every token as a flat `--dm-*` custom-property map. */
 export function cssVariables(): Record<string, string> {
   const flat: Flat = {};
+  flatten("orange", orange, flat);
   flatten("lavender", lavender, flat);
   flatten("coral", coral, flat);
   flatten("ink", ink, flat);
