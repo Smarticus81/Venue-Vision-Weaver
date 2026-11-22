@@ -87,6 +87,23 @@ quality and measurable unit economics. A passing build alone is not completion.
   consented real-reference image-quality/cost benchmarks. Consented reference
   sets have been requested; existing customer photos are not authorized QA
   fixtures. The goal is not complete.
+- Stripe read-only verification confirms charges/payouts enabled, no currently
+  due account requirements, and all three configured live prices active.
+  Detected a display mismatch: live USD charges are 149/month, 399/month and
+  49/pack, whereas app defaults were 129/279/59. Saved matching PRICING_*
+  values in Railway without deploying or changing any Stripe price. Renamed
+  the three mapped products to Dreemer Starter, Dreemer Growth and Dreemer
+  Credit Pack; existing prices, subscriptions and balances are untouched.
+- The active Dreemer Stripe endpoint is on
+  dreamweever-production.up.railway.app, not the custom domain. Added the
+  missing invoice.payment_failed, customer.subscription.updated and
+  customer.subscription.resumed event subscriptions to that exact endpoint
+  (`we_1TkbZ0KCLfkT6EM1nDoPbu3h`), preserving its other subscriptions and API
+  version. The unrelated workspaceapi-server endpoint was left unchanged.
+  Default customer portal is active and enables payment-method updates,
+  invoices, cancellation and price switching. Live signature delivery,
+  checkout, tax setup, and refund/dispute/fraud-event handling remain unproven;
+  no payment, refund or live checkout was initiated during these checks.
 
 ### November 21 checkpoint: brand, marketing and production audit
 
