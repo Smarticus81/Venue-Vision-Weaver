@@ -1041,8 +1041,9 @@ unit coverage; the OS preference itself has not been exercised on a device.
 Validation: typecheck, full unit suite, security smoke, build and real reel
 encode/decode pass. The new film fully decodes with ffmpeg. Captures are local
 fixtures, not real accounts or payments. Preview evidence: `qa-output/lens-*`.
-Performance release gates are not certified: critical app chunks remain about
-195KB gzip (including existing auth/runtime), above the 150KB design budget.
-Physical mid-tier mobile LCP/CLS/INP/60fps profiling is still required before
+The built landing entry is 134.45KB gzip with no static chunk imports; the
+optional lens adds 2.07KB. The separate 60.33KB motion chunk is dynamically
+loaded by non-landing routes, not part of the critical entry. The JavaScript
+budget is met. Physical mid-tier mobile LCP/CLS/INP/60fps profiling is still required before
 calling this production-performance approved. This revision is for design review,
 not an authorization to replace the public site or enable outreach.
