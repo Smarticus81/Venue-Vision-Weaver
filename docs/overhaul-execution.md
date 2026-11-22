@@ -45,6 +45,28 @@ quality and measurable unit economics. A passing build alone is not completion.
 
 ## Current work
 
+### November 21 checkpoint: real motion-reel encoding
+
+- Added `pnpm run test:reel-encode`, using geometric fixtures rather than any
+  customer images. It runs the production title-card, frame-composition, clip
+  encoder and concatenation path, then probes and fully decodes the result.
+- The first real encode exposed full-range `yuvj420p` output despite the
+  requested `yuv420p`. Explicitly convert JPEG sample range to limited-range
+  video and tag it consistently. The regression verifies decoded lavender,
+  black and white pixels, not just the container's color-range metadata.
+- Replaced the second lossy encode during concatenation with stream copying.
+  This is limited to internally generated, codec/time-base-matched clips; it
+  is not a generic arbitrary-video concatenator. Fast-start MP4 is retained.
+- Latest local integration check passes H.264/avc1, yuv420p/tv, 1280x720,
+  square pixels, 30 fps, all 120 frames with continuous timestamps, four-second
+  duration, moov-before-mdat and complete error-checked decode. The final
+  synthetic fixture encoded to 471,377 bytes in 1,532 ms on this workstation;
+  this is not a production throughput, visual-quality or cost benchmark.
+- Added an explicit ffmpeg/ffprobe installation and integration-test step to
+  GitHub CI. Full unit tests, security smoke and build/typecheck exited 0 in
+  local session 17676. Physical iOS/Android and live HTTPS playback remain
+  unverified; the overhaul is not yet deployed.
+
 ### November 21 checkpoint: payment-risk handling
 
 - Updated Stripe Node to 23.2.0 and added refund, dispute and early-fraud-warning

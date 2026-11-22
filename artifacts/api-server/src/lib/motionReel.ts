@@ -468,7 +468,10 @@ export function kenBurnsFilter(frames: number, zoomIn: boolean): string {
   const zoomExpr = zoomIn ? `1+${span}*on/${last}` : `${REEL_MAX_ZOOM}-${span}*on/${last}`;
   return (
     `scale=${superWidth}:${superHeight},setsar=1,` +
-    `zoompan=z='${zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${REEL_WIDTH}x${REEL_HEIGHT}:fps=${REEL_FPS}`
+    `zoompan=z='${zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${REEL_WIDTH}x${REEL_HEIGHT}:fps=${REEL_FPS},` +
+    // Sharp supplies full-range JPEGs. Convert the actual samples as well as
+    // tagging the encoder; -pix_fmt alone can retain a full-range H.264 flag.
+    "scale=in_range=pc:out_range=tv,format=yuv420p"
   );
 }
 
@@ -499,14 +502,11 @@ async function concatClips(clips: Buffer[], signal?: AbortSignal): Promise<Buffe
         "0",
         "-i",
         listPath,
+        // Every clip comes from renderKenBurnsClip with identical dimensions,
+        // codec, pixel format and time base. Remux without a second lossy pass.
         "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "20",
-        "-pix_fmt",
-        "yuv420p",
+        "copy",
+        "-an",
         "-movflags",
         "+faststart",
         outPath,
@@ -595,6 +595,8 @@ async function renderKenBurnsClip(
         "23",
         "-pix_fmt",
         "yuv420p",
+        "-color_range",
+        "tv",
         "-movflags",
         "+faststart",
         outPath,

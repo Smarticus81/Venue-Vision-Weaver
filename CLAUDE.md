@@ -43,6 +43,7 @@ pnpm run test:growth           # growth loop (KPIs, attribution, experiments, ad
 pnpm run test:governance       # governance + metrics
 pnpm run test:web              # every artifacts/wedding-app/src/**/*.test.ts
 pnpm run test:brand            # lib/brand contrast and token tests
+pnpm run test:reel-encode      # real synthetic reel encode/decode; requires ffmpeg + ffprobe
 
 # Source-contract + behaviour security smoke (run in CI and by verify:production)
 pnpm run smoke:security

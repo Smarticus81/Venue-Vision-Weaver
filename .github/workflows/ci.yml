@@ -84,6 +84,14 @@ jobs:
       - name: Unit tests (api, web, brand)
         run: pnpm run test
 
+      - name: Install reel codec tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Encode and fully decode a production motion reel
+        run: pnpm run test:reel-encode
+
       - name: Security smoke
         run: pnpm run smoke:security
 
