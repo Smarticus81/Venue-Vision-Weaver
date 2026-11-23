@@ -426,7 +426,7 @@ function GalleryView({
       eyebrow="Your preview at"
       action={cta ? <DateCtaLink cta={cta} compact onClick={() => track("cta_click")} testId="venue-cta-header" /> : null}
       mainClassName="gs-main"
-      footerNote={`Every image here is an AI preview, imagined at ${venueName} from the couple's photos and the venue's own photos.`}
+      footerNote={`Every image here is a generated preview, imagined at ${venueName} from the couple's photos and the venue's own photos.`}
     >
       <div className="gs-page" data-testid="gallery-view" data-has-sticky={!!cta}>
         <section className="gs-hero">
@@ -439,9 +439,9 @@ function GalleryView({
                 venueName={venueName}
               />
             ) : (
-              <img src={shareAssetUrl(stills[0]!.objectKey, token)} alt={`AI preview of the two of you at ${venueName}`} />
+              <img src={shareAssetUrl(stills[0]!.objectKey, token)} alt={`generated preview of the two of you at ${venueName}`} />
             )}
-            <span className="gs-tag">AI preview, imagined at {venueName}</span>
+            <span className="gs-tag">generated preview, imagined at {venueName}</span>
           </div>
           <div className="gs-hero__copy">
             <p className="eyebrow">Your gallery</p>
@@ -495,8 +495,8 @@ function GalleryView({
                   aria-label={`Open image ${i + 1} of ${stills.length}${name ? `, ${name}` : ""}`}
                   data-testid={`gallery-still-${i}`}
                 >
-                  <img src={src} alt={`AI preview of the couple at ${venueName}${name ? `: ${name.toLowerCase()}` : ""}`} loading={i === 0 ? "eager" : "lazy"} />
-                  <span className="gs-tag">AI preview, imagined at {venueName}</span>
+                  <img src={src} alt={`generated preview of the couple at ${venueName}${name ? `: ${name.toLowerCase()}` : ""}`} loading={i === 0 ? "eager" : "lazy"} />
+                  <span className="gs-tag">generated preview, imagined at {venueName}</span>
                 </button>
                 {real && venue ? (
                   <div className="gs-pair__real">
@@ -623,10 +623,10 @@ function Lightbox({
         <DialogTitle className="sr-only">
           Image {(index ?? 0) + 1} of {count}
         </DialogTitle>
-        <DialogDescription className="sr-only">AI preview, imagined at {venueName}. Swipe or use the arrow keys.</DialogDescription>
+        <DialogDescription className="sr-only">generated preview, imagined at {venueName}. Swipe or use the arrow keys.</DialogDescription>
         {current ? (
           <div className="gs-lightbox__stage" onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
-            <img src={src} alt={`AI preview of the couple at ${venueName}`} draggable={false} />
+            <img src={src} alt={`generated preview of the couple at ${venueName}`} draggable={false} />
           </div>
         ) : null}
         <div className="gs-lightbox__bar">
@@ -635,7 +635,7 @@ function Lightbox({
           </button>
           <p>
             {(index ?? 0) + 1} / {count}
-            {name ? ` · ${name}` : ""} · AI preview, imagined at {venueName}
+            {name ? ` · ${name}` : ""} · generated preview, imagined at {venueName}
           </p>
           <a href={src} download onClick={onDownload} aria-label="Save this image">
             <Download size={18} />

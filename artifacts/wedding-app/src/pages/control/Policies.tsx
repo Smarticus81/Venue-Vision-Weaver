@@ -36,7 +36,7 @@ const POLICY_LABELS: Record<string, string> = {
   max_contacts_per_prospect: "Emails per prospect, lifetime",
   max_credit_grant_per_action: "Credits per promo grant",
   max_credit_grants_per_day: "Promo credits per day",
-  max_daily_ai_usd: "AI spend per day (USD)",
+  max_daily_ai_usd: "Model spend per day (USD)",
   vetting_pass_score: "Vetting pass score",
   vetting_review_score: "Vetting review score",
   vetting_blocked_countries: "Blocked countries",

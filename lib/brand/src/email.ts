@@ -7,14 +7,8 @@
  * The `dark` scheme is for email clients' forced dark modes (Gmail, Apple
  * Mail, Outlook's `[data-ogsc]`) and reuses the ink surface roles.
  */
-import {
-  ICON_BODY_PATH,
-  ICON_LINE_PATHS,
-  ICON_LINE_STROKE,
-  ICON_SIZE,
-  ICON_SPARK_PATHS,
-  ICON_SPARK_STROKE,
-} from "./logo.js";
+import { ICON_HEIGHT, ICON_SIZE, logoAssetUrl } from "./logo.js";
+import { relativeLuminance } from "./contrast.js";
 import { brand, coral, font, fontImportUrl, ink, ivory, radius, semantic } from "./tokens.js";
 
 export const BRAND = {
@@ -102,11 +96,10 @@ export const BRAND_EMAIL = {
 } as const;
 
 /**
- * Inline SVG of the mark in one color, for HTML email headers where an
- * external image request is unwelcome. Same geometry as every other logo file.
+ * Historical function name retained for callers. Returns an email-compatible
+ * PNG image of the actual generated mark (not an SVG or a replacement drawing).
  */
 export function brandMarkSvg(color: string, size = 20): string {
-  const lines = ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("");
-  const spark = ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${ICON_SIZE} ${ICON_SIZE}" aria-hidden="true"><path d="${ICON_BODY_PATH}" fill="${color}" fill-rule="evenodd"/><g fill="none" stroke="${color}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">${lines}</g><g fill="none" stroke="${color}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">${spark}</g></svg>`;
+  const tone = relativeLuminance(color) > 0.4 ? "reversed" : "ink";
+  return `<img src="${brand.url}${logoAssetUrl("mark", tone)}" width="${size}" height="${Math.round(size * ICON_HEIGHT / ICON_SIZE)}" alt="" style="display:block;border:0;"/>`;
 }

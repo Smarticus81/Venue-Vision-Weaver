@@ -12,7 +12,7 @@ const STEPS = [
   },
   {
     title: "They see themselves married at your venue",
-    body: "Dreemer builds four AI stills and a motion reel. You can review the gallery before delivery; the couple gets a private link to revisit and share.",
+    body: "Dreemer builds four personalized stills and a motion reel. You can review the gallery before delivery; the couple gets a private link to revisit and share.",
   },
   {
     title: "They check their date. You see it happen.",

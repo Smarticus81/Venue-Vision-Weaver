@@ -6,19 +6,8 @@ import { existsSync, promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import {
-  ICON_BODY_PATH,
-  ICON_LINE_PATHS,
-  ICON_LINE_STROKE,
-  ICON_SPARK_PATHS,
-  ICON_SPARK_STROKE,
-  LOCKUP_GAP,
   LOCKUP_HEIGHT,
-  LOCKUP_ICON_OFFSET_Y,
-  LOCKUP_ICON_SCALE,
-  LOCKUP_ICON_WIDTH,
   LOCKUP_WIDTH,
-  WORDMARK_PATHS,
-  WORDMARK_OFFSETS,
   coral,
   font,
   ink,
@@ -209,32 +198,25 @@ export function layoutVenueTitle(
 const TITLE_LOCKUP_WIDTH = 420;
 
 /**
- * The lockup drawn from the brand geometry (no font needed), scaled to
+ * The actual generated brand artwork (no font needed), scaled to
  * TITLE_LOCKUP_WIDTH and centred horizontally with its top edge at `top`.
  */
-function reelLockupSvg(top: number): string {
-  const scale = TITLE_LOCKUP_WIDTH / LOCKUP_WIDTH;
+async function reelLockupSvg(top: number): Promise<string> {
   const left = (REEL_WIDTH - TITLE_LOCKUP_WIDTH) / 2;
-  const wordX = LOCKUP_ICON_WIDTH + LOCKUP_GAP;
-  return `<g transform="translate(${left} ${top}) scale(${scale})">
-        <g transform="translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})">
-          <path d="${ICON_BODY_PATH}" fill="${coral[400]}" fill-rule="evenodd"/>
-          <g fill="none" stroke="${coral[400]}" stroke-width="${ICON_LINE_STROKE}" stroke-linecap="round">
-            ${ICON_LINE_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
-          </g>
-          <g fill="none" stroke="${coral[400]}" stroke-width="${ICON_SPARK_STROKE}" stroke-linecap="round">
-            ${ICON_SPARK_PATHS.map((d) => `<path d="${d}"/>`).join("\n            ")}
-          </g>
-        </g>
-        <g transform="translate(${wordX} 0)" fill="${ivory[100]}" fill-rule="evenodd">
-          ${WORDMARK_PATHS.map((d, i) => `<path transform="translate(${WORDMARK_OFFSETS[i]} 0)" d="${d}"/>`).join("\n          ")}
-        </g>
-      </g>`;
+  const candidates = [
+    path.resolve(MODULE_DIR, "../../wedding-app/dist/public/brand/dreemer-lockup-reversed.png"),
+    path.resolve(MODULE_DIR, "../../../wedding-app/public/brand/dreemer-lockup-reversed.png"),
+    path.resolve(process.cwd(), "artifacts/wedding-app/public/brand/dreemer-lockup-reversed.png"),
+  ];
+  const asset = candidates.find(existsSync);
+  if (!asset) throw new Error("Dreemer reel logo asset is missing");
+  const data = (await fs.readFile(asset)).toString("base64");
+  return `<image x="${left}" y="${top}" width="${TITLE_LOCKUP_WIDTH}" height="${LOCKUP_HEIGHT * TITLE_LOCKUP_WIDTH / LOCKUP_WIDTH}" href="data:image/png;base64,${data}"/>`;
 }
 
 /**
  * Branded opening card: the Dreemer lockup, "CREATED FOR" and the venue
- * name, all drawn as paths. `scale` renders the same 1280x720 layout at a
+ * name, with the PNG logo and path-based venue lettering. `scale` renders the same 1280x720 layout at a
  * multiple of that size (the reel uses its supersampled size).
  */
 export async function buildReelTitleCard(
@@ -291,7 +273,7 @@ export async function buildReelTitleCard(
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)"/>
       <rect width="100%" height="100%" fill="url(#glow)"/>
-      ${reelLockupSvg(lockupTop)}
+      ${await reelLockupSvg(lockupTop)}
       ${strokeTextSvg({ text: "CREATED FOR", centerX: REEL_WIDTH / 2, top: createdForTop, capHeight: 15, color: ink[300], strokeUnits: 11 })}
       ${venueSvg}
     </svg>`;

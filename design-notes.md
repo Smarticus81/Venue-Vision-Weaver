@@ -1,5 +1,21 @@
 # Design notes
 
+## 2026-11-22 — Product-first language
+
+User direction: no AI-led branding or labels. Marketing now says "Sales tools for venues" and "Personalized previews. Private galleries. Better follow-up." Updated public metadata, social artwork, gallery/tour-card sharing copy, shared navigation, consent wording and the outreach copy brief. Plain-language generated-preview disclosures remain; no consent check, guard or functionality was removed. Provider names in internal provenance are not marketing copy.
+
+## 2026-11-22 — Photo-led venue sales, replacing the rejected lens design
+
+This page exists to get venue teams to start a trial because they can show couples personalized previews and follow up using gallery activity.
+
+Direction: the venue, in focus. Real Knotting Hill Place architecture fills the frame; neutral black/white and upright Manrope replace glacial colors and Syne. The actual OpenAI-generated photo-frame/D/check logo replaces all hand-built geometry. The user approved official photo and derived-video usage. Sources and exact image prompts are in `docs/venue-cinema-assets.md`.
+
+Layout: full-bleed venue opening → large interactive original/AI comparison → asymmetrical sales-workspace demo → full-bleed lawn → selectable pricing, questions and final trial action. Signature interaction is the direct photo comparison. Killed the WebGL lens, orbital signals, sticky multi-chapter story and abstract possibility copy. No fake revenue metrics or customer endorsements.
+
+Google video access is pending after HTTP 402. A real generated film must pass visual/codec/browser checks before enabling the hero player; the old motion-design slideshow is not reused or relabelled. Current product reels remain branded still-image reels, described accurately.
+
+Auth, customer data, billing rules and all outreach send safeguards are unchanged. Logo changes in the email template do not send messages. Responsive and regression results are recorded after verification below.
+
 ## 2026-11-21 — Safer venue photo categorization
 
 The venue-photo page exists to help an operator supply accurate coverage of
@@ -1047,3 +1063,15 @@ loaded by non-landing routes, not part of the critical entry. The JavaScript
 budget is met. Physical mid-tier mobile LCP/CLS/INP/60fps profiling is still required before
 calling this production-performance approved. This revision is for design review,
 not an authorization to replace the public site or enable outreach.
+# November 22, 2026 — architectural dusk rebuild (current)
+
+Supersedes the neutral photo-led/lens experiments below. User requested rich color, immersive scenes and substantially tighter spacing, with no technology branding. Reference studied: MotionSites Flower Valley's continuous full-scene composition, not its literal floral content.
+
+Layout: full-bleed dusk estate → compact three-step strip → large interactive venue/couple comparison on plum → event-lawn sales workspace → lilac pricing/FAQ → compact peach conversion band. Removed the duplicate gallery banner and 600px closing section. Hero lighting visualization generated with OpenAI from the licensed actual venue photo, original-photo toggle retained. No generated video file exists yet; the empty film source deliberately stays disabled.
+
+Signature: draggable/keyboard before-after gallery, with genuine scene/plan/activity controls. No parallax or particles added: they do not explain the product. Palette and normal-weight upright typography are specific to the dusk scene. Shared pricing/privacy/signup surfaces now match, and the legacy 76px all-caps public-page title override is removed.
+
+Review: full landing sections visually inspected at 1440×900 and 375×812; additional 768×1024 and 360×800 checks. Pricing, privacy, signup and sign-in inspected at desktop/mobile sizes using the isolated UI fixture. Tested scene selection, slider Home/End/arrow keys, sales events, all three prices, FAQ expansion and CTA routing. No real account creation, payments, or outreach. Physical iOS/Android and field performance have not been tested. Evidence is in ignored `qa-output/color-*`.
+
+Validation: full typecheck, unit suites, security smoke, build, and actual reel encode/decode passed. Landing entry 131.71KB gzip. Local hero WebP 344KB desktop / 97KB mobile. Reduced-motion CSS disables scene transitions; no constant animation loop. Google premium film remains blocked on enabled billing/access, as separately disclosed.
+

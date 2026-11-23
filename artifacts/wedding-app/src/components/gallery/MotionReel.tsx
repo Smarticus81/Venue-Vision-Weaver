@@ -66,7 +66,7 @@ export function MotionReel({ src, poster, venueName }: { src: string; poster: st
         onPlaying={() => setStatus("playing")}
         onPause={() => setStatus((current) => current === "error" ? current : "paused")}
         onError={() => { ++requestId.current; setStatus("error"); }}
-        aria-label={`Your reel at ${venueName}, AI preview`}
+        aria-label={`Your reel at ${venueName}, generated preview`}
         data-testid="gallery-reel"
       />
       <div className="gs-reel__actions">

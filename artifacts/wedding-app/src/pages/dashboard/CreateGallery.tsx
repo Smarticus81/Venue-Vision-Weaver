@@ -68,7 +68,7 @@ export function CreateGallery({ ctx }: { ctx: DashboardContext }) {
       <SectionHead
         id="create-gallery-title"
         title="Create a couple's gallery"
-        description="Four AI previews of the couple at your venue plus a short reel, ready to send with your booking link."
+        description="Four generated previews of the couple at your venue plus a short reel, ready to send with your booking link."
         aside={
           <Button asChild variant="ghost" size="sm">
             <Link href={`/dashboard/tour/${slug}`} data-testid="open-tour-day">

@@ -21,7 +21,7 @@ test("wrapTitle keeps names to two lines and truncates the rest", () => {
   assert.ok(long[1].endsWith("…"));
 });
 
-test("buildTourCardSvg embeds the QR, the link and the AI preview label", () => {
+test("buildTourCardSvg embeds the QR, the link and the generated preview label", () => {
   const svg = buildTourCardSvg({
     venueName: "Willow & Oak",
     url: "https://www.dreemer.co/preview/willow-oak",
@@ -32,7 +32,7 @@ test("buildTourCardSvg embeds the QR, the link and the AI preview label", () => 
   assert.ok(svg.includes("Willow &amp; Oak"));
   assert.ok(svg.includes("www.dreemer.co/preview/willow-oak"));
   assert.ok(svg.includes('<path d="M0 0h1v1H0z"/>'));
-  assert.ok(svg.includes("AI preview, imagined at Willow &amp; Oak"));
+  assert.ok(svg.includes("generated preview, imagined at Willow &amp; Oak"));
   assert.ok(!svg.includes("<Willow"));
   assert.match(svg, /scale\(26\.2069\)/);
 });

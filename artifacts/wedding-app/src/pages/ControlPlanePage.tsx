@@ -268,7 +268,7 @@ function ControlConsole() {
               )}
             >
               <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
-              {overview.aiConfigured ? overview.model : "AI not configured"}
+              {overview.aiConfigured ? overview.model : "Model connection not configured"}
             </span>
           </div>
         </div>

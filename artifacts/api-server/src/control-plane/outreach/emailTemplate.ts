@@ -1,4 +1,4 @@
-import { BRAND, BRAND_COLORS, BRAND_EMAIL, BRAND_TYPE, brandMarkSvg } from "@workspace/brand";
+import { BRAND, BRAND_COLORS, BRAND_EMAIL, BRAND_TYPE } from "@workspace/brand";
 
 /**
  * The outreach email: a personal note with the venue's own photos as the
@@ -164,8 +164,8 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
       ? `${paragraphs[0]}${secondary}${paragraphs.slice(1).join("")}`
       : `${paragraphs.join("")}${secondary}`;
 
-  const markLight = brandMarkSvg(BRAND_COLORS.light.accent, 18);
-  const markDark = brandMarkSvg(BRAND_COLORS.dark.accent, 18);
+  const logoLight = `<img src="https://www.${BRAND.domain}/brand/dreemer-lockup-ink.png" alt="Dreemer" width="150" height="33" style="display:block;border:0;"/>`;
+  const logoDark = `<img src="https://www.${BRAND.domain}/brand/dreemer-lockup-reversed.png" alt="Dreemer" width="150" height="33" style="display:block;border:0;"/>`;
 
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -214,8 +214,7 @@ export function renderOutreachEmail(input: TemplateInput): RenderedEmail {
           <tr>
             <td class="px" style="padding:0 ${gutter}px 14px;">
               <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-                <td valign="middle" style="padding-right:7px;line-height:0;"><span class="dm-mark-light">${markLight}</span><span class="dm-mark-dark">${markDark}</span></td>
-                <td valign="middle" class="dm-muted" style="font-family:${FONT_BODY};font-size:14px;letter-spacing:0.02em;color:${colors.inkMuted};">${escapeHtml(BRAND.wordmark)}</td>
+                <td valign="middle" style="line-height:0;"><span class="dm-mark-light">${logoLight}</span><span class="dm-mark-dark">${logoDark}</span></td>
               </tr></table>
             </td>
           </tr>

@@ -60,7 +60,7 @@ export function SiteFooter() {
       <DreemerLogo className="text-[1.25rem]" />
       <p>The visual sales platform for venues.</p>
       <Link href="/pricing">Pricing</Link>
-      <Link href="/privacy">Privacy &amp; AI previews</Link>
+      <Link href="/privacy">Privacy &amp; photo use</Link>
       {config.contactEmail ? <a href={`mailto:${config.contactEmail}`}>Email us</a> : null}
       <span>© {new Date().getFullYear()} Dreemer</span>
     </footer>

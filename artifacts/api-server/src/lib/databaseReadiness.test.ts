@@ -388,7 +388,7 @@ const shellHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Dre
 test("noscript shell carries the pitch, the prices and a plain sign-up anchor", () => {
   const html = shell.renderNoscriptShell(publicConfig, "/");
   assert.ok(html.startsWith("<noscript>"));
-  assert.ok(html.includes("<h1>Turn venue interest into booking intent.</h1>"));
+  assert.ok(html.includes("<h1>Turn tours into bookings.</h1>"));
   assert.ok(html.includes("Starter $129 a month, 25 galleries"));
   assert.ok(html.includes("Growth $279 a month, 100 galleries"));
   assert.ok(html.includes("Credit pack $59, 10 galleries"));

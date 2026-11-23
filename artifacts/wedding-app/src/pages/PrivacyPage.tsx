@@ -2,7 +2,7 @@ import { SiteHeader, SiteFooter } from "@/components/layout/SiteChrome";
 import { usePublicConfig } from "@/lib/publicConfig";
 
 /*
- * /privacy: how Dreemer handles couple photos, venue photos and AI previews.
+ * /privacy: how Dreemer handles couple photos, venue photos and generated previews.
  * Plain words, specific commitments only. Figures (retention window, contact
  * address) come from the public config so this page never drifts from what
  * the product actually does.
@@ -23,7 +23,7 @@ export default function PrivacyPage() {
       <SiteHeader />
       <main id="main-content" className="prose-page page-width">
         <header className="page-intro">
-          <p className="eyebrow">Privacy &amp; AI previews</p>
+          <p className="eyebrow">Privacy &amp; photo use</p>
           <h1>How Dreemer handles photos</h1>
           <p>
             Dreemer makes a small private gallery for a couple who toured a wedding venue: four
@@ -33,7 +33,7 @@ export default function PrivacyPage() {
         </header>
 
         <nav aria-label="On this page" className="page-toc">
-          <a href="#ai-previews">AI previews</a>
+          <a href="#ai-previews">Generated previews</a>
           <a href="#consent">Consent</a>
           <a href="#retention">Retention</a>
           <a href="#rights">Who owns the images</a>
@@ -44,11 +44,11 @@ export default function PrivacyPage() {
         </nav>
 
         <section id="ai-previews">
-          <h2>Every generated image is an AI preview</h2>
+          <h2>Previews, not photographs</h2>
           <p>
-            The images and the reel are not photographs of the couple at the venue. They are AI
+            The images and the reel are not photographs of the couple at the venue. They are digital
             previews, generated at the couple's request from two or three photos of themselves and
-            the venue's photos of its spaces. Every image and the reel are labelled "AI preview,
+            the venue's photos of its spaces. Every image and the reel are labelled "generated preview,
             imagined at {"{the venue}"}" wherever they appear, and the real photo of the space sits
             beside each one. The venue's architecture is never altered; only the couple, the light
             and the decor are generated.

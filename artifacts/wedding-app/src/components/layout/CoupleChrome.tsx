@@ -77,7 +77,7 @@ export function CoupleChrome({
         <div className="cc-footer__inner">
           {footerNote ? <p className="cc-footer__note">{footerNote}</p> : null}
           <nav className="cc-footer__links" aria-label="Footer">
-            <Link href="/privacy">Privacy &amp; AI previews</Link>
+            <Link href="/privacy">Privacy &amp; photo use</Link>
           </nav>
           <p className="cc-powered">
             <span>Powered by</span>

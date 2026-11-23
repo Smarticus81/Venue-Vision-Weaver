@@ -1,106 +1,25 @@
-import type { JSX } from "react";
 import { Link } from "wouter";
-import {
-  ICON_BODY_PATH,
-  ICON_LINE_PATHS,
-  ICON_LINE_STROKE,
-  ICON_SIZE,
-  ICON_SPARK_PATHS,
-  ICON_SPARK_STROKE,
-  LOCKUP_GAP,
-  LOCKUP_ICON_OFFSET_Y,
-  LOCKUP_ICON_SCALE,
-  LOCKUP_ICON_WIDTH,
-  LOCKUP_WIDTH,
-  WORDMARK_HEIGHT,
-  WORDMARK_PATHS,
-  WORDMARK_OFFSETS,
-  WORDMARK_WIDTH,
-} from "@workspace/brand";
+import { logoAssetUrl, LOGO_DIMENSIONS, type LogoPart } from "@workspace/brand";
 import { cn } from "@/lib/utils";
 
 type DreemerLogoProps = {
-  /** `lockup` = mark + wordmark (default), `mark` = icon only, `wordmark` = text only. */
-  variant?: "lockup" | "mark" | "wordmark";
-  /** `color` uses the text-safe brand accent; `mono` uses currentColor throughout. */
-  tone?: "color" | "mono";
+  variant?: LogoPart;
+  /** Mono inherits currentColor through the exact artwork's alpha mask. */
+  tone?: "color" | "mono" | "reversed";
   className?: string;
-  /** Pass `null` to render without a link. */
   href?: string | null;
 };
 
-/**
- * The Dreemer logo, drawn from the same geometry as the files in
- * lib/brand/assets/logo so the app can never drift from the asset set. The
- * wordmark is paths, not text, so it does not wait on a web font.
- */
-export function DreemerLogo({
-  variant = "lockup",
-  tone = "color",
-  className,
-  href = "/",
-}: DreemerLogoProps) {
-  const markFill = tone === "color" ? "var(--dm-accent-text)" : "currentColor";
-  const mark = (
-    <g>
-      <path d={ICON_BODY_PATH} fill={markFill} fillRule="evenodd" />
-      <g fill="none" stroke={markFill} strokeWidth={ICON_LINE_STROKE} strokeLinecap="round">
-        {ICON_LINE_PATHS.map((d) => (
-          <path key={d} d={d} />
-        ))}
-      </g>
-      <g fill="none" stroke={markFill} strokeWidth={ICON_SPARK_STROKE} strokeLinecap="round">
-        {ICON_SPARK_PATHS.map((d) => (
-          <path key={d} d={d} />
-        ))}
-      </g>
-    </g>
-  );
-  const word = (
-    <g fill="currentColor" fillRule="evenodd">
-      {WORDMARK_PATHS.map((d, i) => (
-        <path key={i} d={d} transform={`translate(${WORDMARK_OFFSETS[i]} 0)`} />
-      ))}
-    </g>
-  );
-
-  let svg: JSX.Element;
-  if (variant === "mark") {
-    svg = (
-      <svg viewBox={`0 0 ${ICON_SIZE} ${ICON_SIZE}`} className="h-[1.15em] w-auto" aria-hidden focusable="false">
-        {mark}
-      </svg>
-    );
-  } else if (variant === "wordmark") {
-    svg = (
-      <svg viewBox={`0 0 ${WORDMARK_WIDTH} ${WORDMARK_HEIGHT}`} className="h-[1em] w-auto" aria-hidden focusable="false">
-        {word}
-      </svg>
-    );
-  } else {
-    svg = (
-      <svg viewBox={`0 0 ${LOCKUP_WIDTH} ${WORDMARK_HEIGHT}`} className="h-[1em] w-auto" aria-hidden focusable="false">
-        <g transform={`translate(0 ${LOCKUP_ICON_OFFSET_Y}) scale(${LOCKUP_ICON_SCALE})`}>{mark}</g>
-        <g transform={`translate(${LOCKUP_ICON_WIDTH + LOCKUP_GAP} 0)`}>{word}</g>
-      </svg>
-    );
-  }
-
-  const logo = (
-    <span className={cn("inline-flex items-center text-[1.5rem] leading-none text-foreground select-none", className)}>
-      {svg}
-      <span className="sr-only">Dreemer</span>
-    </span>
-  );
-
+/** The actual OpenAI-generated logo artwork, fetched as an independently cached asset. */
+export function DreemerLogo({ variant = "lockup", tone = "color", className, href = "/" }: DreemerLogoProps) {
+  const [width, height] = LOGO_DIMENSIONS[variant];
+  const asset = `${import.meta.env.BASE_URL.replace(/\/$/, "")}${logoAssetUrl(variant, tone === "reversed" ? "reversed" : "ink")}`;
+  const sizing = variant === "lockup" ? "h-[1.5em]" : variant === "mark" ? "h-[1.15em]" : "h-[1em]";
+  const logo = <span className={cn("inline-flex items-center text-[1.5rem] leading-none text-foreground select-none", className)}>
+    {tone === "mono" ? <span aria-hidden="true" className={cn("inline-block bg-current", sizing)} style={{ aspectRatio: `${width} / ${height}`, maskImage: `url("${asset}")`, WebkitMaskImage: `url("${asset}")`, maskSize: "contain", WebkitMaskSize: "contain", maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat" }} />
+      : <img src={asset} width={width} height={height} alt="" aria-hidden="true" draggable={false} className={cn("w-auto object-contain", sizing)} />}
+    <span className="sr-only">Dreemer</span>
+  </span>;
   if (!href) return logo;
-  return (
-    <Link
-      href={href}
-      aria-label="Dreemer home"
-      className="inline-flex min-h-11 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-    >
-      {logo}
-    </Link>
-  );
+  return <Link href={href} aria-label="Dreemer home" className="inline-flex min-h-11 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">{logo}</Link>;
 }

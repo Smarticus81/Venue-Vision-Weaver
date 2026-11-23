@@ -155,7 +155,9 @@ test("research: falls back gracefully and flags the operator when no usable imag
     unsubscribeUrl: "https://studio.test/api/outreach/unsubscribe/tok",
     postalAddress: "Dreemer · 1 Main St · Hudson, NY 12534",
   });
-  assert.ok(!/<img/.test(rendered.html), "no broken image slots");
+  const imageTags = rendered.html.match(/<img\b[^>]*>/g) ?? [];
+  assert.equal(imageTags.length, 2, "only the light/dark brand lockups remain");
+  assert.ok(imageTags.every(tag => /alt="Dreemer"/.test(tag) && /https:\/\/www\.dreemer\.co\/brand\/dreemer-lockup-(ink|reversed)\.png/.test(tag)), "no empty venue image slots");
   assert.match(rendered.html, /First paragraph\./);
 });
 
@@ -196,7 +198,9 @@ test("template: responsive, dark-mode aware, escaped, with plain text and alt te
     unsubscribeUrl: "https://studio.test/api/outreach/unsubscribe/tok123",
     postalAddress: "Dreemer · 1 Main St · Hudson, NY 12534",
   });
-  assert.equal((rendered.html.match(/<img /g) ?? []).length, 3, "at most three images");
+  const imageTags = rendered.html.match(/<img\b[^>]*>/g) ?? [];
+  assert.equal(imageTags.filter(tag => !/alt="Dreemer"/.test(tag)).length, 3, "at most three venue images");
+  assert.equal(imageTags.filter(tag => /alt="Dreemer"/.test(tag)).length, 2, "light and dark logo artwork");
   assert.match(rendered.html, /alt="The Barn at golden hour"/);
   assert.match(rendered.html, /Photo: thebarn\.test/);
   assert.match(rendered.html, /@media \(prefers-color-scheme: dark\)/);

@@ -10,7 +10,7 @@ const COLUMNS = ["You provide", "Dreemer creates", "You review"] as const;
 const ROWS: Array<{ label: string; cells: [string, string, string] }> = [
   {
     label: "The couple",
-    cells: ["Two or three clear photos, with both partners' consent", "Personalized AI previews guided by their photos", "Both partners' likeness and natural details"],
+    cells: ["Two or three clear photos, with both partners' consent", "Personalized previews guided by their photos", "Both partners' likeness and natural details"],
   },
   {
     label: "The setting",
@@ -61,7 +61,7 @@ export function CompareStrip() {
             decoding="async"
           />
           <figcaption>
-            <span>Illustrative AI preview</span>
+            <span>Illustrative generated preview</span>
             The couple in the room
           </figcaption>
         </figure>
@@ -93,7 +93,7 @@ export function CompareStrip() {
           ))}
         </tbody>
       </table>
-      <p className="caption">AI can change details or likeness. Preview your results; these images are inspirations, not photographs or promises of the finished event.</p>
+      <p className="caption">Generated previews can change details or likeness. Preview your results; these images are inspirations, not photographs or promises of the finished event.</p>
     </section>
   );
 }

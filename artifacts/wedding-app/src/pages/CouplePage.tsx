@@ -676,7 +676,7 @@ export default function CouplePage() {
       venue={venue}
       mainRef={mainRef}
       mainClassName="cp-main"
-      footerNote="Images are AI previews made from your photos and the venue's own photos."
+      footerNote="Images are generated previews made from your photos and the venue's own photos."
     >
       {step <= 3 ? <StepProgress step={step} /> : null}
       <div className="cp-step" key={step}>
@@ -794,7 +794,7 @@ function VenueWelcome({
           Start our preview <ArrowRight />
         </Button>
         <p className="cp-fineprint">
-          These are AI previews, not photographs. Your photos are used only for this gallery and deleted{" "}
+          These are generated previews, not photographs. Your photos are used only for this gallery and deleted{" "}
           {retentionDays} days after it's ready. <Link href="/privacy">How we handle photos</Link>
         </p>
       </div>
@@ -1201,7 +1201,7 @@ function DetailsStep({
           />
           <span>
             <strong>We both agree.</strong> We're both in these photos, and we're both happy for them to be used to
-            make AI preview images of us at {venue.name}. They're used for this gallery only.{" "}
+            make generated preview images of us at {venue.name}. They're used for this gallery only.{" "}
             <Link href="/privacy">Details</Link>
           </span>
         </label>
@@ -1213,7 +1213,7 @@ function DetailsStep({
         <div className="cp-summary">
           <p className="cp-summary__title">What happens next</p>
           <p>
-            Your photos upload, then the next page shows your gallery as it's made: four AI images and a short reel,
+            Your photos upload, then the next page shows your gallery as it's made: four generated images and a short reel,
             usually in about five minutes. Keep that page's link to come back any time.
           </p>
         </div>

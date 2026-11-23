@@ -177,8 +177,8 @@ function indexHtml(): string | null {
 
 // The landing hero is the LCP element; preload it only when the built asset
 // exists so a missing file never costs a wasted request.
-const HERO_IMAGE_PATH = "/brand/lens-venue-1536.webp";
-const HERO_MOBILE_IMAGE_PATH = "/brand/lens-venue-800.webp";
+const HERO_IMAGE_PATH = "/brand/khp-dusk-1536.webp";
+const HERO_MOBILE_IMAGE_PATH = "/brand/khp-dusk-800.webp";
 let heroPreloadTag: string | null = null;
 function heroPreload(): string {
   if (heroPreloadTag === null) {
@@ -285,7 +285,7 @@ async function galleryMetaTags(shareToken: string): Promise<string | null> {
     const coupleName = session.coupleName || "The couple";
     const venueName = venue ? venue.name : "the venue";
     const title = `${coupleName} at ${venueName} · Dreemer`;
-    const description = `AI preview: ${coupleName} imagined at ${venueName}, made with Dreemer.`;
+    const description = `generated preview: ${coupleName} imagined at ${venueName}, made with Dreemer.`;
 
     tags = galleryOpenGraphTags({
       title,

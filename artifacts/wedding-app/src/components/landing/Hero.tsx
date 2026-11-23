@@ -14,7 +14,7 @@ export function Hero({ trial }: { trial: TrialConfig }) {
         <p className="eyebrow">A new way to remember the venue tour</p>
         <h1 id="hero-heading">Let them see<br />their day <em>here.</em></h1>
         <p className="album-hero__description">Your venue. The two of them. A wedding they can picture.</p>
-        <p className="album-hero__detail">Create personalized AI wedding galleries from your venue photos and the couple's own pictures—with a motion reel to share and your date link built in.</p>
+        <p className="album-hero__detail">Create personalized wedding galleries from your venue photos and the couple's own pictures—with a motion reel to share and your date link built in.</p>
         <div className="action-row">
           <Link
             href="/create-venue"
@@ -39,7 +39,7 @@ export function Hero({ trial }: { trial: TrialConfig }) {
           <img {...COMPARE_IMAGES.room} loading="lazy" decoding="async" />
           <div><span>The starting point</span><strong>The venue's own photos</strong></div>
         </div>
-        <p className="album-hero__disclosure">Example venue &amp; demo couple · AI preview</p>
+        <p className="album-hero__disclosure">Example venue &amp; demo couple · generated preview</p>
       </div>
     </section>
   );

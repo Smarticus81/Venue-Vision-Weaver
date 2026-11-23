@@ -9,13 +9,45 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { iconSvg, lockupSvg, tileSvg, wordmarkSvg, type LogoVariant } from "../src/logo.js";
+import { iconSvg, lockupSvg, tileSvg as renderTile, wordmarkSvg, type LogoPart, type LogoVariant } from "../src/logo.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const assetDir = path.resolve(here, "../assets/logo");
 const publicDir = path.resolve(here, "../../../artifacts/wedding-app/public");
 mkdirSync(assetDir, { recursive: true });
 mkdirSync(publicDir, { recursive: true });
+mkdirSync(path.join(publicDir, "brand"), { recursive: true });
+
+// These rectangles only trim empty margins / separate the original generated artwork.
+// No tracing, font substitution, generative edits, or redrawing takes place here.
+const source = path.join(assetDir, "dreemer-openai-source.png");
+const crops = {
+  lockup: { left: 56, top: 148, width: 2069, height: 450 },
+  mark: { left: 56, top: 148, width: 485, height: 450 },
+  wordmark: { left: 578, top: 226, width: 1547, height: 307 },
+} as const;
+const artwork = {} as Record<LogoPart, Record<"ink" | "reversed", Buffer>>;
+for (const part of Object.keys(crops) as LogoPart[]) {
+  const crop = crops[part];
+  const original = await sharp(source).extract(crop).png().toBuffer();
+  const alpha = await sharp(original).extractChannel("alpha").raw().toBuffer();
+  const reversed = await sharp({ create: { width: crop.width, height: crop.height, channels: 3, background: "#ffffff" } })
+    .joinChannel(alpha, { raw: { width: crop.width, height: crop.height, channels: 1 } }).png().toBuffer();
+  artwork[part] = { ink: original, reversed };
+  for (const tone of ["ink", "reversed"] as const) {
+    write(assetDir, `dreemer-${part}-${tone}.png`, artwork[part][tone]);
+    // Keep full-resolution canonical crops for exports; resize web delivery assets.
+    const webWidth = part === "lockup" ? 960 : part === "wordmark" ? 768 : 384;
+    const web = await sharp(artwork[part][tone]).resize({ width: webWidth, withoutEnlargement: true }).png({ compressionLevel: 9 }).toBuffer();
+    write(path.join(publicDir, "brand"), `dreemer-${part}-${tone}.png`, web);
+  }
+}
+function href(part: LogoPart, variant: LogoVariant) {
+  return `data:image/png;base64,${artwork[part][variant === "reversed" ? "reversed" : "ink"].toString("base64")}`;
+}
+function tileSvg(options: Parameters<typeof renderTile>[0] = {}) {
+  return renderTile({ ...options, imageHref: href("mark", options.variant === "light" ? "ink" : "reversed") });
+}
 
 function write(dir: string, name: string, data: string | Buffer): void {
   writeFileSync(path.join(dir, name), typeof data === "string" ? data.replace(/[\t ]+$/gm, "") : data);
@@ -54,22 +86,22 @@ function ico(images: Array<{ size: number; data: Buffer }>): Buffer {
 }
 
 const variants: LogoVariant[] = ["color", "ink", "reversed"];
-const pad = { color: 0, ink: 0, reversed: 24 } as const;
+const pad = { color: 0, ink: 0, reversed: 0 } as const;
 
 for (const variant of variants) {
-  write(assetDir, `dreemer-icon-${variant}.svg`, iconSvg(variant, { padding: pad[variant] }));
-  write(assetDir, `dreemer-wordmark-${variant}.svg`, wordmarkSvg(variant, { padding: pad[variant] }));
-  write(assetDir, `dreemer-lockup-${variant}.svg`, lockupSvg(variant, { padding: pad[variant] }));
+  write(assetDir, `dreemer-icon-${variant}.svg`, iconSvg(variant, { padding: pad[variant], imageHref: href("mark", variant) }));
+  write(assetDir, `dreemer-wordmark-${variant}.svg`, wordmarkSvg(variant, { padding: pad[variant], imageHref: href("wordmark", variant) }));
+  write(assetDir, `dreemer-lockup-${variant}.svg`, lockupSvg(variant, { padding: pad[variant], imageHref: href("lockup", variant) }));
 }
 write(assetDir, "dreemer-tile-light.svg", tileSvg({ variant: "light" }));
 write(assetDir, "dreemer-tile-dark.svg", tileSvg({ variant: "dark" }));
 write(assetDir, "dreemer-favicon.svg", tileSvg({ size: 64, simplified: true }));
 
 // PNG exports for decks, docs, and email.
-write(assetDir, "dreemer-lockup-color@2x.png", await png(lockupSvg("color", { padding: 40 }), 2000));
-write(assetDir, "dreemer-lockup-reversed@2x.png", await png(lockupSvg("reversed", { padding: 40 }), 2000));
-write(assetDir, "dreemer-icon-color-512.png", await png(iconSvg("color", { padding: 6 }), 512));
-write(assetDir, "dreemer-icon-ink-512.png", await png(iconSvg("ink", { padding: 6 }), 512));
+write(assetDir, "dreemer-lockup-color@2x.png", await png(lockupSvg("color", { padding: 40, imageHref: href("lockup", "ink") }), 2000));
+write(assetDir, "dreemer-lockup-reversed@2x.png", await png(lockupSvg("reversed", { padding: 40, imageHref: href("lockup", "reversed") }), 2000));
+write(assetDir, "dreemer-icon-color-512.png", await png(iconSvg("color", { padding: 6, imageHref: href("mark", "ink") }), 512));
+write(assetDir, "dreemer-icon-ink-512.png", await png(iconSvg("ink", { padding: 6, imageHref: href("mark", "ink") }), 512));
 
 // App icons.
 const icon192 = await png(tileSvg({ size: 192 }), 192);
@@ -84,7 +116,7 @@ const favicon = ico([
   { size: 32, data: fav32 },
   { size: 48, data: fav48 },
 ]);
-const emailLockup = await png(lockupSvg("color", { padding: 10 }), 560);
+const emailLockup = await png(lockupSvg("color", { padding: 10, imageHref: href("lockup", "ink") }), 560);
 
 for (const dir of [assetDir, publicDir]) {
   write(dir, "icon-192.png", icon192);

@@ -89,7 +89,7 @@ export function buildTourCardSvg(input: TourCardInput): string {
     `<rect x="${qrX - 40}" y="${qrY - 40}" width="${qrSize + 80}" height="${qrSize + 80}" rx="24" fill="${semantic.surfaceRaised}" stroke="${semantic.border}" stroke-width="3"/>`,
     `<g transform="translate(${qrX} ${qrY}) scale(${scale.toFixed(4)})">${input.qrSvg}</g>`,
     `<text x="${W / 2}" y="${qrY + qrSize + 130}" text-anchor="middle" font-family="${fontBody}" font-size="34" font-weight="600" fill="${semantic.text}">${display}</text>`,
-    `<text x="${W / 2}" y="${H - 170}" text-anchor="middle" font-family="${fontBody}" font-size="26" fill="${semantic.textMuted}">Images are an AI preview, imagined at ${escapeXml(input.venueName)}. Private link, yours to keep.</text>`,
+    `<text x="${W / 2}" y="${H - 170}" text-anchor="middle" font-family="${fontBody}" font-size="26" fill="${semantic.textMuted}">Images are a generated preview, imagined at ${escapeXml(input.venueName)}. Private link, yours to keep.</text>`,
     `<text x="${W / 2}" y="${H - 120}" text-anchor="middle" font-family="${fontBody}" font-size="26" fill="${semantic.textMuted}">Made with Dreemer</text>`,
     `</svg>`,
   ].join("");

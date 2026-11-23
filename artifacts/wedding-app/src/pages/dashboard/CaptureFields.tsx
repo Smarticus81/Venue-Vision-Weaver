@@ -205,7 +205,7 @@ export function ConsentCheck({
         data-testid={`${id}-input`}
       />
       <span>
-        Both of them agreed to an AI preview of their wedding at {venueName}, made from these photos. Their photos are
+        Both of them agreed to a generated preview of their wedding at {venueName}, made from these photos. Their photos are
         deleted {retentionDays} days after the gallery is delivered.
       </span>
     </label>

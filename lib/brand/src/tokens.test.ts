@@ -66,6 +66,7 @@ test("generated css contains the brand anchors", () => {
   const css = cssText();
   assert.match(css, /--dm-lavender-500: #2A4FDC;/);
   assert.match(css, /--dm-coral-500: #2A4FDC;/);
-  assert.match(css, /--dm-ink-900: #092C39;/);
-  assert.match(css, /--dm-ivory-200: #E7F0F2;/);
+  assert.match(css, /--dm-ink-900: #101116;/);
+  assert.match(css, /--dm-ivory-200: #EEEEF1;/);
+  assert.match(css, /--dm-font-display: 'Manrope'/);
 });

@@ -10,8 +10,8 @@ export function faqEntries(config: PublicConfig): Array<{ q: string; a: string }
   const c = pricing.currency;
   return [
     {
-      q: "Is this a photo or an AI image?",
-      a: "An AI preview. Images and reels are labelled as AI previews, and venue reference photos provide context. Generations are guided by your venue photos, but AI can make mistakes. Review the results before sharing them with a couple.",
+      q: "Is this a photo or a generated image?",
+      a: "A generated preview, not a photograph. Images and reels are labelled as previews, with venue reference photos for context. Details and likeness can differ from reality. Review the results before sharing them with a couple.",
     },
     {
       q: "Who owns the images?",
@@ -46,7 +46,7 @@ export function Faq({ config, heading = "Questions venues ask first." }: { confi
           <h2 id="faq-heading">{heading}</h2>
         </div>
         <p>
-          The long version is on the <a href="/privacy" className="text-link">privacy and AI previews</a> page.
+          The long version is on the <a href="/privacy" className="text-link">privacy and photo use</a> page.
         </p>
       </div>
       <div className="faq-list">

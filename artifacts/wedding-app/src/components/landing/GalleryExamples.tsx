@@ -23,10 +23,10 @@ export function GalleryExamples() {
           <li><strong>One motion reel</strong><span>A short film made from their gallery</span></li>
           <li><strong>Your next step</strong><span>Your venue's date or enquiry link</span></li>
         </ul>
-        <p className="album-examples__note">Illustrative AI examples from demo scenes. Results vary; evaluate a sample in your own venue before sharing with couples.</p>
+        <p className="album-examples__note">Illustrative Generated examples from demo scenes. Results vary; evaluate a sample in your own venue before sharing with couples.</p>
       </div>
       <div className="album-viewer">
-        <div className="album-viewer__label"><span>The wedding album</span><span>AI preview</span></div>
+        <div className="album-viewer__label"><span>The wedding album</span><span>generated preview</span></div>
         <figure id="example-selected" aria-live="polite" aria-atomic="true">
           <img key={frame.src} src={frame.src} alt={frame.alt} width={600} height={750} loading="lazy" decoding="async" />
           <figcaption><h3>{frame.label}</h3><p>{descriptions[selected]}</p></figcaption>

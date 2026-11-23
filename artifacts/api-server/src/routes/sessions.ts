@@ -560,11 +560,11 @@ router.post("/venues/:slug/sessions", async (req, res): Promise<void> => {
     return;
   }
 
-  // Both partners agree to the AI preview and photo handling before any
+  // Both partners agree to the generated preview and photo handling before any
   // photo is touched. Couple sessions never start without it.
   if (body.data.consent !== true) {
     res.status(400).json({
-      error: "Please confirm that both of you agree to the AI preview and how your photos are handled.",
+      error: "Please confirm that both of you agree to the generated preview and how your photos are handled.",
       code: "consent_required",
     });
     return;

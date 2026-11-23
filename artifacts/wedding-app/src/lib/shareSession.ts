@@ -31,7 +31,7 @@ export function shareText(target: ShareTarget): { title: string; text: string } 
   const couple = target.coupleName?.trim();
   return {
     title: couple ? `${couple} at ${venue || "our venue"}` : `Our day at ${venue || "our venue"}`,
-    text: venue ? `An AI preview of our wedding at ${venue}.` : "An AI preview of our wedding day.",
+    text: venue ? `A generated preview of our wedding at ${venue}.` : "A generated preview of our wedding day.",
   };
 }
 

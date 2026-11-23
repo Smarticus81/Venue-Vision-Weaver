@@ -3,7 +3,7 @@
  * and motion across the web app, the API server's emails and rendered
  * assets, and any future surface.
  *
- * Possibility lens: glacial surfaces, deep blue ink and refracted blue light.
+ * Photo-led identity: neutral ink, white surfaces, clear upright typography.
  * Legacy scale identifiers are compatibility aliases, not retained colors.
  * Accent fills use white text; light cyan is reserved for dark surfaces.
  * Status colors retain their semantic meaning and contrast requirements.
@@ -16,9 +16,9 @@ export const brand = {
   wordmark: "DREEMER",
   domain: "dreemer.co",
   url: "https://www.dreemer.co",
-  tagline: "Turn venue interest into booking intent.",
+  tagline: "Turn tours into bookings.",
   description:
-    "The visual sales platform for venues. Create personalized previews, track engagement and give every tour a compelling next step.",
+    "Personalized previews and private galleries for venue sales. Show couples themselves at your venue, then track views, shares and date enquiries.",
 } as const;
 
 /* ---------------------------------------------------------------- color */
@@ -41,26 +41,26 @@ export const lavender = prism;
 export const coral = prism;
 
 export const ink = {
-  50: "#EDF3F5",
-  100: "#DAE7EB",
-  200: "#BDD2DA",
-  300: "#A4C1CC",
-  400: "#6A8A98",
-  500: "#4D6570",
-  600: "#384F5A",
-  700: "#294450",
-  800: "#173A49",
-  900: "#092C39",
+  50: "#F2F2F4",
+  100: "#E4E4E8",
+  200: "#CFCFD6",
+  300: "#B7B8C0",
+  400: "#80828B",
+  500: "#5D6068",
+  600: "#454750",
+  700: "#34363D",
+  800: "#25262D",
+  900: "#101116",
 } as const;
 
 export const ivory = {
   0: "#FFFFFF",
-  50: "#F6FAFA",
-  100: "#EFF5F5",
-  200: "#E7F0F2",
-  300: "#CDDEE3",
-  400: "#9BB4BE",
-  500: "#718D99",
+  50: "#FAFAFB",
+  100: "#F5F5F7",
+  200: "#EEEEF1",
+  300: "#D9DADE",
+  400: "#B0B2BA",
+  500: "#797C86",
 } as const;
 
 export const sea = {
@@ -152,10 +152,10 @@ export const semantic = {
 /* ----------------------------------------------------------------- type */
 
 /**
- * Syne brings broad, sculptural geometry; Manrope keeps the interface quiet.
+ * Upright Manrope across display and interface; logo lettering is generated artwork.
  */
 export const font = {
-  display: "'Syne', ui-sans-serif, system-ui, sans-serif",
+  display: "'Manrope', ui-sans-serif, system-ui, sans-serif",
   body: "'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
   mono: "ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace",
   /** Email clients can't load web fonts reliably; this stack degrades gracefully. */
@@ -163,7 +163,7 @@ export const font = {
 } as const;
 
 export const fontImportUrl =
-  "https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700&family=Manrope:wght@400;500;600&display=swap";
+  "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap";
 
 /** Modular scale, 1.25 ratio from a 16px base, in px. */
 export const typeScale = {

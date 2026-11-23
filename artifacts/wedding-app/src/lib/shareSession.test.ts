@@ -112,7 +112,7 @@ describe("share link and text", () => {
   it("names the venue in the share text", () => {
     assert.deepEqual(shareText({ shareToken: "t", venueName: "Willow Barn", coupleName: "Ana & Sam" }), {
       title: "Ana & Sam at Willow Barn",
-      text: "An AI preview of our wedding at Willow Barn.",
+      text: "A generated preview of our wedding at Willow Barn.",
     });
   });
 });
